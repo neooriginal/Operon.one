@@ -1,6 +1,8 @@
 const ai = require('./tools/AI/ai');
 const browser = require('./tools/browser/main');
 const fileSystem = require('./tools/filesystem/main');
+const deepSearch = require('./tools/deepSearch/main');
+const webSearch = require('./tools/webSearch/main');
 const ascii = require('./utils/ascii');
 
 
@@ -11,9 +13,16 @@ async function centralOrchestrator(question){
   You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
 
   You will have access to the following tools:
-  - webBrowser: to browse the web
+  - webBrowser: to browse the web in a browser for complexer tasks
   - fileSystem: to save and load files
   - chatCompletion: to ask normal AI questions
+
+  - webSearch: quick and simple web search for basic information
+  - deepResearch: deep research on a specific topic
+  - execute: create and execute python files 
+  - bash: execute bash commands
+
+  Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task.
 
   You shall provide a JSON response with the following format:
   {
@@ -80,6 +89,16 @@ async function centralOrchestrator(question){
     }else if(step.action === "chatCompletion"){
       const summary = await ai.callAI(step.step, stepsOutput.join("; "), []);
       stepsOutput.push(`Used the chatCompletion to ${summary}`);
+    }else if(step.action === "deepResearch"){
+      const summary = await deepSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        console.log(`[X] ${step.step}`);
+      });
+      stepsOutput.push(`Used the deepResearch to ${summary}`);
+    } else if(step.action === "webSearch"){
+      const summary = await webSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        console.log(`[X] ${step.step}`);
+      });
+      stepsOutput.push(`Used the webSearch to ${summary}`);
     }
   }
 }

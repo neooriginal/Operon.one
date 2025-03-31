@@ -1,6 +1,6 @@
 
 function getModel(prompt){
-    return "anthropic/claude-3.7-sonnet";
+    return {model: "anthropic/claude-3.7-sonnet", maxTokens: 1000};
 }
 
 module.exports = {getModel};

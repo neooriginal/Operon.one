@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const dotenv = require('dotenv');
 const smartModelSelector = require('./smartModelSelector');
+const tokenCalculation = require('./tokenCalculation');
 dotenv.config();
 
 const openai = new OpenAI({
@@ -11,8 +12,15 @@ const openai = new OpenAI({
 
 
 async function callAI(systemMessage, prompt, messages, image=undefined){
-    const model = await smartModelSelector.getModel(prompt);
-    
+    const model = await smartModelSelector.getModel(prompt).model;
+    const maxTokens = await smartModelSelector.getModel(prompt).maxTokens;
+    let tokens = tokenCalculation.calculateTokens(prompt);
+
+    if(tokens > maxTokens){
+        console.log("Tokens are too high, using smart model selector");
+    }
+
+
     let messagesForAPI = [
         {role: "system", content: [
             {type: "text", text: systemMessage+"; REMEMBER TO RESPOND IN JSON FORMAT"}
