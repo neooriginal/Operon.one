@@ -3,6 +3,9 @@ const browser = require('./tools/browser/main');
 const fileSystem = require('./tools/filesystem/main');
 const deepSearch = require('./tools/deepSearch/main');
 const webSearch = require('./tools/webSearch/main');
+const pythonExecute = require('./tools/pythonExecute/main');
+const bash = require('./tools/bash/index');
+const imageGeneration = require('./tools/imageGeneration/main');
 const ascii = require('./utils/ascii');
 
 
@@ -22,7 +25,7 @@ async function centralOrchestrator(question){
   - execute: create and execute python files 
   - bash: execute bash commands
 
-  Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task.
+  Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task. 
 
   You shall provide a JSON response with the following format:
   {
@@ -68,37 +71,73 @@ async function centralOrchestrator(question){
     const step = plan[stepKey];
     console.log(`[ ] ${step.step}`);
     
-    if(step.action === "webBrowser") {
-      const summary = await browser.runTask(
-        `${step.step} Expected output: ${step.expectedOutput}`, 
-        stepsOutput.join("; "), 
-        (summary) => {
+    let summary;
+    switch(step.action) {
+      case "webBrowser":
+        summary = await browser.runTask(
+          `${step.step} Expected output: ${step.expectedOutput}`, 
+          stepsOutput.join("; "), 
+          (summary) => {
+            console.log(`[X] ${step.step}`);
+          }
+        );
+        stepsOutput.push(`Used the webBrowser to ${summary.toString()}`);
+        break;
+
+      case "fileSystem":
+        summary = await fileSystem.runTask(
+          `${step.step} Expected output: ${step.expectedOutput}`, 
+          stepsOutput.join("; "), 
+          (summary) => {
+            console.log(`[X] ${step.step}`);
+          }
+        );
+        stepsOutput.push(`Used the fileSystem to ${summary.toString()}`);
+        break;
+
+      case "chatCompletion":
+        summary = await ai.callAI(step.step, stepsOutput.join("; "), []);
+        stepsOutput.push(`Used the chatCompletion to ${summary.toString()}`);
+        break;
+
+      case "deepResearch":
+        summary = await deepSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
           console.log(`[X] ${step.step}`);
-        }
-      );
-      stepsOutput.push(`Used the webBrowser to ${summary}`);
-    } else if(step.action === "fileSystem") {
-      const summary = await fileSystem.runTask(
-        `${step.step} Expected output: ${step.expectedOutput}`, 
-        stepsOutput.join("; "), 
-        (summary) => {
+        });
+        stepsOutput.push(`Used the deepResearch to ${summary.toString()}`);
+        break;
+
+      case "webSearch":
+        summary = await webSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
           console.log(`[X] ${step.step}`);
-        }
-      );
-      stepsOutput.push(`Used the fileSystem to ${summary}`);
-    }else if(step.action === "chatCompletion"){
-      const summary = await ai.callAI(step.step, stepsOutput.join("; "), []);
-      stepsOutput.push(`Used the chatCompletion to ${summary}`);
-    }else if(step.action === "deepResearch"){
-      const summary = await deepSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
-        console.log(`[X] ${step.step}`);
-      });
-      stepsOutput.push(`Used the deepResearch to ${summary}`);
-    } else if(step.action === "webSearch"){
-      const summary = await webSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
-        console.log(`[X] ${step.step}`);
-      });
-      stepsOutput.push(`Used the webSearch to ${summary}`);
+        });
+        stepsOutput.push(`Used the webSearch to ${summary.toString()}`);
+        break;
+
+      case "execute":
+        summary = await pythonExecute.runTask(step.step, stepsOutput.join("; "), (summary) => {
+          console.log(`[X] ${step.step}`);
+        });
+        stepsOutput.push(`Used the execute to ${summary.toString()}`);
+        break;
+
+      case "bash":
+        summary = await bash.runTask(step.step, stepsOutput.join("; "), (summary) => {
+          console.log(`[X] ${step.step}`);
+        });
+        stepsOutput.push(`Used the bash to ${summary.toString()}`);
+        break;
+
+      case "imageGeneration":
+        summary = await imageGeneration.runTask(step.step, stepsOutput.join("; "), (summary) => {
+          console.log(`[X] ${step.step}`);
+        });
+        stepsOutput.push(`Used the imageGeneration to ${summary.toString()}`);
+        break;
+
+      default:
+        console.log(`Unknown action: ${step.action}`);
+        break;
     }
   }
 }

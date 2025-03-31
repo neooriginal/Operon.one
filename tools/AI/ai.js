@@ -9,7 +9,15 @@ const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1"
 });
 
+async function generateImage(prompt){
+    const response = await openai.images.generate({
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024"
+    });
 
+    return response.data[0].url;
+}
 
 async function callAI(systemMessage, prompt, messages, image=undefined){
     const model = await smartModelSelector.getModel(prompt).model;
@@ -69,4 +77,4 @@ function parseJSON(jsonString){
     return JSON.parse(json);
 }
 
-module.exports = {callAI};
+module.exports = {callAI, generateImage};
