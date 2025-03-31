@@ -7,19 +7,18 @@ const pythonExecute = require('./tools/pythonExecute/main');
 const bash = require('./tools/bash/index');
 const imageGeneration = require('./tools/imageGeneration/main');
 const ascii = require('./utils/ascii');
-
+const { improvePrompt } = require('./tools/prompting/promptImprover');
 let plan = [];
 let history = [];
 
 let globalPrompt = `
 
 You will have access to the following tools:
-- webBrowser: to browse the web in a browser for complexer tasks
+- webBrowser: to browse the web in a browser for complexer tasks and tasks that require actions
 - fileSystem: to save and load files
 - chatCompletion: to ask normal AI questions
-
-- webSearch: quick and simple web search for basic information
-- deepResearch: deep research on a specific topic
+- webSearch: quick and simple web search for basic information (using duckduckgo)
+- deepResearch: deep research on a specific topic (using duckduckgo)
 - execute: create and execute python files 
 - bash: execute bash commands
 
@@ -61,6 +60,11 @@ Keep the JSON response as detailed as possible so the AI can work on it with no 
 
 async function centralOrchestrator(question){
   await ascii.printWelcome();
+  console.log("[ ] Improving prompt")
+  question = await improvePrompt(question);
+  console.log("[X] Improving prompt");
+  console.log( question);
+  
   let prompt = `
   You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
   ${globalPrompt}
