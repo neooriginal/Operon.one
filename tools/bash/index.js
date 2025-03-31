@@ -43,12 +43,16 @@ async function evaluateOutput(task, result){
     `
     let summary = await ai.callAI(prompt, task, history);
     history.push({
-        role: "user",
-        content: task
+        role: "user", 
+        content: [
+            {type: "text", text: task}
+        ]
     });
     history.push({
-        role: "assistant",
-        content: summary
+        role: "assistant", 
+        content: [
+            {type: "text", text: summary}
+        ]
     });
     return summary;
 }
@@ -69,12 +73,16 @@ async function generateBashCode(task){
     `
     let code = await ai.callAI(prompt, task, history);
     history.push({
-        role: "user",
-        content: task
+        role: "user", 
+        content: [
+            {type: "text", text: task}
+        ]
     });
     history.push({
-        role: "assistant",
-        content: code
+        role: "assistant", 
+        content: [
+            {type: "text", text: code}
+        ]
     });
     return code;
 }

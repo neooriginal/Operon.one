@@ -69,12 +69,16 @@ async function generateCode(task) {
 
     let code = await ai.callAI(prompt, task, history);
     history.push({
-        role: "user",
-        content: task
+        role: "user", 
+        content: [
+            {type: "text", text: task}
+        ]
     });
     history.push({
-        role: "assistant",
-        content: code
+        role: "assistant", 
+        content: [
+            {type: "text", text: code}
+        ]
     });
 
     return code;

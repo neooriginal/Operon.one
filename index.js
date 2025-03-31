@@ -8,67 +8,86 @@ const bash = require('./tools/bash/index');
 const imageGeneration = require('./tools/imageGeneration/main');
 const ascii = require('./utils/ascii');
 
+let plan = [];
+let history = [];
 
+let globalPrompt = `
+
+You will have access to the following tools:
+- webBrowser: to browse the web in a browser for complexer tasks
+- fileSystem: to save and load files
+- chatCompletion: to ask normal AI questions
+
+- webSearch: quick and simple web search for basic information
+- deepResearch: deep research on a specific topic
+- execute: create and execute python files 
+- bash: execute bash commands
+
+Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task. 
+
+You shall provide a JSON response with the following format:
+{
+  step1: {
+    "step": "step description",
+    "action": "action to take",
+    "expectedOutput": "expected output"
+  },
+  ....
+}
+
+an example would be:
+User: Research about the history of the internet and create a research paper.
+{
+  step1: {
+    "step": "using the fileSystem, create a todo.md where i plan the steps to research about the history of the internet",
+    "action": "fileSystem",
+    "expectedOutput": "todo.md"
+  },
+  step2: {
+    "step": "using the browser, open google and search for the history of the internet. then go to the first result and read the content. and continue till you gathered enough information",
+    "action": "webBrowser",
+    "expectedOutput": "history of the internet"
+  },
+  step3: {
+    "step": "using the fileSystem, save the gathered information to a file called 'internetHistory.txt'",
+    "action": "fileSystem",
+    "expectedOutput": "internetHistory.txt"
+  },
+  ....
+}
+
+Keep the JSON response as detailed as possible so the AI can work on it with no misunderstandings.
+`
 
 async function centralOrchestrator(question){
-    await ascii.printWelcome();
+  await ascii.printWelcome();
   let prompt = `
   You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
-
-  You will have access to the following tools:
-  - webBrowser: to browse the web in a browser for complexer tasks
-  - fileSystem: to save and load files
-  - chatCompletion: to ask normal AI questions
-
-  - webSearch: quick and simple web search for basic information
-  - deepResearch: deep research on a specific topic
-  - execute: create and execute python files 
-  - bash: execute bash commands
-
-  Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task. 
-
-  You shall provide a JSON response with the following format:
-  {
-    step1: {
-      "step": "step description",
-      "action": "action to take",
-      "expectedOutput": "expected output"
-    },
-    ....
-  }
-
-  an example would be:
-  User: Research about the history of the internet and create a research paper.
-  {
-    step1: {
-      "step": "using the fileSystem, create a todo.md where i plan the steps to research about the history of the internet",
-      "action": "fileSystem",
-      "expectedOutput": "todo.md"
-    },
-    step2: {
-      "step": "using the browser, open google and search for the history of the internet. then go to the first result and read the content. and continue till you gathered enough information",
-      "action": "webBrowser",
-      "expectedOutput": "history of the internet"
-    },
-    step3: {
-      "step": "using the fileSystem, save the gathered information to a file called 'internetHistory.txt'",
-      "action": "fileSystem",
-      "expectedOutput": "internetHistory.txt"
-    },
-    ....
-  }
-  
-  Keep the JSON response as detailed as possible so the AI can work on it with no misunderstandings.
+  ${globalPrompt}
   `
   console.log("[ ] Planning...");
 
-  let plan = await ai.callAI(prompt, question, []);
+  plan = await ai.callAI(prompt, question, history);
+  history.push({
+    role: "user", 
+    content: [
+        {type: "text", text: question}
+    ]
+  });
+  history.push({
+  role: "assistant", 
+  content: [
+      {type: "text", text: plan}
+  ]
+  });
   console.log("[X] Planning...");
  
   let stepsOutput = [];
+  let currentStepIndex = 0;
 
-  for(let stepKey in plan) {
-    const step = plan[stepKey];
+  // Continue executing steps until we've completed all steps in the plan
+  while (currentStepIndex < plan.length) {
+    const step = plan[currentStepIndex];
     console.log(`[ ] ${step.step}`);
     
     let summary;
@@ -139,7 +158,47 @@ async function centralOrchestrator(question){
         console.log(`Unknown action: ${step.action}`);
         break;
     }
+    
+    // Mark this step as completed
+    currentStepIndex++;
+    
+    // Check progress and potentially update the plan
+    const updatedPlan = await checkProgress(question, plan, stepsOutput, currentStepIndex);
+    
+    // If the plan was updated, use the new plan but keep our current position
+    if (updatedPlan !== plan) {
+      plan = updatedPlan;
+    }
   }
+}
+
+async function checkProgress(question, steps, stepsOutput, completedSteps){
+  let prompt = `
+  You are an AI agent that can check the progress of a task.
+  You will be given a list of steps and the steps output.
+  You will need to check the progress of the task and return the progress in a JSON format. If the task is running as expected, return the exact step list as the one provided. If the task is not running as expected, edit the step list to make it more likely to succeed.
+  Note: already completed steps can not be changed. ${completedSteps} steps have been completed.
+
+  Steps: ${steps}
+  Steps Output: ${stepsOutput}
+
+  ${globalPrompt}
+  `
+  const updatedPlan = await ai.callAI(prompt, question, history);
+  history.push({
+    role: "user", 
+    content: [
+        {type: "text", text: question}
+    ]
+  });
+  history.push({
+    role: "assistant", 
+    content: [
+      {type: "text", text: updatedPlan}
+  ]
+});
+
+  return updatedPlan;
 }
 
 centralOrchestrator("Research about the history of the internet and create a research paper.");
