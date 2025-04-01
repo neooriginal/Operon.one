@@ -55,42 +55,84 @@ async function evaluatewithAI(task, webData){
 
 async function searchWeb(task){
     try {
-        let urls = []
+        let urls = [];
+        let webData = [];
         let queries = await getQuery(task);
+        
         for(let query of queries){
             try {
-                let response = await axios.get(`https://duckduckgo.com/?q=${encodeURIComponent(query)}`);
-                //push first five urls into urls array which arent ads and dont have duckduckgo in the url
-                let extractedUrls = response.data.match(/https?:\/\/[^\s]+/g) || [];
-                let count = 0;
-                for(let url of extractedUrls){
-                    if(!url.includes("duckduckgo") && !url.includes("ad.com") && count < 5){
-                        urls.push(url);
-                        count++;
-                    }
-                }
-                
                 let wikipediaArticle = await getWikipediaArticle(query);
                 if (wikipediaArticle) {
-                    urls.push(wikipediaArticle);
+                    webData.push(`Wikipedia article on "${query}":\n${wikipediaArticle}`);
                 }
+                
+                // Use more reliable search API instead of screen scraping
+                try {
+                    // For now, let's use a more reliable public API - Wikipedia's API for related articles
+                    if (wikipediaArticle) {
+                        const relatedArticlesUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=5`;
+                        const relatedResponse = await axios.get(relatedArticlesUrl, { timeout: 15000 });
+                        
+                        if (relatedResponse.data.query && relatedResponse.data.query.search) {
+                            const relatedArticles = relatedResponse.data.query.search;
+                            for (let i = 1; i < relatedArticles.length; i++) { // Skip first one as we already got it
+                                try {
+                                    const title = relatedArticles[i].title;
+                                    const contentUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+                                    const contentResponse = await axios.get(contentUrl, { timeout: 15000 });
+                                    
+                                    if (contentResponse.data.extract) {
+                                        webData.push(`Related Wikipedia article on "${title}":\n${contentResponse.data.extract}`);
+                                    }
+                                } catch (relatedError) {
+                                    console.error(`Error fetching related article: ${relatedError.message}`);
+                                    continue;
+                                }
+                                
+                                // Short delay between API calls
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                        }
+                    }
+                    
+                    console.log(`Successfully processed query "${query}"`);
+                } catch (searchApiError) {
+                    console.error(`Search API error for "${query}":`, searchApiError.message);
+                    // Continue with other queries even if this API fails
+                }
+                
+                // Add a delay between queries to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
             } catch (queryError) {
                 console.error(`Error processing query "${query}":`, queryError.message);
                 continue; // Skip to next query on error
             }
         }
-        return urls.length > 0 ? urls : "No search results found";
+        
+        // Return the compiled web data or a fallback message
+        if (webData.length > 0) {
+            return webData.join("\n\n");
+        } else if (urls.length > 0) {
+            return urls; // Backward compatibility
+        } else {
+            return "No search results found. Please try different search terms or check your internet connection.";
+        }
     } catch (error) {
         console.error("Error in searchWeb:", error.message);
-        throw new Error(`Failed to search web: ${error.message}`);
+        return "Unable to search web due to network issues. Please try again later.";
     }
 }
 
 async function getWikipediaArticle(query) {
     try {
-        // Search for the query
+        // Search for the query with timeout config
+        const axiosConfig = {
+            timeout: 15000 // 15 second timeout
+        };
+        
         const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json`;
-        const searchResponse = await axios.get(searchUrl);
+        const searchResponse = await axios.get(searchUrl, axiosConfig);
         
         if (!searchResponse.data.query || !searchResponse.data.query.search || !searchResponse.data.query.search.length) {
             return null;
@@ -101,7 +143,7 @@ async function getWikipediaArticle(query) {
         
         // Fetch the article in plain text
         const contentUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-        const contentResponse = await axios.get(contentUrl);
+        const contentResponse = await axios.get(contentUrl, axiosConfig);
         
         return contentResponse.data.extract || null;
     } catch (error) {

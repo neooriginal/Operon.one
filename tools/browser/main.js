@@ -6,6 +6,12 @@ let page = undefined;
 let history = [];
 let summaryCallback = null;
 
+// Token optimization settings
+const MAX_WEBSITE_TEXT_LENGTH = 500; // Reduced from 1000
+const MAX_ELEMENT_COUNT = 15; // Limit number of elements
+const SCREENSHOT_QUALITY = 50; // Reduced from 80
+const MAX_HISTORY_LENGTH = 3; // Keep only recent interactions
+
 async function initialize(){
     if(browser){
         return browser;
@@ -18,8 +24,11 @@ async function initialize(){
 }
 
 async function taskFunction(task, data, image, websiteTextContent){
-
-    data = "Elements avalible for interaction: " + data + "\n\n" + "Website text content: " + websiteTextContent;
+    // Truncate data to reduce tokens
+    const elementData = limitElements(data);
+    const truncatedWebsiteContent = websiteTextContent.substring(0, MAX_WEBSITE_TEXT_LENGTH);
+    
+    data = "Elements avalible for interaction: " + elementData + "\n\n" + "Website text content: " + truncatedWebsiteContent;
     let prompt = `
     You are an AI agent that can execute complex tasks. You are ment to control a web browser and navigate through the web.
     Do your best to complete the task provided by the user. 
@@ -51,14 +60,16 @@ async function taskFunction(task, data, image, websiteTextContent){
     Once you have enough information to confidently complete the task, respond with the "close" action. Look at previous messages for the information collected earlier and use it to summarize and finish the task.
     `
 
-    
-    // Add user's most recent input to history with proper formatting
+    // Manage history - add user's most recent input 
     history.push({
         role: "user", 
         content: [
             {type: "text", text: data}
         ]
     });
+    
+    // Keep history limited to prevent token growth
+    limitHistory();
 
     let result = await ai.callAI(prompt, data, history, image);
 
@@ -69,7 +80,9 @@ async function taskFunction(task, data, image, websiteTextContent){
             {type: "text", text: result.toString()}
         ]
     });
-
+    
+    // Keep history limited again after adding response
+    limitHistory();
     
     if(result.action === "goToPage"){
         await goToPage(result.url);
@@ -90,6 +103,23 @@ async function taskFunction(task, data, image, websiteTextContent){
 
     let content = await getContent();
     taskFunction(task, content.elements, content.screenshot, content.websiteTextContent);
+}
+
+// Helper function to limit history length
+function limitHistory() {
+    if (history.length > MAX_HISTORY_LENGTH * 2) { // *2 to account for pairs of user/assistant messages
+        // Keep only the most recent interactions
+        history = history.slice(-MAX_HISTORY_LENGTH * 2);
+    }
+}
+
+// Helper function to limit elements data
+function limitElements(elementData) {
+    if (!elementData) return "";
+    
+    // Split by elements and take only top elements
+    const elements = elementData.split(',').slice(0, MAX_ELEMENT_COUNT);
+    return elements.join(',');
 }
 
 async function initialAI(task){
@@ -118,12 +148,17 @@ async function initialAI(task){
 // Add function to run task from external files
 async function runTask(task, otherAIData, callback) {
     history = []; // Reset history for a new task
-    history.push({
-        role: "user", 
-        content: [
-            {type: "text", text: otherAIData}
-        ]
-    });
+    
+    // Only add other AI data if it exists and isn't too large
+    if (otherAIData) {
+        const truncatedData = otherAIData.substring(0, MAX_WEBSITE_TEXT_LENGTH);
+        history.push({
+            role: "user", 
+            content: [
+                {type: "text", text: truncatedData}
+            ]
+        });
+    }
     
     return new Promise((resolve) => {
         summaryCallback = (summary) => {
@@ -200,9 +235,12 @@ async function getContent() {
     //remove listener
     page.off('console', listener);
 
+    // Get only the first MAX_ELEMENT_COUNT elements
+    elements = elements.slice(0, MAX_ELEMENT_COUNT);
+
     const screenshotOptions = {
         encoding: 'base64',
-        quality: 80,
+        quality: SCREENSHOT_QUALITY, // Reduced quality to save tokens
         type: 'jpeg', // jpeg is faster than png
         fullPage: false,
         clip: null,
@@ -214,7 +252,7 @@ async function getContent() {
     screenshot = `data:${contentType};base64,${screenshot}`;
 
     const websiteTextContent = await page.evaluate(() => {
-        return document.body.innerText.trim().replace(/\s+/g, ' ').substring(0, 1000);
+        return document.body.innerText.trim().replace(/\s+/g, ' ').substring(0, MAX_WEBSITE_TEXT_LENGTH);
     });
 
     return {elements: elements.toString(), screenshot: screenshot, websiteTextContent: websiteTextContent};

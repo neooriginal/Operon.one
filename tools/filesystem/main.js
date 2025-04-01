@@ -164,6 +164,10 @@ async function runStep(task, otherAIData){
     }
 
     Once you have enough information to confidently complete the task, respond with the "close" action. Look at previous messages for the information collected earlier and use it to summarize and finish the task.
+    Never add placeholders but instead complete the task using the actions provided.
+
+    Data previous AI has collected to complete the task:
+    ${otherAIData}
     `
 
     // Add user's most recent input to history with proper formatting

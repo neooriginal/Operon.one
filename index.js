@@ -123,6 +123,13 @@ async function centralOrchestrator(question){
       case "chatCompletion":
         summary = await ai.callAI(step.step, stepsOutput.join("; "), []);
         stepsOutput.push(`Used the chatCompletion to ${summary.toString()}`);
+        console.log(`[X] ${step.step}`);
+        history.push({
+          role: "assistant", 
+          content: [
+            {type: "text", text: JSON.stringify(summary)}
+          ]
+        });
         break;
 
       case "deepResearch":
@@ -176,6 +183,8 @@ async function centralOrchestrator(question){
       plan = updatedPlan;
     }
   }
+  const finalOutput = await finalizeTask(question, stepsOutput);
+  console.log(finalOutput);
 }
 
 async function checkProgress(question, steps, stepsOutput, completedSteps){
@@ -184,6 +193,8 @@ async function checkProgress(question, steps, stepsOutput, completedSteps){
   You will be given a list of steps and the steps output.
   You will need to check the progress of the task and return the progress in a JSON format. If the task is running as expected, return the exact step list as the one provided. If the task is not running as expected, edit the step list to make it more likely to succeed.
   Note: already completed steps can not be changed. ${completedSteps} steps have been completed.
+
+  Only add steps if absolutely necessary.
 
   Steps: ${steps}
   Steps Output: ${stepsOutput}
@@ -207,7 +218,28 @@ async function checkProgress(question, steps, stepsOutput, completedSteps){
   ]
 });
 
+  //compare length of updatedPlan and plan and compare added or removed steps to console log
+  if(updatedPlan.length > plan.length){
+    console.log(`[!] Added steps: ${updatedPlan.length - plan.length}`);
+  } else if(updatedPlan.length < plan.length){
+    console.log(`[!] Removed steps: ${plan.length - updatedPlan.length}`);
+  }
+
   return updatedPlan;
+}
+
+async function finalizeTask(question, stepsOutput){
+  let prompt = `
+  You are an AI agent that can finalize a task.
+  You will be given a question and the steps output.
+  You will need to finalize the task and return the final output. This can be either pure text or locations to files etc.
+
+  Question: ${question}
+  Steps Output: ${stepsOutput}
+
+  `
+  const finalOutput = await ai.callAI(prompt, question, history);
+  return finalOutput;
 }
 
 centralOrchestrator("Research about the history of the internet and create a research paper.");
