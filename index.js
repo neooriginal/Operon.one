@@ -143,7 +143,7 @@ async function centralOrchestrator(question){
         summary = await webSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the webSearch to ${summary.toString()}`);
+        stepsOutput.push(`Used the webSearch to ${summary}`);
         break;
 
       case "execute":
