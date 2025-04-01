@@ -19,7 +19,7 @@ async function generateImage(prompt){
     return response.data[0].url;
 }
 
-async function callAI(systemMessage, prompt, messages, image=undefined){
+async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true){
     const model = await smartModelSelector.getModel(prompt).model;
     const maxTokens = await smartModelSelector.getModel(prompt).maxTokens;
     let tokens = tokenCalculation.calculateTokens(prompt);
@@ -29,9 +29,11 @@ async function callAI(systemMessage, prompt, messages, image=undefined){
     }
 
 
+    if(jsonResponse)systemMessage = systemMessage+". ! Only respond with valid JSON !"
+
     let messagesForAPI = [
         {role: "system", content: [
-            {type: "text", text: systemMessage+"; REMEMBER TO RESPOND IN JSON FORMAT"}
+            {type: "text", text: systemMessage}
         ]},
 
     ];
@@ -56,25 +58,57 @@ async function callAI(systemMessage, prompt, messages, image=undefined){
     const response = await openai.chat.completions.create({
         model: model,
         messages: messagesForAPI,
-        response_format: {type: "json_object"}
+        response_format: jsonResponse ? {type: "json_object"} : undefined
     });
+
 
     if(!response?.choices?.[0]?.message?.content){
         console.log("No response from AI");
         console.log(response);
+        console.log(response.choices[0]);
         return;
     }
-    
-    return parseJSON(response.choices[0].message.content);
+
+
+    if(jsonResponse){
+        return parseJSON(response.choices[0].message.content);
+    }else{
+        return response.choices[0].message.content;
+    }
 }
 
-function parseJSON(jsonString){
-    //parse json in a smart way (eg when json includes ```json or similar) it still parses
-    let json = jsonString;
-    if(jsonString.includes("```json")){
-        json = jsonString.split("```json")[1].split("```")[0];
+function parseJSON(jsonString) {
+    try {
+        // First attempt direct parsing
+        try {
+            return JSON.parse(jsonString);
+        } catch (e) {
+            // Continue to cleanup attempts
+        }
+
+        // Clean up the string to handle various formats
+        let cleanedJson = jsonString;
+        
+        // Remove markdown code blocks (with or without language identifier)
+        if (cleanedJson.includes("```")) {
+            // Match anything between code blocks, prioritizing json blocks
+            const codeBlockRegex = /```(?:json)?([\s\S]*?)```/;
+            const match = cleanedJson.match(codeBlockRegex);
+            if (match && match[1]) {
+                cleanedJson = match[1].trim();
+            }
+        }
+        
+        // Try parsing the cleaned JSON
+        return JSON.parse(cleanedJson);
+    } catch (error) {
+        console.error("Failed to parse JSON response:", error.message);
+        // Return a basic object with the original content to avoid breaking
+        return { 
+            error: "Failed to parse as JSON",
+            rawContent: jsonString
+        };
     }
-    return JSON.parse(json);
 }
 
 module.exports = {callAI, generateImage};

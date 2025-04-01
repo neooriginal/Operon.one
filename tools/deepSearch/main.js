@@ -1,5 +1,5 @@
 const axios = require("axios");
-const ai = require("../ai/main");
+const ai = require("../AI/ai");
 
 
 async function runTask(task, otherAIData, callback){

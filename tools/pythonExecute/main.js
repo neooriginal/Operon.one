@@ -1,4 +1,4 @@
-const ai = require("../ai/main");
+const ai = require("../AI/ai");
 const child_process = require("child_process")
 const fs = require("fs");
 const path = require("path");

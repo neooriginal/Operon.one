@@ -185,15 +185,7 @@ async function runStep(task, otherAIData){
     });
 
     try {
-        // Parse the result if it's a string (handle JSON parsing)
-        if (typeof result === 'string') {
-            try {
-                result = JSON.parse(result);
-            } catch (e) {
-                console.error("Error parsing JSON from AI response:", e.message);
-                throw new Error("Invalid response format from AI");
-            }
-        }
+
 
         if(result.action === "saveToFile"){
             saveToFile(result.content, result.path || '', result.filename);
@@ -215,6 +207,7 @@ async function runStep(task, otherAIData){
             }
             return;
         }
+
     } catch (error) {
         // Log error but continue execution
         console.error("Error in filesystem operation:", error.message);

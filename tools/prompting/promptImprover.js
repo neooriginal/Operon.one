@@ -1,20 +1,19 @@
 const ai = require("../AI/ai");
-async function improvePrompt(prompt){
+async function improvePrompt(question){
     let prompt = `
     You are an AI agent that can improve a prompt.
     The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific and detailed.
     You can return the same prompt if you think it is already good.
 
-    Return the improved prompt in a JSON format.
-    {
-        "improvedPrompt": \`IMPROVED PROMPT HERE\`
-    }
+    Only reply with the improved prompt.
+
+    Use \` in the JSON (start and end) to allow for multiple lines of code, but do not use \` for the improved prompt content.
 
     Here is some information about good prompting:
     ${promptingGuidelines}
     `
-    let improvedPrompt = await ai.callAI(prompt, prompt);
-    return improvedPrompt.improvedPrompt;
+    let improvedPrompt = await ai.callAI(prompt, question, undefined, undefined, false);
+    return improvedPrompt;
 }
 
 
@@ -65,13 +64,13 @@ let promptingGuidelines = `
 - **Start simple and refine**: Begin with a general prompt and adjust based on the response. Example:
   - Initial prompt: *"Suggest marketing strategies for small businesses."*
   - Follow-up prompt: *"Focus on social media strategies for businesses with limited budgets."*
-- **Give feedback**: Specify what worked and what didn’t in previous responses (e.g., "The tone was too formal; make it more conversational").
+- **Give feedback**: Specify what worked and what didnt in previous responses (e.g., "The tone was too formal; make it more conversational").
 
 ---
 
 ### **7. Using Delimiters Effectively**
 - **Separate instructions from content clearly**: Use delimiters like triple quotes or backticks to distinguish instructions from data or examples.
-  - Example: *"Analyze the following text for sentiment analysis: ``````”*
+  - Example: *"Analyze the following text for sentiment analysis: ”*
 
 ---
 

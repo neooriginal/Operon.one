@@ -54,8 +54,6 @@ User: Research about the history of the internet and create a research paper.
   },
   ....
 }
-
-Keep the JSON response as detailed as possible so the AI can work on it with no misunderstandings.
 `
 
 async function centralOrchestrator(question){
@@ -63,15 +61,17 @@ async function centralOrchestrator(question){
   console.log("[ ] Improving prompt")
   question = await improvePrompt(question);
   console.log("[X] Improving prompt");
-  console.log( question);
-  
+
   let prompt = `
   You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
   ${globalPrompt}
   `
   console.log("[ ] Planning...");
 
-  plan = await ai.callAI(prompt, question, history);
+  let planObject = await ai.callAI(prompt, question, history);
+  // Convert the plan object into an array
+  plan = Object.values(planObject).filter(item => item && typeof item === 'object');
+  
   history.push({
     role: "user", 
     content: [
@@ -81,7 +81,7 @@ async function centralOrchestrator(question){
   history.push({
   role: "assistant", 
   content: [
-      {type: "text", text: plan}
+      {type: "text", text: JSON.stringify(planObject)}
   ]
   });
   console.log("[X] Planning...");
@@ -89,10 +89,12 @@ async function centralOrchestrator(question){
   let stepsOutput = [];
   let currentStepIndex = 0;
 
+  
+
   // Continue executing steps until we've completed all steps in the plan
   while (currentStepIndex < plan.length) {
     const step = plan[currentStepIndex];
-    console.log(`[ ] ${step.step}`);
+    console.log(`[ ] ${step.step} using ${step.action}`);
     
     let summary;
     switch(step.action) {
@@ -188,7 +190,10 @@ async function checkProgress(question, steps, stepsOutput, completedSteps){
 
   ${globalPrompt}
   `
-  const updatedPlan = await ai.callAI(prompt, question, history);
+  const updatedPlanObject = await ai.callAI(prompt, question, history);
+  // Convert the plan object to array
+  const updatedPlan = Object.values(updatedPlanObject).filter(item => item && typeof item === 'object');
+  
   history.push({
     role: "user", 
     content: [
@@ -198,7 +203,7 @@ async function checkProgress(question, steps, stepsOutput, completedSteps){
   history.push({
     role: "assistant", 
     content: [
-      {type: "text", text: updatedPlan}
+      {type: "text", text: JSON.stringify(updatedPlanObject)}
   ]
 });
 
