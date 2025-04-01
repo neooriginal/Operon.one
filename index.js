@@ -129,7 +129,7 @@ async function centralOrchestrator(question){
         summary = await deepSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the deepResearch to ${summary.toString()}`);
+        stepsOutput.push(`Used the deepResearch to ${summary}`);
         break;
 
       case "webSearch":

@@ -167,12 +167,17 @@ async function runStep(task, otherAIData){
     `
 
     // Add user's most recent input to history with proper formatting
-    history.push({
-        role: "user", 
-        content: [
-            {type: "text", text: task}
-        ]
-    });
+    if (task && !history.some(entry => 
+        entry.role === "user" && 
+        entry.content.some(c => c.type === "text" && c.text === task)
+    )) {
+        history.push({
+            role: "user", 
+            content: [
+                {type: "text", text: task}
+            ]
+        });
+    }
 
     let result = await ai.callAI(prompt, task, history);
 
@@ -185,28 +190,81 @@ async function runStep(task, otherAIData){
     });
 
     try {
-
+        let operationResult;
 
         if(result.action === "saveToFile"){
             saveToFile(result.content, result.path || '', result.filename);
+            operationResult = `File saved: ${result.filename} to path: ${result.path || ''}`;
         }else if(result.action === "deleteFile"){
             deleteFile(result.path || '', result.filename);
+            operationResult = `File deleted: ${result.filename} from path: ${result.path || ''}`;
         }else if(result.action === "createDirectory"){
             createDirectory(result.path || '');
+            operationResult = `Directory created: ${result.path || ''}`;
         }else if(result.action === "deleteDirectory"){
             deleteDirectory(result.path || '');
+            operationResult = `Directory deleted: ${result.path || ''}`;
         }else if(result.action === "listFiles"){
-            return listFiles(result.path || '');
+            const files = listFiles(result.path || '');
+            operationResult = `Files in ${result.path || ''}: ${JSON.stringify(files)}`;
+            
+            // Add operation result to history
+            history.push({
+                role: "system", 
+                content: [
+                    {type: "text", text: operationResult}
+                ]
+            });
+            
+            // Continue with next step
+            return runStep(task).then(() => files);
         }else if(result.action === "listDirectories"){
-            return listDirectories(result.path || '');
+            const directories = listDirectories(result.path || '');
+            operationResult = `Directories in ${result.path || ''}: ${JSON.stringify(directories)}`;
+            
+            // Add operation result to history
+            history.push({
+                role: "system", 
+                content: [
+                    {type: "text", text: operationResult}
+                ]
+            });
+            
+            // Continue with next step
+            return runStep(task).then(() => directories);
         }else if(result.action === "readFile"){
-            return readFile(result.path || '', result.filename);
+            const content = readFile(result.path || '', result.filename);
+            operationResult = `File read: ${result.filename} from path: ${result.path || ''}`;
+            
+            // Add operation result to history
+            history.push({
+                role: "system", 
+                content: [
+                    {type: "text", text: operationResult}
+                ]
+            });
+            
+            // Continue with next step
+            return runStep(task).then(() => content);
         }else if(result.action === "close"){
             if (summaryCallback) {
                 summaryCallback(result.summary);
             }
             return;
         }
+
+        // Add operation result to history for non-return operations
+        if (operationResult) {
+            history.push({
+                role: "system", 
+                content: [
+                    {type: "text", text: operationResult}
+                ]
+            });
+        }
+
+        // Continue processing
+        return runStep(task);
 
     } catch (error) {
         // Log error but continue execution
@@ -218,9 +276,10 @@ async function runStep(task, otherAIData){
                 {type: "text", text: `Error: ${error.message}`}
             ]
         });
+        
+        // Continue processing despite error
+        return runStep(task);
     }
-
-    runStep(task);
 }
 
 async function runTask(task, otherAIData, callback){
