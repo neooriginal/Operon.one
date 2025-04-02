@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const exec = promisify(require('child_process').exec);
-const rimraf = promisify(require('rimraf'));
+const rimraf = require('rimraf');
 const { v4: uuidv4 } = require('uuid');
 
 // Import the central orchestrator function
