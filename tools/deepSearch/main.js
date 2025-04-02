@@ -94,8 +94,7 @@ async function searchWeb(task){
                             }
                         }
                     }
-                    
-                    console.log(`Successfully processed query "${query}"`);
+              
                 } catch (searchApiError) {
                     console.error(`Search API error for "${query}":`, searchApiError.message);
                     // Continue with other queries even if this API fails

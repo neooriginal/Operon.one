@@ -1,7 +1,7 @@
 
 function getModel(prompt){
     //return {model: "anthropic/claude-3.7-sonnet", maxTokens: 120000};
-    return {model: "openai/gpt-4o", maxTokens: 120000};
+   return {model: "openai/gpt-4o", maxTokens: 120000};
 }
 
 const models = [

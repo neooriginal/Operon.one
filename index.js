@@ -8,6 +8,7 @@ const bash = require('./tools/bash/index');
 const imageGeneration = require('./tools/imageGeneration/main');
 const ascii = require('./utils/ascii');
 const { improvePrompt } = require('./tools/prompting/promptImprover');
+const writer = require('./tools/writer/main');
 let plan = [];
 let history = [];
 
@@ -21,15 +22,17 @@ You will have access to the following tools:
 - deepResearch: deep research on a specific topic (using duckduckgo)
 - execute: create and execute python files 
 - bash: execute bash commands
+- writer: used to write about things in detail based on the information collected previously
 
-Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task. 
+Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task. You can use the file system to write down notes or important information which you can then read at the end.
 
 You shall provide a JSON response with the following format:
 {
   step1: {
     "step": "step description",
     "action": "action to take",
-    "expectedOutput": "expected output"
+    "expectedOutput": "expected output",
+    "usingData": "data from specific tools to use for the step" //default: all. can be multiple tools separated by commas
   },
   ....
 }
@@ -40,17 +43,32 @@ User: Research about the history of the internet and create a research paper.
   step1: {
     "step": "using the fileSystem, create a todo.md where i plan the steps to research about the history of the internet",
     "action": "fileSystem",
-    "expectedOutput": "todo.md"
+    "expectedOutput": "todo.md",
+    "usingData": "none"
   },
   step2: {
-    "step": "using the browser, open google and search for the history of the internet. then go to the first result and read the content. and continue till you gathered enough information",
-    "action": "webBrowser",
-    "expectedOutput": "history of the internet"
+    "step": "what is the internet?",
+    "action": "chatCompletion",
+    "expectedOutput": "history of the internet",
+    "usingData": "none"
   },
   step3: {
+    "step": "search for the history of the internet. then go to the first result and read the content. and continue till you gathered enough information",
+    "action": "deepResearch",
+    "expectedOutput": "history of the internet",
+    "usingData": "none"
+  },
+  step4: {
+    "step": "using the writer, write a research paper about the history of the internet based on the information gathered",
+    "action": "writer",
+    "expectedOutput": "research paper",
+    "usingData": "deepResearch,chatCompletion"
+  },
+  step5: {
     "step": "using the fileSystem, save the gathered information to a file called 'internetHistory.txt'",
     "action": "fileSystem",
-    "expectedOutput": "internetHistory.txt"
+    "expectedOutput": "internetHistory.txt",
+    "usingData": "writer"
   },
   ....
 }
@@ -96,33 +114,61 @@ async function centralOrchestrator(question){
     const step = plan[currentStepIndex];
     console.log(`[ ] ${step.step} using ${step.action}`);
     
+    // Filter stepsOutput based on usingData parameter
+    let filteredStepsOutput = [];
+    if (step.usingData && step.usingData !== "none") {
+      const requestedTools = step.usingData.split(",").map(tool => tool.trim());
+      
+      if (requestedTools.includes("all")) {
+        filteredStepsOutput = stepsOutput;
+      } else {
+        filteredStepsOutput = stepsOutput.filter(output => 
+          requestedTools.includes(output.action)
+        );
+      }
+    }
+    
+    const inputData = step.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
+    
     let summary;
     switch(step.action) {
       case "webBrowser":
         summary = await browser.runTask(
           `${step.step} Expected output: ${step.expectedOutput}`, 
-          stepsOutput.join("; "), 
+          inputData, 
           (summary) => {
             console.log(`[X] ${step.step}`);
           }
         );
-        stepsOutput.push(`Used the webBrowser to ${summary.toString()}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
       case "fileSystem":
         summary = await fileSystem.runTask(
           `${step.step} Expected output: ${step.expectedOutput}`, 
-          stepsOutput.join("; "), 
+          inputData, 
           (summary) => {
             console.log(`[X] ${step.step}`);
           }
         );
-        stepsOutput.push(`Used the fileSystem to ${summary.toString()}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
       case "chatCompletion":
-        summary = await ai.callAI(step.step, stepsOutput.join("; "), []);
-        stepsOutput.push(`Used the chatCompletion to ${summary.toString()}`);
+        summary = await ai.callAI(step.step, inputData, []);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         console.log(`[X] ${step.step}`);
         history.push({
           role: "assistant", 
@@ -133,40 +179,68 @@ async function centralOrchestrator(question){
         break;
 
       case "deepResearch":
-        summary = await deepSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        summary = await deepSearch.runTask(step.step, inputData, (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the deepResearch to ${summary}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
       case "webSearch":
-        summary = await webSearch.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        summary = await webSearch.runTask(step.step, inputData, (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the webSearch to ${summary}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
       case "execute":
-        summary = await pythonExecute.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        summary = await pythonExecute.runTask(step.step, inputData, (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the execute to ${summary.toString()}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
       case "bash":
-        summary = await bash.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        summary = await bash.runTask(step.step, inputData, (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the bash to ${summary.toString()}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
       case "imageGeneration":
-        summary = await imageGeneration.runTask(step.step, stepsOutput.join("; "), (summary) => {
+        summary = await imageGeneration.runTask(step.step, inputData, (summary) => {
           console.log(`[X] ${step.step}`);
         });
-        stepsOutput.push(`Used the imageGeneration to ${summary.toString()}`);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
         break;
 
+      case "writer":
+        summary = await writer.write(question, inputData);
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
+        break;
       default:
         console.log(`Unknown action: ${step.action}`);
         break;
@@ -197,7 +271,7 @@ async function checkProgress(question, steps, stepsOutput, completedSteps){
   Only add steps if absolutely necessary.
 
   Steps: ${steps}
-  Steps Output: ${stepsOutput}
+  Steps Output: ${stepsOutput.map(item => `${item.action}: ${item.output}`).join("; ")}
 
   ${globalPrompt}
   `
@@ -235,11 +309,19 @@ async function finalizeTask(question, stepsOutput){
   You will need to finalize the task and return the final output. This can be either pure text or locations to files etc.
 
   Question: ${question}
-  Steps Output: ${stepsOutput}
+  Steps Output: ${stepsOutput.map(item => `${item.action}: ${item.output}`).join("; ")}
 
   `
   const finalOutput = await ai.callAI(prompt, question, history);
   return finalOutput;
 }
 
-centralOrchestrator("Research about the history of the internet and create a research paper.");
+// Export the centralOrchestrator function for the tester
+module.exports = {
+  centralOrchestrator
+};
+
+// Run the orchestrator if this file is executed directly
+if (require.main === module) {
+  centralOrchestrator("Research about the history of the internet and create a research paper.");
+}
