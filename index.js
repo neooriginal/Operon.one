@@ -8,6 +8,7 @@ const bash = require('./tools/bash/index');
 const imageGeneration = require('./tools/imageGeneration/main');
 const math = require('./tools/math/main');
 const ascii = require('./utils/ascii');
+const fs = require('fs');
 const { improvePrompt } = require('./tools/prompting/promptImprover');
 const writer = require('./tools/writer/main');
 let plan = [];
@@ -80,6 +81,13 @@ User: Research about the history of the internet and create a research paper.
 async function centralOrchestrator(question){
   history = [];
   await ascii.printWelcome();
+  console.log("[ ] Cleaning workspace");
+  
+  if(fs.existsSync("output")){
+    fs.rmdirSync("output", {recursive: true});
+  }
+  fs.mkdirSync("output");
+  console.log("[X] Cleaning workspace");
   console.log("[ ] Improving prompt")
   question = await improvePrompt(question);
   console.log("[X] Improving prompt");
@@ -327,7 +335,8 @@ async function finalizeTask(question, stepsOutput){
   Steps Output: ${stepsOutput.map(item => `${item.action}: ${item.output}`).join("; ")}
 
   `
-  const finalOutput = await ai.callAI(prompt, question, history);
+  const finalOutput = await ai.callAI(prompt, question, history, undefined, false);
+
   return finalOutput;
 }
 

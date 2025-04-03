@@ -242,22 +242,22 @@ async function input(element, text){
     }
     
     try {
-        // Use same approach as click function to find elements by custom numbering
-        const success = await page.evaluate(`
+        // Changed from string-based evaluate to function-based evaluate
+        const success = await page.evaluate((elementId) => {
             try {
-                const el = window.numberedElements[${JSON.stringify(element)}];
+                const el = window.numberedElements[elementId];
                 if (el) {
                     el.focus();
                     return true;
                 } else {
-                    console.log("Element not found: " + ${JSON.stringify(element)});
+                    console.log("Element not found: " + elementId);
                     return false;
                 }
             } catch(e) {
                 console.log("Error focusing element: " + e);
                 return false;
             }
-        `);
+        }, element);
         
         if (success) {
             // Type the text into the focused element
