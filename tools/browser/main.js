@@ -71,8 +71,9 @@ async function taskFunction(task, data, image, websiteTextContent){
     // Keep history limited to prevent token growth
     limitHistory();
 
-    let result = await ai.callAI(prompt, data, history, image);
+    let result = await ai.callAI(prompt, data, history, image, undefined, "browser");
 
+    if(!result)return taskFunction(task, content.elements, content.screenshot, content.websiteTextContent);
     // Add AI response to history
     history.push({
         role: "assistant", 
@@ -169,6 +170,8 @@ async function runTask(task, otherAIData, callback) {
     });
 }
 
+runTask("research about rabbit r1 and put in cart in amazon")
+
 async function goToPage(url){
     const browser = await initialize();
     page = await browser.newPage();
@@ -197,20 +200,69 @@ async function click(element){
             result = message.text();
         }
     });
-    await page.evaluate(`
-        try{
-            window.clickElement(${JSON.stringify(element)});
-        }catch(e){
-            console.log("Error clicking element: " + e);
-        }
+    
+    try {
+        // Set up a promise that will resolve if navigation occurs
+        const navigationPromise = page.waitForNavigation({ timeout: 5000 }).catch(() => {});
+        
+        // Execute the click
+        await page.evaluate(`
+            try{
+                window.clickElement(${JSON.stringify(element)});
+            }catch(e){
+                console.log("Error clicking element: " + e);
+            }
         `);
-    page.off('console', listener);
-    if(!result)result="success";
-    return {result: result};
+        
+        // Wait for navigation to complete if it was triggered by the click
+        await navigationPromise;
+        
+        page.off('console', listener);
+        if(!result) result="success";
+        return {result: result};
+    } catch (error) {
+        page.off('console', listener);
+        console.log("Error during click operation:", error);
+        return {result: "Error: " + error.message};
+    }
 }
 
 async function input(element, text){
-    await page.type(element, text);
+    // Check if element is properly defined
+    if (!element) {
+        console.log("Error: No element specified for input");
+        return {result: "Error: No element specified"};
+    }
+    
+    try {
+        // Use same approach as click function to find elements by custom numbering
+        const success = await page.evaluate(`
+            try {
+                const el = window.numberedElements[${JSON.stringify(element)}];
+                if (el) {
+                    el.focus();
+                    return true;
+                } else {
+                    console.log("Element not found: " + ${JSON.stringify(element)});
+                    return false;
+                }
+            } catch(e) {
+                console.log("Error focusing element: " + e);
+                return false;
+            }
+        `);
+        
+        if (success) {
+            // Type the text into the focused element
+            await page.keyboard.type(text);
+            return {result: "success"};
+        } else {
+            return {result: "Element not found or not focusable"};
+        }
+    } catch (error) {
+        console.log("Error during input operation:", error);
+        return {result: "Error: " + error.message};
+    }
 }
 
 async function getContent() {
@@ -251,9 +303,10 @@ async function getContent() {
     let contentType = screenshotOptions.type === 'png' ? 'image/png' : 'image/jpeg';
     screenshot = `data:${contentType};base64,${screenshot}`;
 
-    const websiteTextContent = await page.evaluate(() => {
-        return document.body.innerText.trim().replace(/\s+/g, ' ').substring(0, MAX_WEBSITE_TEXT_LENGTH);
-    });
+
+    const websiteTextContent = await page.evaluate((maxLength) => {
+        return document.body.innerText.trim().replace(/\s+/g, ' ').substring(0, maxLength);
+    }, MAX_WEBSITE_TEXT_LENGTH);
 
     return {elements: elements.toString(), screenshot: screenshot, websiteTextContent: websiteTextContent};
 }

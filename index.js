@@ -6,6 +6,7 @@ const webSearch = require('./tools/webSearch/main');
 const pythonExecute = require('./tools/pythonExecute/main');
 const bash = require('./tools/bash/index');
 const imageGeneration = require('./tools/imageGeneration/main');
+const math = require('./tools/math/main');
 const ascii = require('./utils/ascii');
 const { improvePrompt } = require('./tools/prompting/promptImprover');
 const writer = require('./tools/writer/main');
@@ -23,8 +24,10 @@ You will have access to the following tools:
 - execute: create and execute python files 
 - bash: execute bash commands
 - writer: used to write about things in detail based on the information collected previously
+- math: to perform complex mathematical calculations and operations
 
 Implement the chatCompletion tool into the tasks so the AI can evaluate responses and continue the task. You can use the file system to write down notes or important information which you can then read at the end.
+If they are easy questions, do not try to make them too complicated (eg just call chatCompletion once and be done with it)
 
 You shall provide a JSON response with the following format:
 {
@@ -75,6 +78,7 @@ User: Research about the history of the internet and create a research paper.
 `
 
 async function centralOrchestrator(question){
+  history = [];
   await ascii.printWelcome();
   console.log("[ ] Improving prompt")
   question = await improvePrompt(question);
@@ -224,6 +228,17 @@ async function centralOrchestrator(question){
 
       case "imageGeneration":
         summary = await imageGeneration.runTask(step.step, inputData, (summary) => {
+          console.log(`[X] ${step.step}`);
+        });
+        stepsOutput.push({
+          step: step.step,
+          action: step.action,
+          output: summary
+        });
+        break;
+
+      case "math":
+        summary = await math.runTask(step.step, inputData, (summary) => {
           console.log(`[X] ${step.step}`);
         });
         stepsOutput.push({

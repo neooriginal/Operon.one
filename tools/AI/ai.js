@@ -19,9 +19,10 @@ async function generateImage(prompt){
     return response.data[0].url;
 }
 
-async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, retryCount=0){
-    const model = await smartModelSelector.getModel(prompt).model;
-    const maxTokens = await smartModelSelector.getModel(prompt).maxTokens;
+async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, model="auto"){
+    let modelpicker = await smartModelSelector.getModel(prompt, model);
+    model = modelpicker.model
+    const maxTokens = modelpicker.maxTokens
     let tokens = tokenCalculation.calculateTokens(prompt);
 
     if(tokens > maxTokens){
@@ -42,6 +43,8 @@ Never respond with an empty message.
 `;
         systemMessage = systemMessage + jsonInstructions;
     }
+
+    systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING"
 
     let messagesForAPI = [
         {role: "system", content: [

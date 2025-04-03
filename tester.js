@@ -178,11 +178,24 @@ async function runTest(prompt, index) {
     const afterFiles = fs.readdirSync(__dirname);
     const newFiles = afterFiles.filter(file => !beforeFiles.includes(file));
     
-    // Collect output files
+    // Collect output files and their contents
     const outputDir = path.join(__dirname, 'output');
     let outputFiles = [];
+    let outputContents = {};
+    
     if (fs.existsSync(outputDir)) {
       outputFiles = fs.readdirSync(outputDir);
+      
+      // Read contents of each output file
+      for (const file of outputFiles) {
+        const filePath = path.join(outputDir, file);
+        try {
+          const content = fs.readFileSync(filePath, 'utf8');
+          outputContents[file] = content;
+        } catch (error) {
+          outputContents[file] = `Error reading file: ${error.message}`;
+        }
+      }
     }
     
     // Log test information
@@ -204,7 +217,11 @@ async function runTest(prompt, index) {
       `Duration: ${testDuration}ms\n\n` +
       `New Files Created:\n${newFiles.join('\n')}\n\n` +
       `Output Files:\n${outputFiles.join('\n')}\n\n` +
-      `Console Output:\n${logs.join('\n')}\n`
+      `Output File Contents:\n` +
+      Object.entries(outputContents)
+        .map(([filename, content]) => `\n=== ${filename} ===\n${content}\n`)
+        .join('\n') +
+      `\nConsole Output:\n${logs.join('\n')}\n`
     );
     
     console.log = originalConsoleLog;
