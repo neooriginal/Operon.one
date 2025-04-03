@@ -44,7 +44,7 @@ Never respond with an empty message.
         systemMessage = systemMessage + jsonInstructions;
     }
 
-    systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING"
+    systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING AND NEVER USE PLACEHOLDERS."
 
     let messagesForAPI = [
         {role: "system", content: [

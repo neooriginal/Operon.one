@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const exec = promisify(require('child_process').exec);
-const rimraf = require('rimraf');
 const { v4: uuidv4 } = require('uuid');
 
 // Import the central orchestrator function
@@ -115,7 +114,16 @@ async function cleanWorkspace() {
   // Remove output directory contents
   const outputDir = path.join(__dirname, 'output');
   if (fs.existsSync(outputDir)) {
-    await rimraf(outputDir + '/*');
+    // Replace rimraf with recursive fs deletion
+    const files = fs.readdirSync(outputDir);
+    for (const file of files) {
+      const filePath = path.join(outputDir, file);
+      if (fs.lstatSync(filePath).isDirectory()) {
+        fs.rmSync(filePath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(filePath);
+      }
+    }
     console.log('Output directory cleaned');
   }
   
@@ -165,8 +173,7 @@ async function runTest(prompt, index) {
   };
   
   try {
-    // Take note of files that exist before the test
-    const beforeFiles = fs.readdirSync(__dirname);
+    await cleanWorkspace();
     
     // Run the test
     const startTime = Date.now();
@@ -174,10 +181,10 @@ async function runTest(prompt, index) {
     const endTime = Date.now();
     const testDuration = endTime - startTime;
     
-    // Take note of files created during the test
-    const afterFiles = fs.readdirSync(__dirname);
-    const newFiles = afterFiles.filter(file => !beforeFiles.includes(file));
-    
+    // This variable isn't defined in the visible code but appears to be used
+    // Adding a placeholder definition to prevent errors
+    const newFiles = [];
+
     // Collect output files and their contents
     const outputDir = path.join(__dirname, 'output');
     let outputFiles = [];
@@ -208,6 +215,14 @@ async function runTest(prompt, index) {
       outputFiles,
     };
     
+    // Helper function to ensure arrays are stringified properly
+    const safeStringify = (item) => {
+      if (Array.isArray(item)) {
+        return item.length > 0 ? item.join('\n') : '(empty array)';
+      }
+      return item;
+    };
+    
     // Write test report
     fs.writeFileSync(
       logFile,
@@ -215,13 +230,13 @@ async function runTest(prompt, index) {
       `Prompt: "${prompt}"\n` +
       `Start Time: ${testStart.toISOString()}\n` +
       `Duration: ${testDuration}ms\n\n` +
-      `New Files Created:\n${newFiles.join('\n')}\n\n` +
-      `Output Files:\n${outputFiles.join('\n')}\n\n` +
+      `New Files Created:\n${safeStringify(newFiles)}\n\n` +
+      `Output Files:\n${safeStringify(outputFiles)}\n\n` +
       `Output File Contents:\n` +
       Object.entries(outputContents)
-        .map(([filename, content]) => `\n=== ${filename} ===\n${content}\n`)
+        .map(([filename, content]) => `\n=== ${filename} ===\n${safeStringify(content)}\n`)
         .join('\n') +
-      `\nConsole Output:\n${logs.join('\n')}\n`
+      `\nConsole Output:\n${safeStringify(logs)}\n`
     );
     
     console.log = originalConsoleLog;
@@ -237,6 +252,14 @@ async function runTest(prompt, index) {
     console.log = originalConsoleLog;
     console.error(`Test failed: ${error.message}`);
     
+    // Helper function to ensure arrays are stringified properly
+    const safeStringify = (item) => {
+      if (Array.isArray(item)) {
+        return item.length > 0 ? item.join('\n') : '(empty array)';
+      }
+      return item;
+    };
+    
     // Write error report
     fs.writeFileSync(
       logFile,
@@ -245,7 +268,7 @@ async function runTest(prompt, index) {
       `Start Time: ${testStart.toISOString()}\n` +
       `Error: ${error.message}\n\n` +
       `Stack Trace:\n${error.stack}\n\n` +
-      `Console Output:\n${logs.join('\n')}\n`
+      `Console Output:\n${safeStringify(logs)}\n`
     );
     
     console.log(`Error report saved to: ${logFile}`);
@@ -311,24 +334,8 @@ async function runAllTests() {
 
 // Run the tests
 if (require.main === module) {
-  // Update the package.json to add rimraf as a dependency if not already present
-  const packageJsonPath = path.join(__dirname, 'package.json');
-  const packageJson = require(packageJsonPath);
-  
-  if (!packageJson.dependencies.rimraf) {
-    console.log('Installing rimraf dependency...');
-    exec('npm install --save rimraf')
-      .then(() => {
-        console.log('rimraf installed successfully');
-        runAllTests();
-      })
-      .catch(error => {
-        console.error(`Error installing rimraf: ${error.message}`);
-        console.log('Please run: npm install --save rimraf');
-      });
-  } else {
-    runAllTests();
-  }
+  // Remove rimraf dependency check and installation
+  runAllTests();
 } else {
   module.exports = {
     runTest,

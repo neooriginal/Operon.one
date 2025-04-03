@@ -338,5 +338,5 @@ module.exports = {
 
 // Run the orchestrator if this file is executed directly
 if (require.main === module) {
-  centralOrchestrator("Research about the history of the internet and create a research paper.");
+  centralOrchestrator("name ideas for my manus.im like project which is an AI which can do stuff for you. eg browsing, researching, math etc. something rememberable and techy. then check the domain prices for each and make sure they are below 20usd/year");
 }

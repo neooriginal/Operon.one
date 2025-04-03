@@ -4,6 +4,7 @@ const ai = require('../AI/ai');
 let browser = undefined;
 let page = undefined;
 let history = [];
+let lastActions = [];
 let summaryCallback = null;
 
 // Token optimization settings
@@ -43,7 +44,8 @@ async function taskFunction(task, data, image, websiteTextContent){
     },
     {
         "action": "input",
-        "text": "text to input" //input needs to be selected from the page
+        "text": "text to input", //input needs to be selected from the page
+        "element": "element to input text into" //number of the element. either from image provided or from the data provided by the user,
     },
     {
         "action": "scroll",
@@ -54,6 +56,9 @@ async function taskFunction(task, data, image, websiteTextContent){
         "summary": \`summary of the tasks results in detail\` 
         //do when you are done with the task
     }
+
+    Try not to repeat actions and actually check that an action might have already been completed even though there is no big ui feedback.
+    Last actions you did: ${lastActions.join(", ")}
 
     The main task is: ${task}
 
@@ -84,6 +89,8 @@ async function taskFunction(task, data, image, websiteTextContent){
     
     // Keep history limited again after adding response
     limitHistory();
+
+    lastActions.push(result.toString());
     
     if(result.action === "goToPage"){
         await goToPage(result.url);
@@ -149,6 +156,7 @@ async function initialAI(task){
 // Add function to run task from external files
 async function runTask(task, otherAIData, callback) {
     history = []; // Reset history for a new task
+    lastActions = [];
     
     // Only add other AI data if it exists and isn't too large
     if (otherAIData) {
@@ -170,7 +178,6 @@ async function runTask(task, otherAIData, callback) {
     });
 }
 
-runTask("research about rabbit r1 and put in cart in amazon")
 
 async function goToPage(url){
     const browser = await initialize();
@@ -283,7 +290,7 @@ async function getContent() {
     });
 
     await page.evaluate(elementNumberingScript);
-    await sleep(1000);
+    await sleep(3000);
     //remove listener
     page.off('console', listener);
 
