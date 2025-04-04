@@ -3,7 +3,7 @@ async function improvePrompt(question){
     let prompt = `
     You are an AI agent that can improve a prompt.
     The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific and detailed.
-    You can return the same prompt if you think it is already good.
+    You can return the same prompt if you think it is already good. Do not add information which is not obvious and not provided.
 
     Only reply with the improved prompt.
 

@@ -91,8 +91,8 @@ Never respond with an empty message.
     if(jsonResponse){
         const result = parseJSON(response.choices[0].message.content);
         
-        console.log(result);
-        
+        // Use proper JSON stringification for logging
+        console.log(JSON.stringify(result, null, 2));
         
         return result;
     } else {
@@ -101,6 +101,10 @@ Never respond with an empty message.
 }
 
 function parseJSON(jsonString) {
+    if (!jsonString || typeof jsonString !== 'string') {
+        return { error: "Invalid input - not a string", fallback: true };
+    }
+    
     try {
         // First attempt direct parsing
         try {
@@ -154,7 +158,11 @@ function parseJSON(jsonString) {
         cleanedJson = result;
         
         // Try parsing the cleaned JSON
-        return JSON.parse(cleanedJson);
+        try {
+            return JSON.parse(cleanedJson);
+        } catch (error) {
+            throw error; // Re-throw to be caught by outer try/catch
+        }
     } catch (error) {
         console.error("Failed to parse JSON response:", error.message);
         console.error("Original content:", jsonString.substring(0, 500) + (jsonString.length > 500 ? '...' : ''));
@@ -162,7 +170,8 @@ function parseJSON(jsonString) {
         return { 
             error: "Failed to parse as JSON",
             errorMessage: error.message,
-            rawContent: jsonString
+            rawContent: jsonString,
+            fallback: true
         };
     }
 }

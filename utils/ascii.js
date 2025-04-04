@@ -4,7 +4,7 @@ const chalk = require("chalk");
 async function printWelcome(){
 
     
-    await figlet("Neo AI", { font: "Slant" }, (err, data) => {
+    await figlet("Operon.one", { font: "Slant" }, (err, data) => {
         if (err) {
             console.error("Something went wrong...");
             console.error(err);

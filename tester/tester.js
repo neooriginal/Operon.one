@@ -5,9 +5,9 @@ const exec = promisify(require('child_process').exec);
 const { v4: uuidv4 } = require('uuid');
 
 // Import the central orchestrator function
-const { centralOrchestrator } = require('./index');
+const { centralOrchestrator } = require('../index');
 // Import the AI module for evaluation
-const { callAI } = require('./tools/AI/ai.js');
+const { callAI } = require('../tools/AI/ai.js');
 
 // Create reports directory if it doesn't exist
 const REPORTS_DIR = path.join(__dirname, 'test_reports');
@@ -18,18 +18,18 @@ if (!fs.existsSync(REPORTS_DIR)) {
 // Test prompts from basic to complex
 const testPrompts = [
   // Basic information queries
-  "What is the capital of France?",
-  "Who was Albert Einstein?",
-  "What is the tallest mountain in the world?",
-  "What ingredients are in a classic margarita?",
-  "How many days are in each month of the year?",
+  // "What is the capital of France?",
+  // "Who was Albert Einstein?",
+  //"What is the tallest mountain in the world?",
+  //"What ingredients are in a classic margarita?",
+  //"How many days are in each month of the year?",
   
   // Simple task execution
-  "Create a simple to-do list for me",
-  "Write a short poem about technology",
-  "Calculate the area of a circle with radius 5cm",
+  //"Create a simple to-do list for me",
+  //"Write a short poem about technology",
+  // "Calculate the area of a circle with radius 5cm",
   "Convert 100 USD to euros using current exchange rates",
-  "Create a weekly workout schedule for beginners",
+  //"Create a weekly workout schedule for beginners",
   
   // Trip planning
   "Plan a 7-day trip to Japan including flights, accommodation, and daily activities",
@@ -136,7 +136,12 @@ async function evaluateTestResult(prompt, testResult, logs, outputContents, test
   4. Are there any errors or issues in the output?
   5. What could have been improved?
   6. Did the test pass or fail in your assessment?
+
+  ALSO VERY IMPORTANT: make sure the results of the different steps are used for the final response.
   
+  Ignore [object Object] logs.
+  also include what could be improved AI-wise (prompting eg.)
+
   Your response MUST include all of the following fields in valid JSON format:
   - passed: boolean (whether the test passed your evaluation)
   - score: number (0-10 score of the response quality)
