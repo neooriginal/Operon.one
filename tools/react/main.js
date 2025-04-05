@@ -176,8 +176,10 @@ async function saveThoughtChain(fileSystem, userId = 'default') {
     
     // Use the runTask method of fileSystem
     await fileSystem.runTask(
-      `Save the ReAct thought chain to output/thought_chain_${userId}.json. Expected output: output/thought_chain_${userId}.json`,
-      thoughtChainJSON
+      `Save the ReAct thought chain to thought_chain.json. Expected output: thought_chain.json`,
+      thoughtChainJSON,
+      null,
+      userId
     );
     
     return { success: true };

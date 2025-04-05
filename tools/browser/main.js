@@ -709,8 +709,35 @@ async function close(userId = 'default'){
     }
 }
 
+/**
+ * Clean up browser resources for a specific user
+ * @param {string} userId - User identifier
+ * @returns {Promise<boolean>} - Success status
+ */
+async function cleanupResources(userId = 'default') {
+  try {
+    // Close the browser instance if it exists
+    if (browserInstances.has(userId)) {
+      const browser = browserInstances.get(userId);
+      await browser.close().catch(e => console.error(`Error closing browser for user ${userId}:`, e));
+      browserInstances.delete(userId);
+    }
+    
+    // Clear page reference as well
+    if (pageInstances.has(userId)) {
+      pageInstances.delete(userId);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`Error cleaning up browser resources for user ${userId}:`, error);
+    return false;
+  }
+}
+
 module.exports = {
     runTask,
     close,
-    initialize
+    initialize,
+    cleanupResources
 };

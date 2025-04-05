@@ -3,43 +3,53 @@ const path = require('path');
 const ai = require('../AI/ai');
 const contextManager = require('../../utils/context');
 
-function getBaseDirectory() {
+function getBaseDirectory(userId = 'default') {
     const applicationBaseDir = path.join(__dirname, '..', '..');
-    return path.join(applicationBaseDir, 'output');
+    const outputDir = path.join(applicationBaseDir, 'output');
+    
+    // User-specific directory inside output
+    return path.join(outputDir, userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
 }
 
-// Ensure the base directory exists
-function ensureBaseDirectoryExists() {
-    const baseDir = getBaseDirectory();
+// Ensure the base directory exists, now with user-specific path
+function ensureBaseDirectoryExists(userId = 'default') {
+    // First ensure the main output directory exists
+    const outputDir = path.join(__dirname, '..', '..', 'output');
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    // Then ensure user-specific directory exists
+    const baseDir = getBaseDirectory(userId);
     if (!fs.existsSync(baseDir)) {
         fs.mkdirSync(baseDir, { recursive: true });
     }
 }
 
-// Sanitize and resolve paths to prevent directory traversal
-function securePath(userPath) {
-    // If path is empty or undefined, return the base directory
+// Sanitize and resolve paths to prevent directory traversal, with user-specific base
+function securePath(userPath, userId = 'default') {
+    // If path is empty or undefined, return the user's base directory
     if (!userPath || userPath.trim() === '') {
-        return getBaseDirectory();
+        return getBaseDirectory(userId);
     }
     
     // Remove any leading slashes and normalize path
     const normalizedPath = path.normalize(userPath.replace(/^[\/\\]+/, ''));
     
-    // Resolve the full path
-    const fullPath = path.resolve(getBaseDirectory(), normalizedPath);
+    // Resolve the full path, using user-specific base
+    const fullPath = path.resolve(getBaseDirectory(userId), normalizedPath);
     
-    // Ensure the path is within the base directory
-    if (!fullPath.startsWith(getBaseDirectory())) {
+    // Ensure the path is within the user's base directory
+    if (!fullPath.startsWith(getBaseDirectory(userId))) {
         throw new Error('Security violation: Attempted to access path outside of allowed directory');
     }
     
     return fullPath;
 }
 
-function saveToFile(content, userPath, filename) {
-    ensureBaseDirectoryExists();
-    const dirPath = securePath(userPath);
+function saveToFile(content, userPath, filename, userId = 'default') {
+    ensureBaseDirectoryExists(userId);
+    const dirPath = securePath(userPath, userId);
     
     // Ensure the directory exists
     if (!fs.existsSync(dirPath)) {
@@ -48,19 +58,19 @@ function saveToFile(content, userPath, filename) {
     
     const filePath = path.join(dirPath, filename);
     // Final security check on complete path
-    if (!filePath.startsWith(getBaseDirectory())) {
+    if (!filePath.startsWith(getBaseDirectory(userId))) {
         throw new Error('Security violation: Attempted to access path outside of allowed directory');
     }
     
     fs.writeFileSync(filePath, content);
 }
 
-function readFile(userPath, filename) {
-    const dirPath = securePath(userPath);
+function readFile(userPath, filename, userId = 'default') {
+    const dirPath = securePath(userPath, userId);
     const filePath = path.join(dirPath, filename);
     
     // Final security check on complete path
-    if (!filePath.startsWith(getBaseDirectory())) {
+    if (!filePath.startsWith(getBaseDirectory(userId))) {
         throw new Error('Security violation: Attempted to access path outside of allowed directory');
     }
     
@@ -71,18 +81,18 @@ function readFile(userPath, filename) {
     return fs.readFileSync(filePath, 'utf8');
 }
 
-function createDirectory(userPath) {
-    ensureBaseDirectoryExists();
-    const dirPath = securePath(userPath);
+function createDirectory(userPath, userId = 'default') {
+    ensureBaseDirectoryExists(userId);
+    const dirPath = securePath(userPath, userId);
     fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function deleteFile(userPath, filename) {
-    const dirPath = securePath(userPath);
+function deleteFile(userPath, filename, userId = 'default') {
+    const dirPath = securePath(userPath, userId);
     const filePath = path.join(dirPath, filename);
     
     // Final security check on complete path
-    if (!filePath.startsWith(getBaseDirectory())) {
+    if (!filePath.startsWith(getBaseDirectory(userId))) {
         throw new Error('Security violation: Attempted to access path outside of allowed directory');
     }
     
@@ -91,15 +101,15 @@ function deleteFile(userPath, filename) {
     }
 }
 
-function deleteDirectory(userPath) {
-    const dirPath = securePath(userPath);
+function deleteDirectory(userPath, userId = 'default') {
+    const dirPath = securePath(userPath, userId);
     if (fs.existsSync(dirPath)) {
         fs.rmSync(dirPath, { recursive: true, force: true });
     }
 }
 
-function listFiles(userPath) {
-    const dirPath = securePath(userPath);
+function listFiles(userPath, userId = 'default') {
+    const dirPath = securePath(userPath, userId);
     if (!fs.existsSync(dirPath)) {
         return [];
     }
@@ -108,8 +118,8 @@ function listFiles(userPath) {
     );
 }
 
-function listDirectories(userPath) {
-    const dirPath = securePath(userPath);
+function listDirectories(userPath, userId = 'default') {
+    const dirPath = securePath(userPath, userId);
     if (!fs.existsSync(dirPath)) {
         return [];
     }
@@ -201,7 +211,7 @@ async function runStep(task, otherAIData, userId = 'default'){
         let operationResult;
 
         if(result.action === "saveToFile"){
-            saveToFile(result.content, result.path || '', result.filename);
+            saveToFile(result.content, result.path || '', result.filename, userId);
             operationResult = `File saved: ${result.filename} to path: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -211,7 +221,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 filename: result.filename
             });
         }else if(result.action === "deleteFile"){
-            deleteFile(result.path || '', result.filename);
+            deleteFile(result.path || '', result.filename, userId);
             operationResult = `File deleted: ${result.filename} from path: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -221,7 +231,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 filename: result.filename
             });
         }else if(result.action === "createDirectory"){
-            createDirectory(result.path || '');
+            createDirectory(result.path || '', userId);
             operationResult = `Directory created: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -230,7 +240,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 path: result.path || ''
             });
         }else if(result.action === "deleteDirectory"){
-            deleteDirectory(result.path || '');
+            deleteDirectory(result.path || '', userId);
             operationResult = `Directory deleted: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -239,7 +249,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 path: result.path || ''
             });
         }else if(result.action === "listFiles"){
-            const files = listFiles(result.path || '');
+            const files = listFiles(result.path || '', userId);
             operationResult = `Files in ${result.path || ''}: ${JSON.stringify(files)}`;
             
             // Track operation in tool state
@@ -263,7 +273,7 @@ async function runStep(task, otherAIData, userId = 'default'){
             // Continue with next step
             return runStep(task, otherAIData, userId).then(() => files);
         }else if(result.action === "listDirectories"){
-            const directories = listDirectories(result.path || '');
+            const directories = listDirectories(result.path || '', userId);
             operationResult = `Directories in ${result.path || ''}: ${JSON.stringify(directories)}`;
             
             // Track operation in tool state
@@ -287,7 +297,7 @@ async function runStep(task, otherAIData, userId = 'default'){
             // Continue with next step
             return runStep(task, otherAIData, userId).then(() => directories);
         }else if(result.action === "readFile"){
-            const content = readFile(result.path || '', result.filename);
+            const content = readFile(result.path || '', result.filename, userId);
             operationResult = `File read: ${result.filename} from path: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -358,8 +368,8 @@ async function runStep(task, otherAIData, userId = 'default'){
 }
 
 async function writeFileDirectly(content, userPath, filename, userId = 'default'){
-    ensureBaseDirectoryExists();
-    const dirPath = securePath(userPath);
+    ensureBaseDirectoryExists(userId);
+    const dirPath = securePath(userPath, userId);
     const filePath = path.join(dirPath, filename);
     fs.writeFileSync(filePath, content);
 }
@@ -381,6 +391,9 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
     
     // Save initial state
     contextManager.setToolState('fileSystem', toolState, userId);
+    
+    // Ensure user directory exists
+    ensureBaseDirectoryExists(userId);
     
     try {
         // Store callback for later use

@@ -13,6 +13,7 @@ const { improvePrompt } = require('./tools/prompting/promptImprover');
 const writer = require('./tools/writer/main');
 const react = require('./tools/react/main');
 const contextManager = require('./utils/context');
+const path = require('path');
 
 let globalPrompt = `
 
@@ -141,10 +142,23 @@ async function centralOrchestrator(question, userId = 'default'){
     await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
     
-    if(fs.existsSync("output")){
-      fs.rmdirSync("output", {recursive: true});
+    // Create a user-specific output directory
+    const outputDir = path.join(__dirname, 'output');
+    const userOutputDir = path.join(outputDir, userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+    
+    // Ensure main output dir exists
+    if(!fs.existsSync(outputDir)){
+      fs.mkdirSync(outputDir, { recursive: true });
     }
-    fs.mkdirSync("output");
+    
+    // Clean up user directory if it exists
+    if(fs.existsSync(userOutputDir)){
+      fs.rmdirSync(userOutputDir, {recursive: true});
+    }
+    
+    // Create fresh user directory
+    fs.mkdirSync(userOutputDir, { recursive: true });
+    
     console.log("[X] Cleaning workspace");
     console.log("[ ] Improving prompt")
     question = await improvePrompt(question);
@@ -159,7 +173,7 @@ async function centralOrchestrator(question, userId = 'default'){
     `
     console.log("[ ] Planning...");
 
-    let planObject = await ai.callAI(prompt, question, []);
+    let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId);
     // Convert the plan object into an array
     const plan = Object.values(planObject).filter(item => item && typeof item === 'object');
     
@@ -208,7 +222,8 @@ async function centralOrchestrator(question, userId = 'default'){
             inputData, 
             (summary) => {
               console.log(`[X] ${enhancedStep.step}`);
-            }
+            },
+            userId
           );
           break;
 
@@ -218,7 +233,8 @@ async function centralOrchestrator(question, userId = 'default'){
             inputData, 
             (summary) => {
               console.log(`[X] ${enhancedStep.step}`);
-            }
+            },
+            userId
           );
           break;
 
@@ -228,12 +244,13 @@ async function centralOrchestrator(question, userId = 'default'){
             inputData, 
             (summary) => {
               console.log(`[X] ${enhancedStep.step}`);
-            }
+            },
+            userId
           );
           break;
 
         case "chatCompletion":
-          summary = await ai.callAI(enhancedStep.step, inputData, []);
+          summary = await ai.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId);
           console.log(`[X] ${enhancedStep.step}`);
           contextManager.addToHistory({
             role: "assistant", 
@@ -246,43 +263,44 @@ async function centralOrchestrator(question, userId = 'default'){
         case "deepResearch":
           summary = await deepSearch.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
-          });
+          }, userId);
           break;
 
         case "webSearch":
           summary = await webSearch.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
-          });
+          }, userId);
           break;
 
         case "execute":
           summary = await pythonExecute.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
-          });
+          }, userId);
           break;
 
         case "bash":
           summary = await bash.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
-          });
+          }, userId);
           break;
 
         case "imageGeneration":
           summary = await imageGeneration.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
-          });
+          }, userId);
           break;
 
         case "math":
           summary = await math.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
-          });
+          }, userId);
           break;
 
         case "writer":
           summary = await writer.write(
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
-            inputData
+            inputData,
+            userId
           );
           
           // Validate writer output and handle errors
@@ -318,7 +336,7 @@ async function centralOrchestrator(question, userId = 'default'){
       if (reflection && reflection.changePlan === true) {
         console.log(`[ ] Reflection suggests changing plan: ${reflection.explanation}`);
         try {
-          const updatedPlan = await checkProgress(question, plan, contextManager.getStepsOutput(userId), contextManager.getCurrentStepIndex(userId));
+          const updatedPlan = await checkProgress(question, plan, contextManager.getStepsOutput(userId), contextManager.getCurrentStepIndex(userId), userId);
           
           // If the plan was updated, update it in context
           if (updatedPlan !== plan) {
@@ -340,7 +358,7 @@ async function centralOrchestrator(question, userId = 'default'){
     // After the loop completes, finalize the task
     let finalOutput;
     try {
-      finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId));
+      finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId), userId);
       console.log(JSON.stringify({
         status: "completed",
         stepCount: contextManager.getStepsOutput(userId).length,
@@ -355,9 +373,20 @@ async function centralOrchestrator(question, userId = 'default'){
       finalOutput = "Task completed but could not be finalized: " + error.message;
     }
     
+    // Cleanup resources for this user
+    await cleanupUserResources(userId);
+    
     return finalOutput;
   } catch (error) {
     console.error("Critical error in orchestration:", error.message);
+    
+    // Ensure cleanup even on error
+    try {
+      await cleanupUserResources(userId);
+    } catch (cleanupError) {
+      console.error("Error during cleanup:", cleanupError.message);
+    }
+    
     return `Critical error occurred during execution: ${error.message}`;
   }
 }
@@ -382,7 +411,7 @@ async function withTimeout(promise, timeoutMs = 60000) {
   }
 }
 
-async function checkProgress(question, plan, stepsOutput, currentStepIndex) {
+async function checkProgress(question, plan, stepsOutput, currentStepIndex, userId = 'default') {
   try {
     // Skip progress checks if we're too early in the process
     if (currentStepIndex < 2 || plan.length <= 2) {
@@ -422,7 +451,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex) {
     `;
     
     const response = await withTimeout(
-      ai.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true),
+      ai.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true, "auto", userId),
       30000 // 30-second timeout
     );
     
@@ -448,7 +477,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex) {
   }
 }
 
-async function finalizeTask(question, stepsOutput) {
+async function finalizeTask(question, stepsOutput, userId = 'default') {
   try {
     console.log("[ ] Finalizing task");
     
@@ -473,7 +502,7 @@ async function finalizeTask(question, stepsOutput) {
     `;
     
     const response = await withTimeout(
-      ai.callAI(prompt, "Generate final response", [], undefined, false),
+      ai.callAI(prompt, "Generate final response", [], undefined, false, "auto", userId),
       60000 // 60-second timeout
     );
     
@@ -490,6 +519,58 @@ async function finalizeTask(question, stepsOutput) {
   }
 }
 
+/**
+ * Clean up resources for a specific user after task completion
+ * @param {string} userId - User identifier
+ */
+async function cleanupUserResources(userId) {
+  try {
+    console.log(`[ ] Cleaning up resources for user: ${userId}`);
+    
+    // Close any browser instances using the browser module
+    try {
+      await browser.cleanupResources(userId);
+    } catch (browserError) {
+      console.error("Error closing browser instance:", browserError.message);
+    }
+    
+    // Save the thought chain one final time
+    try {
+      await react.saveThoughtChain(fileSystem, userId);
+    } catch (error) {
+      console.error("Error saving final thought chain:", error.message);
+    }
+    
+    // Create a final report of the session
+    const context = contextManager.getContext(userId);
+    const finalReport = {
+      userId,
+      completedAt: new Date().toISOString(),
+      question: context.question,
+      stepsCompleted: context.stepsOutput.length,
+      planSize: context.plan.length,
+    };
+    
+    // Save the final report to a file in user-specific directory
+    try {
+      await fileSystem.runTask(
+        `Save session report to session_report.json`,
+        JSON.stringify(finalReport, null, 2),
+        null,
+        userId
+      );
+    } catch (error) {
+      console.error("Error saving session report:", error.message);
+    }
+    
+    console.log(`[X] Resources cleaned up for user: ${userId}`);
+    return true;
+  } catch (error) {
+    console.error(`Error cleaning up resources for user ${userId}:`, error.message);
+    return false;
+  }
+}
+
 // Export the centralOrchestrator function for the tester
 module.exports = {
   centralOrchestrator
@@ -497,5 +578,7 @@ module.exports = {
 
 // Run the orchestrator if this file is executed directly
 if (require.main === module) {
-  centralOrchestrator("make a super clean, modern and highly animated homepage for my new project 'operon.one'. basically an ai that can do stuff for you (eg browsing the web, editing files, research, complete actions on the web and so much more). all of that automated and in a nice dashboard. so create the homepage / landingpage for it and make it extremly animated with world class top notch animations like never seen before. has to make a good first impression and be impressive to anyone. it should be written in html,css,js.");
+  // Generate a timestamp-based userId for direct execution
+  const directUserId = `direct_${Date.now()}`;
+  centralOrchestrator("make a super clean, modern and highly animated homepage for my new project 'operon.one'. basically an ai that can do stuff for you (eg browsing the web, editing files, research, complete actions on the web and so much more). all of that automated and in a nice dashboard. so create the homepage / landingpage for it and make it extremly animated with world class top notch animations like never seen before. has to make a good first impression and be impressive to anyone. it should be written in html,css,js.", directUserId);
 }
