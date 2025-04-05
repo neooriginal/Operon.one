@@ -19,10 +19,16 @@ const contextManager = require('../../utils/context');
  */
 async function processStep(step, userId = 'default') {
   const context = contextManager.getContext(userId);
-  const stepsOutput = context.stepsOutput;
-  const plan = context.plan;
-  const currentStepIndex = context.currentStepIndex;
-  const question = context.question;
+  const stepsOutput = context.stepsOutput || [];
+  const plan = context.plan || [];
+  const currentStepIndex = context.currentStepIndex || 0;
+  const question = context.question || '';
+  
+  // Guard against missing context
+  if (!question || !plan || plan.length === 0) {
+    console.error("Missing critical context in processStep");
+    return step; // Return original step if context is missing
+  }
   
   // Create a reasoning prompt that asks the AI to think about this step
   const prompt = `
@@ -46,35 +52,57 @@ I want you to REASON about this step before executing it:
 2. What is the purpose of this specific step?
 3. How should you approach this step to get the best results?
 4. What potential issues might arise and how would you handle them?
+5. What edge cases should you consider and handle? (IMPORTANT: Be thorough here)
+6. What validations are needed to ensure correct output? 
+
+Focus on ACCURACY, CORRECTNESS and COMPLETENESS. Prioritize these over explanations.
 
 Return your reasoning in this JSON format:
 {
   "reasoning": "Your step-by-step thought process",
   "approach": "How you will execute this step",
+  "edgeCases": ["List of edge cases to handle"],
+  "validations": ["List of validations to perform"],
   "expectedOutcome": "What you expect to achieve",
   "fallbackPlan": "What to do if something goes wrong",
-  "enhancedPrompt": "An improved prompt for this step that includes your reasoning"
+  "enhancedPrompt": "An improved prompt for this step that includes specific handling for edge cases"
 }
 `;
 
-  // Get the AI reasoning
-  const reasoning = await ai.callAI(prompt, "", []);
-  
-  // Store in thought chain using context manager
-  contextManager.addToThoughtChain({
-    step: currentStepIndex + 1,
-    reasoning: reasoning
-  }, userId);
-  
-  // Enhance the step with reasoning
-  const enhancedStep = {
-    ...step,
-    reasoning: reasoning,
-    originalPrompt: step.step,
-    step: reasoning.enhancedPrompt || step.step
-  };
-  
-  return enhancedStep;
+  try {
+    // Get the AI reasoning
+    const reasoning = await ai.callAI(prompt, "", []);
+    
+    // Validate that reasoning contains required fields
+    if (!reasoning || !reasoning.enhancedPrompt) {
+      console.warn("Invalid reasoning response - missing enhancedPrompt");
+      return {
+        ...step,
+        step: step.step // Keep original if reasoning failed
+      };
+    }
+    
+    // Store in thought chain using context manager
+    contextManager.addToThoughtChain({
+      step: currentStepIndex + 1,
+      reasoning: reasoning
+    }, userId);
+    
+    // Enhance the step with reasoning
+    const enhancedStep = {
+      ...step,
+      reasoning: reasoning,
+      originalPrompt: step.step,
+      step: reasoning.enhancedPrompt || step.step,
+      edgeCases: reasoning.edgeCases || [],
+      validations: reasoning.validations || []
+    };
+    
+    return enhancedStep;
+  } catch (error) {
+    console.error("Error during reasoning step:", error.message);
+    return step; // Return original step if reasoning fails
+  }
 }
 
 /**

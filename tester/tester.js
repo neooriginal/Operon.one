@@ -137,11 +137,17 @@ async function evaluateTestResult(prompt, testResult, logs, outputContents, test
   const evaluationContext = {
     prompt,
     executionTimeMs: testDuration,
-    logs: logs.join('\n').substring(0, 2000), // Limit log size
+    // Increase log size limit significantly
+    logs: logs.join('\n').substring(0, 10000), 
     outputFiles: Object.keys(outputContents),
+    // Include more content from each file and provide file sizes
     outputSamples: Object.entries(outputContents)
-      .map(([file, content]) => `${file}: ${content.substring(0, 500)}${content.length > 500 ? '...' : ''}`)
-      .join('\n'),
+      .map(([file, content]) => {
+        const fullSize = content.length;
+        const sample = content.substring(0, 2000);
+        return `${file} (${fullSize} bytes): ${sample}${fullSize > 2000 ? '... (truncated)' : ''}`;
+      })
+      .join('\n\n'),
     success: testResult.success,
     error: testResult.error || null
   };
@@ -158,6 +164,8 @@ async function evaluateTestResult(prompt, testResult, logs, outputContents, test
   6. Did the test pass or fail in your assessment?
 
   ALSO VERY IMPORTANT: make sure the results of the different steps are used for the final response.
+  Examine the logs carefully to ensure that outputs from earlier steps are properly incorporated into
+  the final result. Reject responses that calculate information but don't use it properly.
   
   Ignore [object Object] logs.
   also include what could be improved AI-wise (prompting eg.)
@@ -192,7 +200,7 @@ async function evaluateTestResult(prompt, testResult, logs, outputContents, test
         evaluationResult = {
           passed: evaluationText.toLowerCase().includes('pass') && !evaluationText.toLowerCase().includes('fail'),
           score: parseInt(evaluationText.match(/(\d+)\s*\/\s*10/) || [0, 5])[1],
-          feedback: evaluationText.substring(0, 500),
+          feedback: evaluationText.substring(0, 1000),
           improvements: extractImprovements(evaluationText),
           executionTimeAssessment: extractTimeAssessment(evaluationText)
         };
@@ -382,16 +390,40 @@ async function runTest(prompt, index) {
     let outputContents = {};
     
     if (fs.existsSync(outputDir)) {
-      outputFiles = fs.readdirSync(outputDir);
+      // Get all files recursively
+      const getAllFiles = (dir) => {
+        let results = [];
+        const list = fs.readdirSync(dir);
+        list.forEach(file => {
+          const filePath = path.join(dir, file);
+          const stat = fs.statSync(filePath);
+          if (stat && stat.isDirectory()) {
+            results = results.concat(getAllFiles(filePath));
+          } else {
+            results.push(filePath);
+          }
+        });
+        return results;
+      };
+      
+      const allOutputFiles = getAllFiles(outputDir);
+      outputFiles = allOutputFiles.map(file => path.relative(outputDir, file));
       
       // Read contents of each output file
-      for (const file of outputFiles) {
-        const filePath = path.join(outputDir, file);
+      for (const relativePath of outputFiles) {
+        const filePath = path.join(outputDir, relativePath);
         try {
-          const content = fs.readFileSync(filePath, 'utf8');
-          outputContents[file] = content;
+          const stats = fs.statSync(filePath);
+          // Only read text files and limit size
+          if (stats.size < 1000000 && !isLikelyBinaryFile(filePath)) {
+            const content = fs.readFileSync(filePath, 'utf8');
+            outputContents[relativePath] = content;
+          } else {
+            // Just provide metadata for large or binary files
+            outputContents[relativePath] = `[File size: ${stats.size} bytes, Modified: ${stats.mtime}]`;
+          }
         } catch (error) {
-          outputContents[file] = `Error reading file: ${error.message}`;
+          outputContents[relativePath] = `Error reading file: ${error.message}`;
         }
       }
     }
@@ -417,7 +449,7 @@ async function runTest(prompt, index) {
       return item;
     };
     
-    // Write test report with AI evaluation
+    // Write complete test report with AI evaluation
     fs.writeFileSync(
       logFile,
       `Test #${index+1} [${testId}]\n` +
@@ -425,12 +457,20 @@ async function runTest(prompt, index) {
       `Start Time: ${testStart.toISOString()}\n` +
       `Duration: ${testDuration}ms\n\n` +
       `New Files Created:\n${safeStringify(newFiles)}\n\n` +
-      `Output Files:\n${safeStringify(outputFiles)}\n\n` +
+      `Output Files (${outputFiles.length}):\n${safeStringify(outputFiles)}\n\n` +
       `Output File Contents:\n` +
       Object.entries(outputContents)
-        .map(([filename, content]) => `\n=== ${filename} ===\n${safeStringify(content)}\n`)
+        .map(([filename, content]) => {
+          // Handle very large files
+          const contentStr = typeof content === 'string' 
+            ? (content.length > 5000 
+                ? content.substring(0, 5000) + `\n\n... (${content.length - 5000} more bytes) ...` 
+                : content)
+            : content;
+          return `\n=== ${filename} ===\n${safeStringify(contentStr)}\n`;
+        })
         .join('\n') +
-      `\nConsole Output:\n${safeStringify(logs)}\n` +
+      `\nConsole Output (${logs.length} lines):\n${safeStringify(logs)}\n` +
       `\n---------------------------------------------\n` +
       `AI EVALUATION\n` +
       `---------------------------------------------\n` +
@@ -458,19 +498,44 @@ async function runTest(prompt, index) {
     
     // Collect output files and contents if available
     const outputDir = path.join(__dirname, 'output');
+    let outputFiles = [];
     let outputContents = {};
     
     if (fs.existsSync(outputDir)) {
-      const outputFiles = fs.readdirSync(outputDir);
+      // Get all files recursively
+      const getAllFiles = (dir) => {
+        let results = [];
+        const list = fs.readdirSync(dir);
+        list.forEach(file => {
+          const filePath = path.join(dir, file);
+          const stat = fs.statSync(filePath);
+          if (stat && stat.isDirectory()) {
+            results = results.concat(getAllFiles(filePath));
+          } else {
+            results.push(filePath);
+          }
+        });
+        return results;
+      };
+      
+      const allOutputFiles = getAllFiles(outputDir);
+      outputFiles = allOutputFiles.map(file => path.relative(outputDir, file));
       
       // Read contents of each output file
-      for (const file of outputFiles) {
-        const filePath = path.join(outputDir, file);
+      for (const relativePath of outputFiles) {
+        const filePath = path.join(outputDir, relativePath);
         try {
-          const content = fs.readFileSync(filePath, 'utf8');
-          outputContents[file] = content;
+          const stats = fs.statSync(filePath);
+          // Only read text files and limit size
+          if (stats.size < 1000000 && !isLikelyBinaryFile(filePath)) {
+            const content = fs.readFileSync(filePath, 'utf8');
+            outputContents[relativePath] = content;
+          } else {
+            // Just provide metadata for large or binary files
+            outputContents[relativePath] = `[File size: ${stats.size} bytes, Modified: ${stats.mtime}]`;
+          }
         } catch (err) {
-          outputContents[file] = `Error reading file: ${err.message}`;
+          outputContents[relativePath] = `Error reading file: ${err.message}`;
         }
       }
     }
@@ -494,7 +559,7 @@ async function runTest(prompt, index) {
       `Start Time: ${testStart.toISOString()}\n` +
       `Error: ${error.message}\n\n` +
       `Stack Trace:\n${error.stack}\n\n` +
-      `Console Output:\n${safeStringify(logs)}\n` +
+      `Console Output (${logs.length} lines):\n${safeStringify(logs)}\n` +
       `\n---------------------------------------------\n` +
       `AI EVALUATION\n` +
       `---------------------------------------------\n` +
@@ -514,6 +579,13 @@ async function runTest(prompt, index) {
       evaluation: aiEvaluation
     };
   }
+}
+
+// Helper function to determine if a file is likely binary
+function isLikelyBinaryFile(filePath) {
+  const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.exe', '.dll'];
+  const ext = path.extname(filePath).toLowerCase();
+  return binaryExtensions.includes(ext);
 }
 
 // Main test runner

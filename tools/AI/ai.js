@@ -80,14 +80,17 @@ You must respond with valid, parseable JSON only.
 - Ensure all quotes are properly escaped
 - Do not include markdown formatting, code blocks, or any text outside the JSON
 - Verify your response is a single, valid JSON object
+- Ensure all required fields are present in your response
+- For complex data, make sure arrays and nested objects are properly formatted
 Example format: {"key": "value with \\n newline"}
 
 Never respond with an empty message.
+Consider the entire context and all requirements before generating a response.
 `;
         systemMessage = systemMessage + jsonInstructions;
     }
 
-    systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING AND NEVER USE PLACEHOLDERS."
+    systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING AND NEVER USE PLACEHOLDERS. Focus on accuracy and correctness over lengthy explanations. Prioritize functionality over verbose descriptions. Fully address all specifications and requirements."
 
     let messagesForAPI = [
         {role: "system", content: [
@@ -125,59 +128,115 @@ Never respond with an empty message.
     };
     contextManager.setToolState('ai', toolState, userId);
     
-    const response = await openai.chat.completions.create({
-        model: model,
-        messages: messagesForAPI,
-        response_format: jsonResponse ? {type: "json_object"} : undefined
-    });
+    try {
+        // Add retry logic for more reliability
+        let attempts = 0;
+        const maxAttempts = 3;
+        let response = null;
+        
+        while (attempts < maxAttempts) {
+            try {
+                console.log(`Attempt ${attempts + 1} to get AI response...`);
+                response = await openai.chat.completions.create({
+                    model: model,
+                    messages: messagesForAPI,
+                    response_format: jsonResponse ? {type: "json_object"} : undefined,
+                    max_tokens: jsonResponse ? 4096 : 8192, // Increase token limit for responses
+                    temperature: 0.2 // Lower temperature for more deterministic outputs
+                });
+                break; // If successful, exit the retry loop
+            } catch (retryError) {
+                attempts++;
+                console.error(`Attempt ${attempts} failed: ${retryError.message}`);
+                if (attempts >= maxAttempts) {
+                    throw retryError; // Re-throw if max attempts reached
+                }
+                // Wait before retrying (exponential backoff)
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempts)));
+            }
+        }
 
-    if(!response?.choices?.[0]?.message?.content){
-        console.log("No response from AI");
-        console.log(response);
-        console.log(response.choices[0]);
+        if(!response?.choices?.[0]?.message?.content){
+            console.log("No response from AI");
+            console.log(response);
+            console.log(response.choices[0]);
+            
+            // Store error in tool state
+            toolState.lastError = "No response from AI";
+            contextManager.setToolState('ai', toolState, userId);
+            
+            return {
+                error: true,
+                message: "No content received from AI system",
+                fallback: true
+            };
+        }
+
+        const responseContent = response.choices[0].message.content;
+        
+        // Store response in tool state without truncation for proper record-keeping
+        toolState.responses.push({
+            prompt,
+            response: responseContent, // Don't truncate the response
+            timestamp: Date.now(),
+            model: model
+        });
+        
+        // Limit history size
+        if (toolState.responses.length > 50) {
+            toolState.responses = toolState.responses.slice(-50);
+        }
+        if (toolState.prompts.length > 50) {
+            toolState.prompts = toolState.prompts.slice(-50);
+        }
+        
+        // Save updated tool state
+        contextManager.setToolState('ai', toolState, userId);
+
+        if(jsonResponse){
+            const result = parseJSON(responseContent);
+            
+            // Validate result has expected structure if we have validation info
+            if (toolState.lastRequest.expectedStructure) {
+                const validationResult = validateResponse(result, toolState.lastRequest.expectedStructure);
+                if (!validationResult.valid) {
+                    console.warn("Response validation failed:", validationResult.message);
+                    toolState.lastValidationError = validationResult;
+                    contextManager.setToolState('ai', toolState, userId);
+                }
+            }
+            
+            // Use proper JSON stringification for logging
+            console.log(JSON.stringify(result, null, 2));
+            
+            return result;
+        } else {
+            return responseContent;
+        }
+    } catch (error) {
+        console.error(`AI call error: ${error.message}`);
         
         // Store error in tool state
-        toolState.lastError = "No response from AI";
+        toolState.lastError = error.message;
         contextManager.setToolState('ai', toolState, userId);
         
-        return;
-    }
-
-    const responseContent = response.choices[0].message.content;
-    
-    // Store response in tool state
-    toolState.responses.push({
-        prompt,
-        response: responseContent.substring(0, 500) + (responseContent.length > 500 ? "..." : ""),
-        timestamp: Date.now(),
-        model: model
-    });
-    
-    // Limit history size
-    if (toolState.responses.length > 50) {
-        toolState.responses = toolState.responses.slice(-50);
-    }
-    if (toolState.prompts.length > 50) {
-        toolState.prompts = toolState.prompts.slice(-50);
-    }
-    
-    // Save updated tool state
-    contextManager.setToolState('ai', toolState, userId);
-
-    if(jsonResponse){
-        const result = parseJSON(responseContent);
-        
-        // Use proper JSON stringification for logging
-        console.log(JSON.stringify(result, null, 2));
-        
-        return result;
-    } else {
-        return responseContent;
+        // Return a structured error message
+        if (jsonResponse) {
+            return {
+                error: true,
+                message: error.message,
+                details: error.toString(),
+                fallback: true
+            };
+        } else {
+            return `Error calling AI: ${error.message}`;
+        }
     }
 }
 
 function parseJSON(jsonString) {
     if (!jsonString || typeof jsonString !== 'string') {
+        console.error("Invalid input to parseJSON - not a string");
         return { error: "Invalid input - not a string", fallback: true };
     }
     
@@ -187,6 +246,7 @@ function parseJSON(jsonString) {
             return JSON.parse(jsonString);
         } catch (e) {
             // Continue to cleanup attempts
+            console.log("Initial JSON parse failed, attempting cleanup...");
         }
 
         // Clean up the string to handle various formats
@@ -199,6 +259,7 @@ function parseJSON(jsonString) {
             const match = cleanedJson.match(codeBlockRegex);
             if (match && match[1]) {
                 cleanedJson = match[1].trim();
+                console.log("Extracted JSON from code block");
             }
         }
         
@@ -231,25 +292,59 @@ function parseJSON(jsonString) {
             result += char;
         }
         
-        cleanedJson = result;
-        
         // Try parsing the cleaned JSON
         try {
-            return JSON.parse(cleanedJson);
-        } catch (error) {
-            throw error; // Re-throw to be caught by outer try/catch
+            const parsedResult = JSON.parse(result);
+            return parsedResult;
+        } catch (e) {
+            console.error("JSON parsing failed after cleanup:", e.message);
+            
+            // Try one more approach - remove all non-printable characters
+            const printableJson = cleanedJson.replace(/[^\x20-\x7E]/g, '');
+            try {
+                return JSON.parse(printableJson);
+            } catch (e2) {
+                // If all parsing attempts fail, return a structured error
+                console.error("All JSON parsing attempts failed:", e2.message);
+                return {
+                    error: true,
+                    message: "Failed to parse JSON after multiple attempts",
+                    original: jsonString.substring(0, 100) + "...",
+                    fallback: true
+                };
+            }
         }
     } catch (error) {
-        console.error("Failed to parse JSON response:", error.message);
-        console.error("Original content:", jsonString.substring(0, 500) + (jsonString.length > 500 ? '...' : ''));
-        // Return a basic object with the original content to avoid breaking
+        console.error("Unexpected error in parseJSON:", error.message);
         return { 
-            error: "Failed to parse as JSON",
-            errorMessage: error.message,
-            rawContent: jsonString,
+            error: true, 
+            message: error.message,
             fallback: true
         };
     }
+}
+
+// Helper function to validate response structure 
+// This is a simple implementation that can be expanded
+function validateResponse(response, expectedStructure) {
+    // If response has error flag, it's already invalid
+    if (response.error) {
+        return { valid: false, message: response.message || "Response contains error flag" };
+    }
+    
+    // Simple validation - check if required fields exist
+    if (typeof expectedStructure === 'object') {
+        for (const key of Object.keys(expectedStructure)) {
+            if (!(key in response)) {
+                return { 
+                    valid: false, 
+                    message: `Missing required field: ${key}` 
+                };
+            }
+        }
+    }
+    
+    return { valid: true };
 }
 
 module.exports = {callAI, generateImage};

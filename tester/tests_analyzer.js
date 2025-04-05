@@ -11,6 +11,19 @@ function readTestFiles(dir) {
     }))
 }
 
+async function countTokens(text){
+    const tokens = text.length / 4;
+    return tokens;
+}
+
+async function splitWithTokens(maxTokens = 10000, text){
+    const tokens = countTokens(text);
+    if (tokens > maxTokens){
+        const chunks = text.split('\n').slice(0, maxTokens);
+        return chunks.join('\n');
+    }
+}
+
 aiAnalyzeTest();
 async function aiAnalyzeTest() {
     console.log('[ ] Analyzing tests...');
@@ -31,13 +44,14 @@ async function aiAnalyzeTest() {
 
     You will receive a list of tests and you shall respond with a final assesment of the overall ai system and respond with a score from 0 to 100. Also summarize tips for improvements and other things.
 
-    Keep it very detailed and specific. Keep it in a GitHub like format.
+    Keep it very detailed and specific. Keep it in a GitHub like format. Ignore the AI EVALUATION section in the files and evaluate the tests yourself.
 
     include a todo list of things to improve in the format: [ ] - [thing to improve]
     also make a nice overview of the level of complexity vs the time and score of the tests.
     `
     let tests = readTestFiles('./tester/test_reports');
     let testsToString = tests.map(test => test.content).join('\n');
+    testsToString = await splitWithTokens(10000, testsToString);
     let response = await ai.callAI(prompt, testsToString, [], undefined, false);
     fs.writeFileSync('./tester/test_reports/analysis.MD', response);
     console.log('[x] Tests analyzed and saved to ./tester/test_reports/analysis.MD');

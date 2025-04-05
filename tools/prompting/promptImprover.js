@@ -13,27 +13,48 @@ async function improvePrompt(question, userId = 'default'){
     
     let prompt = `
     You are an AI agent that can improve a prompt.
-    The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific and detailed.
+    The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific, detailed, and structured.
+    
+    Specifically, you should:
+    1. Break down multi-step tasks into clearly enumerated steps
+    2. Identify and clarify any ambiguous terms or requirements
+    3. Add specific validations or error handling expectations where appropriate
+    4. Specify expected formats for inputs and outputs
+    5. Identify edge cases that should be handled
+    6. If the prompt involves code, clarify programming language and environment
+    
     You can return the same prompt if you think it is already good. Do not add information which is not obvious and not provided.
 
-    Only reply with the improved prompt.
+    Only reply with the improved prompt. DO NOT include explanations or additional commentary.
 
     Use \` in the JSON (start and end) to allow for multiple lines of code, but do not use \` for the improved prompt content.
 
     Here is some information about good prompting:
     ${promptingGuidelines}
     `
-    let improvedPrompt = await ai.callAI(prompt, question, undefined, undefined, false);
     
-    // Store in user context
-    userContext.promptImprover.history.push({
-        original: question,
-        improved: improvedPrompt,
-        timestamp: new Date().toISOString()
-    });
-    contextManager.updateContext(userId, userContext);
-    
-    return improvedPrompt;
+    try {
+        let improvedPrompt = await ai.callAI(prompt, question, undefined, undefined, false);
+        
+        // Simple validation to detect empty or very short responses
+        if (!improvedPrompt || improvedPrompt.length < 10) {
+            console.warn("Prompt improvement returned invalid result, using original prompt");
+            improvedPrompt = question;
+        }
+        
+        // Store in user context
+        userContext.promptImprover.history.push({
+            original: question,
+            improved: improvedPrompt,
+            timestamp: new Date().toISOString()
+        });
+        contextManager.updateContext(userId, userContext);
+        
+        return improvedPrompt;
+    } catch (error) {
+        console.error("Error improving prompt:", error.message);
+        return question; // Return original prompt if there's an error
+    }
 }
 
 
