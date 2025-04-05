@@ -1,26 +1,56 @@
 const ai = require("../AI/ai");
+const contextManager = require('../../utils/context');
 
-let history = [];
-
-async function runTask(task, otherAIData, callback) {
-    // Initialize history
-    history = [];
+async function runTask(task, otherAIData, callback, userId = 'default') {
+    // Initialize tool state
+    let toolState = contextManager.getToolState('math', userId) || {
+        history: [],
+        operations: []
+    };
     
     // Combine task with other AI data
     task = task + "\n\nOther AI Data: " + otherAIData;
     
     try {
         // Generate and execute mathematical operations
-        let result = await performMathOperation(task);
-        let summary = await evaluateOutput(task, result);
-        callback(summary);
+        let result = await performMathOperation(task, userId);
+        let summary = await evaluateOutput(task, result, userId);
+        
+        if (callback) {
+            callback(summary);
+        }
+        
+        return summary;
     } catch (error) {
         console.error("Error in runTask:", error.message);
-        callback(`Error executing task: ${error.message}`);
+        
+        // Track error in tool state
+        toolState.lastError = {
+            message: error.message,
+            timestamp: Date.now()
+        };
+        contextManager.setToolState('math', toolState, userId);
+        
+        const errorResult = {
+            error: error.message,
+            success: false
+        };
+        
+        if (callback) {
+            callback(errorResult);
+        }
+        
+        return errorResult;
     }
 }
 
-async function performMathOperation(task) {
+async function performMathOperation(task, userId = 'default') {
+    // Get tool state
+    let toolState = contextManager.getToolState('math', userId) || {
+        history: [],
+        operations: []
+    };
+    
     let prompt = `
     You are an AI agent that can execute complex mathematical operations. For this task, the user will provide a mathematical problem and you are supposed to solve it.
     Task: ${task}
@@ -33,26 +63,49 @@ async function performMathOperation(task) {
     }
     `
 
-    let response = await ai.callAI(prompt, task, history);
+    let response = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
     
     // Add to history
-    history.push({
+    toolState.history.push({
         role: "user", 
         content: [
             {type: "text", text: task}
         ]
     });
-    history.push({
+    
+    toolState.history.push({
         role: "assistant", 
         content: [
-            {type: "text", text: response}
+            {type: "text", text: JSON.stringify(response)}
         ]
     });
+    
+    // Track operation in tool state
+    toolState.operations.push({
+        task: task,
+        operation: response.operation,
+        result: response.result,
+        timestamp: Date.now()
+    });
+    
+    // Limit history size
+    if (toolState.history.length > 10) {
+        toolState.history = toolState.history.slice(-10);
+    }
+    if (toolState.operations.length > 10) {
+        toolState.operations = toolState.operations.slice(-10);
+    }
+    
+    // Save updated tool state
+    contextManager.setToolState('math', toolState, userId);
 
     return response;
 }
 
-async function evaluateOutput(task, result) {
+async function evaluateOutput(task, result, userId = 'default') {
+    // Get tool state
+    let toolState = contextManager.getToolState('math', userId);
+    
     let prompt = `
     Based on the following task, evaluate the mathematical operation and return a summary in a JSON format.
     Task: ${task}
@@ -65,7 +118,18 @@ async function evaluateOutput(task, result) {
     }
     `
     
-    let summary = await ai.callAI(prompt, task, history);
+    let summary = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
+    
+    // Add evaluation to tool state
+    toolState.lastEvaluation = {
+        summary: summary.summary,
+        success: summary.success,
+        timestamp: Date.now()
+    };
+    
+    // Save updated tool state
+    contextManager.setToolState('math', toolState, userId);
+    
     return summary;
 }
 

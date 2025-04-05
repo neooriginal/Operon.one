@@ -12,8 +12,7 @@ const fs = require('fs');
 const { improvePrompt } = require('./tools/prompting/promptImprover');
 const writer = require('./tools/writer/main');
 const react = require('./tools/react/main');
-let plan = [];
-let history = [];
+const contextManager = require('./utils/context');
 
 let globalPrompt = `
 
@@ -120,9 +119,11 @@ Return a JSON object structured like this:
 
 `
 
-async function centralOrchestrator(question){
+async function centralOrchestrator(question, userId = 'default'){
   try {
-    history = [];
+    // Initialize context for this user
+    contextManager.resetContext(userId);
+    
     await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
     
@@ -135,8 +136,8 @@ async function centralOrchestrator(question){
     question = await improvePrompt(question);
     console.log("[X] Improving prompt");
 
-    // Reset ReAct thought chain for new session
-    react.resetThoughtChain();
+    // Store question in context
+    contextManager.setQuestion(question, userId);
 
     let prompt = `
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
@@ -144,51 +145,44 @@ async function centralOrchestrator(question){
     `
     console.log("[ ] Planning...");
 
-    let planObject = await ai.callAI(prompt, question, history);
+    let planObject = await ai.callAI(prompt, question, []);
     // Convert the plan object into an array
-    plan = Object.values(planObject).filter(item => item && typeof item === 'object');
+    const plan = Object.values(planObject).filter(item => item && typeof item === 'object');
     
-    history.push({
+    // Store plan in context
+    contextManager.setPlan(plan, userId);
+    
+    // Add to history
+    contextManager.addToHistory({
       role: "user", 
       content: [
           {type: "text", text: question}
       ]
-    });
-    history.push({
-    role: "assistant", 
-    content: [
-        {type: "text", text: JSON.stringify(planObject)}
-    ]
-    });
+    }, userId);
+    
+    contextManager.addToHistory({
+      role: "assistant", 
+      content: [
+          {type: "text", text: JSON.stringify(planObject)}
+      ]
+    }, userId);
+    
     console.log("[X] Planning...");
    
-    let stepsOutput = [];
-    let currentStepIndex = 0;
-
     // Continue executing steps until we've completed all steps in the plan
-    while (currentStepIndex < plan.length) {
+    while (contextManager.getCurrentStepIndex(userId) < plan.length) {
+      const currentStepIndex = contextManager.getCurrentStepIndex(userId);
       const step = plan[currentStepIndex];
       
       // ReAct: Process step with reasoning before execution
       console.log(`[ ] Reasoning about step: ${step.step} using ${step.action}`);
-      const enhancedStep = await react.processStep(step, stepsOutput, plan, currentStepIndex, question);
+      const enhancedStep = await react.processStep(step, userId);
       console.log(`[X] Reasoning complete`);
       
       console.log(`[ ] ${enhancedStep.step} using ${enhancedStep.action}`);
       
-      // Filter stepsOutput based on usingData parameter
-      let filteredStepsOutput = [];
-      if (enhancedStep.usingData && enhancedStep.usingData !== "none") {
-        const requestedTools = enhancedStep.usingData.split(",").map(tool => tool.trim());
-        
-        if (requestedTools.includes("all")) {
-          filteredStepsOutput = stepsOutput;
-        } else {
-          filteredStepsOutput = stepsOutput.filter(output => 
-            requestedTools.includes(output.action)
-          );
-        }
-      }
+      // Get filtered steps output from context
+      const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId);
       
       const inputData = enhancedStep.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
       
@@ -217,12 +211,12 @@ async function centralOrchestrator(question){
         case "chatCompletion":
           summary = await ai.callAI(enhancedStep.step, inputData, []);
           console.log(`[X] ${enhancedStep.step}`);
-          history.push({
+          contextManager.addToHistory({
             role: "assistant", 
             content: [
               {type: "text", text: JSON.stringify(summary)}
             ]
-          });
+          }, userId);
           break;
 
         case "deepResearch":
@@ -285,31 +279,27 @@ async function centralOrchestrator(question){
           break;
       }
       
-      // Add to stepsOutput after execution
-      stepsOutput.push({
-        step: enhancedStep.step,
-        action: enhancedStep.action,
-        output: summary
-      });
+      // Add to stepsOutput after execution using context manager
+      contextManager.addStepOutput(enhancedStep.step, enhancedStep.action, summary, userId);
       
       // ReAct: Reflect on result after execution
       console.log(`[ ] Reflecting on result of step ${currentStepIndex + 1}`);
-      const reflection = await react.reflectOnResult(enhancedStep, summary, stepsOutput, plan, currentStepIndex, question);
+      const reflection = await react.reflectOnResult(enhancedStep, summary, userId);
       console.log(`[X] Reflection complete`);
       
-      // Advance to next step
-      currentStepIndex++;
+      // Increment step index in context
+      contextManager.incrementStepIndex(userId);
       
       // Check if reflection suggests a plan change
       if (reflection && reflection.changePlan === true) {
         console.log(`[ ] Reflection suggests changing plan: ${reflection.explanation}`);
         try {
-          const updatedPlan = await checkProgress(question, plan, stepsOutput, currentStepIndex);
+          const updatedPlan = await checkProgress(question, plan, contextManager.getStepsOutput(userId), contextManager.getCurrentStepIndex(userId));
           
-          // If the plan was updated, use the new plan but keep our current position
+          // If the plan was updated, update it in context
           if (updatedPlan !== plan) {
             console.log("Plan was updated based on reflection");
-            plan = updatedPlan;
+            contextManager.updatePlan(updatedPlan, userId);
           }
         } catch (error) {
           console.error("Error updating plan based on reflection:", error.message);
@@ -318,19 +308,19 @@ async function centralOrchestrator(question){
       }
       
       // Save the thought chain periodically
-      if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length) {
-        await react.saveThoughtChain(fileSystem);
+      if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {
+        await react.saveThoughtChain(fileSystem, userId);
       }
     }
     
     // After the loop completes, finalize the task
     let finalOutput;
     try {
-      finalOutput = await finalizeTask(question, stepsOutput);
+      finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId));
       console.log(JSON.stringify({
         status: "completed",
-        stepCount: stepsOutput.length,
-        successCount: stepsOutput.filter(step => 
+        stepCount: contextManager.getStepsOutput(userId).length,
+        successCount: contextManager.getStepsOutput(userId).filter(step => 
           step && step.output && !step.output.error && step.output.success !== false
         ).length
       }, null, 2));

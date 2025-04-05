@@ -1,5 +1,16 @@
 const ai = require("../AI/ai");
-async function improvePrompt(question){
+const contextManager = require("../../utils/context");
+
+async function improvePrompt(question, userId = 'default'){
+    // Get or initialize user context
+    let userContext = contextManager.getContext(userId);
+    if (!userContext.promptImprover) {
+        userContext.promptImprover = {
+            history: []
+        };
+        contextManager.updateContext(userId, userContext);
+    }
+    
     let prompt = `
     You are an AI agent that can improve a prompt.
     The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific and detailed.
@@ -13,6 +24,15 @@ async function improvePrompt(question){
     ${promptingGuidelines}
     `
     let improvedPrompt = await ai.callAI(prompt, question, undefined, undefined, false);
+    
+    // Store in user context
+    userContext.promptImprover.history.push({
+        original: question,
+        improved: improvedPrompt,
+        timestamp: new Date().toISOString()
+    });
+    contextManager.updateContext(userId, userContext);
+    
     return improvedPrompt;
 }
 
@@ -106,6 +126,6 @@ let promptingGuidelines = `
 
 ### **12. Strategic Use of Keywords**
 - **Highlight key concepts**: Use keywords that emphasize important themes or requirements.
-  - Example for climate change mitigation: *“Focus on practical solutions like renewable energy and community-level initiatives.”*
+  - Example for climate change mitigation: *"Focus on practical solutions like renewable energy and community-level initiatives."*
 
 `

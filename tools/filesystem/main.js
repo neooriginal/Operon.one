@@ -1,9 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-
 const ai = require('../AI/ai');
-let history = [];
-let summaryCallback = null;
+const contextManager = require('../../utils/context');
 
 function getBaseDirectory() {
     const applicationBaseDir = path.join(__dirname, '..', '..');
@@ -120,7 +118,13 @@ function listDirectories(userPath) {
     );
 }
 
-async function runStep(task, otherAIData){
+async function runStep(task, otherAIData, userId = 'default'){
+    // Get tool state from context
+    const toolState = contextManager.getToolState('fileSystem', userId) || { 
+        history: [], 
+        operations: []
+    };
+
     let prompt = `
     You are an AI agent that can execute complex tasks. You are ment to control a the filesystem.
     Do your best to complete the task provided by the user. 
@@ -171,11 +175,11 @@ async function runStep(task, otherAIData){
     `
 
     // Add user's most recent input to history with proper formatting
-    if (task && !history.some(entry => 
+    if (task && !toolState.history.some(entry => 
         entry.role === "user" && 
         entry.content.some(c => c.type === "text" && c.text === task)
     )) {
-        history.push({
+        toolState.history.push({
             role: "user", 
             content: [
                 {type: "text", text: task}
@@ -183,13 +187,13 @@ async function runStep(task, otherAIData){
         });
     }
 
-    let result = await ai.callAI(prompt, task, history);
+    let result = await ai.callAI(prompt, task, toolState.history);
 
     // Add AI response to history
-    history.push({
+    toolState.history.push({
         role: "assistant", 
         content: [
-            {type: "text", text: result.toString()}
+            {type: "text", text: JSON.stringify(result)}
         ]
     });
 
@@ -199,117 +203,213 @@ async function runStep(task, otherAIData){
         if(result.action === "saveToFile"){
             saveToFile(result.content, result.path || '', result.filename);
             operationResult = `File saved: ${result.filename} to path: ${result.path || ''}`;
+            
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "saveToFile", 
+                path: result.path || '', 
+                filename: result.filename
+            });
         }else if(result.action === "deleteFile"){
             deleteFile(result.path || '', result.filename);
             operationResult = `File deleted: ${result.filename} from path: ${result.path || ''}`;
+            
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "deleteFile", 
+                path: result.path || '', 
+                filename: result.filename
+            });
         }else if(result.action === "createDirectory"){
             createDirectory(result.path || '');
             operationResult = `Directory created: ${result.path || ''}`;
+            
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "createDirectory", 
+                path: result.path || ''
+            });
         }else if(result.action === "deleteDirectory"){
             deleteDirectory(result.path || '');
             operationResult = `Directory deleted: ${result.path || ''}`;
+            
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "deleteDirectory", 
+                path: result.path || ''
+            });
         }else if(result.action === "listFiles"){
             const files = listFiles(result.path || '');
             operationResult = `Files in ${result.path || ''}: ${JSON.stringify(files)}`;
             
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "listFiles", 
+                path: result.path || '',
+                result: files
+            });
+            
             // Add operation result to history
-            history.push({
+            toolState.history.push({
                 role: "system", 
                 content: [
                     {type: "text", text: operationResult}
                 ]
             });
             
+            // Save tool state
+            contextManager.setToolState('fileSystem', toolState, userId);
+            
             // Continue with next step
-            return runStep(task).then(() => files);
+            return runStep(task, otherAIData, userId).then(() => files);
         }else if(result.action === "listDirectories"){
             const directories = listDirectories(result.path || '');
             operationResult = `Directories in ${result.path || ''}: ${JSON.stringify(directories)}`;
             
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "listDirectories", 
+                path: result.path || '',
+                result: directories
+            });
+            
             // Add operation result to history
-            history.push({
+            toolState.history.push({
                 role: "system", 
                 content: [
                     {type: "text", text: operationResult}
                 ]
             });
             
+            // Save tool state
+            contextManager.setToolState('fileSystem', toolState, userId);
+            
             // Continue with next step
-            return runStep(task).then(() => directories);
+            return runStep(task, otherAIData, userId).then(() => directories);
         }else if(result.action === "readFile"){
             const content = readFile(result.path || '', result.filename);
             operationResult = `File read: ${result.filename} from path: ${result.path || ''}`;
             
+            // Track operation in tool state
+            toolState.operations.push({
+                action: "readFile", 
+                path: result.path || '',
+                filename: result.filename,
+                preview: content.substring(0, 100) + (content.length > 100 ? '...' : '')
+            });
+            
             // Add operation result to history
-            history.push({
+            toolState.history.push({
                 role: "system", 
                 content: [
-                    {type: "text", text: operationResult}
+                    {type: "text", text: operationResult + "\n\nContent:\n" + content}
                 ]
             });
             
+            // Save tool state
+            contextManager.setToolState('fileSystem', toolState, userId);
+            
             // Continue with next step
-            return runStep(task).then(() => content);
+            return runStep(task, otherAIData, userId).then(() => content);
         }else if(result.action === "close"){
-            if (summaryCallback) {
-                summaryCallback(result.summary);
+            // Limit history size
+            if (toolState.history.length > 20) {
+                toolState.history = toolState.history.slice(-20);
             }
-            return;
+            
+            // Save tool state one last time
+            contextManager.setToolState('fileSystem', toolState, userId);
+            
+            return {summary: result.summary, operations: toolState.operations};
+        }else{
+            operationResult = `Unknown action: ${result.action}`;
         }
 
-        // Add operation result to history for non-return operations
-        if (operationResult) {
-            history.push({
-                role: "system", 
-                content: [
-                    {type: "text", text: operationResult}
-                ]
-            });
-        }
-
-        // Continue processing
-        return runStep(task);
-
+        // Add operation result to history
+        toolState.history.push({
+            role: "system", 
+            content: [
+                {type: "text", text: operationResult}
+            ]
+        });
+        
+        // Save tool state
+        contextManager.setToolState('fileSystem', toolState, userId);
+        
+        // Continue with next step
+        return runStep(task, otherAIData, userId);
     } catch (error) {
-        // Log error but continue execution
-        console.error("Error in filesystem operation:", error.message);
+        console.error('Error in file operation:', error.message);
+        
         // Add error to history
-        history.push({
+        toolState.history.push({
             role: "system", 
             content: [
                 {type: "text", text: `Error: ${error.message}`}
             ]
         });
         
-        // Continue processing despite error
-        return runStep(task);
+        // Save tool state
+        contextManager.setToolState('fileSystem', toolState, userId);
+        
+        // Continue with next step to let the AI handle the error
+        return runStep(task, otherAIData, userId);
     }
 }
 
-async function runTask(task, otherAIData, callback){
-    // Initialize history
-    history = [];
+async function runTask(task, otherAIData, callback, userId = 'default'){
+    // Initialize tool state
+    const toolState = contextManager.getToolState('fileSystem', userId) || { 
+        history: [], 
+        operations: []
+    };
     
-    // Ensure the base directory exists when starting a new task
-    ensureBaseDirectoryExists();
+    // Reset operations for new task
+    toolState.operations = [];
     
-    history.push({
-        role: "user", 
-        content: [
-            {type: "text", text: otherAIData}
-        ]
-    });  
+    // If history is too long, trim it
+    if (toolState.history.length > 20) {
+        toolState.history = toolState.history.slice(-10);
+    }
     
-    return new Promise((resolve) => {
-        summaryCallback = (summary) => {
-            if (callback) callback(summary);
-            resolve(summary);
+    // Save initial state
+    contextManager.setToolState('fileSystem', toolState, userId);
+    
+    try {
+        // Store callback for later use
+        const summary = await runStep(task, otherAIData, userId);
+        
+        if (callback) {
+            callback(summary);
+        }
+        
+        return summary;
+    } catch (error) {
+        console.error("Error in fileSystem tool:", error);
+        
+        if (callback) {
+            callback({
+                error: error.message,
+                success: false
+            });
+        }
+        
+        return {
+            error: error.message,
+            success: false
         };
-        runStep(task);
-    });
+    }
 }
 
 module.exports = {
-    runTask
+    runTask,
+    // Export these functions for direct use
+    saveToFile,
+    readFile,
+    listFiles,
+    listDirectories,
+    createDirectory,
+    deleteFile,
+    deleteDirectory
 };
 

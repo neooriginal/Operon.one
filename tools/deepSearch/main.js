@@ -1,11 +1,29 @@
 const axios = require("axios");
 const ai = require("../AI/ai");
+const contextManager = require("../../utils/context");
 
-
-async function runTask(task, otherAIData, callback){
+async function runTask(task, otherAIData, callback, userId = 'default'){
     try {
-        let webData = await searchWeb(task);
-        let report = await evaluatewithAI(task, webData+"\n\n Also, there is some information that previous tasks have gathered. Keep them in mind while evaluating the web data and add them to the report to not duplicate information and other things. Here is the information: "+otherAIData);
+        // Get or initialize user-specific context
+        let userContext = contextManager.getContext(userId);
+        if (!userContext.deepSearch) {
+            userContext.deepSearch = {
+                searchHistory: [],
+                lastQueries: []
+            };
+            contextManager.updateContext(userId, userContext);
+        }
+
+        let webData = await searchWeb(task, userId);
+        
+        // Store search in history
+        userContext.deepSearch.searchHistory.push({
+            task,
+            timestamp: new Date().toISOString()
+        });
+        contextManager.updateContext(userId, userContext);
+        
+        let report = await evaluatewithAI(task, webData+"\n\n Also, there is some information that previous tasks have gathered. Keep them in mind while evaluating the web data and add them to the report to not duplicate information and other things. Here is the information: "+otherAIData, userId);
         callback(report);
     } catch (error) {
         console.error("Error in runTask:", error.message);
@@ -13,7 +31,7 @@ async function runTask(task, otherAIData, callback){
     }
 }
 
-async function getQuery(task){
+async function getQuery(task, userId = 'default'){
     try {
         let prompt = `
         You are an AI agent that can execute complex tasks. For this task, the user will provide a task and you are supposed to return queries for searching the web.
@@ -25,6 +43,12 @@ async function getQuery(task){
         `
 
         let response = await ai.callAI(prompt, task);
+        
+        // Store queries in user context
+        let userContext = contextManager.getContext(userId);
+        userContext.deepSearch.lastQueries = response.queries || [];
+        contextManager.updateContext(userId, userContext);
+        
         return response.queries || [];
     } catch (error) {
         console.error("Error in getQuery:", error.message);
@@ -32,7 +56,7 @@ async function getQuery(task){
     }
 }
 
-async function evaluatewithAI(task, webData){
+async function evaluatewithAI(task, webData, userId = 'default'){
     try {
         let prompt = `
         You are an AI agent that can execute complex tasks. For this task, the user will provide a task and you are supposed to evaluate the web data scraped from the web and return a detailled report using the web data.
@@ -45,7 +69,23 @@ async function evaluatewithAI(task, webData){
         Web Data:
         ${webData}
         `
+        
+        // Get user context to check for any previous evaluations
+        let userContext = contextManager.getContext(userId);
+        if (!userContext.deepSearch.evaluations) {
+            userContext.deepSearch.evaluations = [];
+        }
+        
         let response = await ai.callAI(prompt, task);
+        
+        // Store evaluation in context
+        userContext.deepSearch.evaluations.push({
+            task,
+            timestamp: new Date().toISOString(),
+            summary: response.report?.substring(0, 100) + "..." || "No report"
+        });
+        contextManager.updateContext(userId, userContext);
+        
         return response.report || "No report could be generated";
     } catch (error) {
         console.error("Error in evaluatewithAI:", error.message);
@@ -53,11 +93,11 @@ async function evaluatewithAI(task, webData){
     }
 }
 
-async function searchWeb(task){
+async function searchWeb(task, userId = 'default'){
     try {
         let urls = [];
         let webData = [];
-        let queries = await getQuery(task);
+        let queries = await getQuery(task, userId);
         
         for(let query of queries){
             try {

@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const dotenv = require('dotenv');
 const smartModelSelector = require('./smartModelSelector');
 const tokenCalculation = require('./tokenCalculation');
+const contextManager = require('../../utils/context');
 dotenv.config();
 
 const openai = new OpenAI({
@@ -9,17 +10,59 @@ const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1"
 });
 
-async function generateImage(prompt){
+async function generateImage(prompt, userId = 'default'){
+    // Initialize or get tool state
+    let toolState = contextManager.getToolState('ai', userId) || {
+        history: [],
+        prompts: [],
+        images: []
+    };
+    
+    // Add prompt to tool state
+    toolState.prompts.push({
+        type: 'image',
+        prompt,
+        timestamp: Date.now()
+    });
+    
     const response = await openai.images.generate({
         prompt: prompt,
         n: 1,
         size: "1024x1024"
     });
 
-    return response.data[0].url;
+    const imageUrl = response.data[0].url;
+    
+    // Store image generation in tool state
+    toolState.images.push({
+        prompt,
+        url: imageUrl,
+        timestamp: Date.now()
+    });
+    
+    // Save updated tool state
+    contextManager.setToolState('ai', toolState, userId);
+    
+    return imageUrl;
 }
 
-async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, model="auto"){
+async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, model="auto", userId = 'default'){
+    // Initialize or get tool state
+    let toolState = contextManager.getToolState('ai', userId) || {
+        history: [],
+        prompts: [],
+        responses: []
+    };
+    
+    // Add prompt to tool state
+    toolState.prompts.push({
+        system: systemMessage,
+        user: prompt,
+        timestamp: Date.now(),
+        model
+    });
+    contextManager.setToolState('ai', toolState, userId);
+    
     let modelpicker = await smartModelSelector.getModel(prompt, model);
     model = modelpicker.model
     const maxTokens = modelpicker.maxTokens
@@ -74,6 +117,13 @@ Never respond with an empty message.
         }
     }
     
+    // Store request details in tool state
+    toolState.lastRequest = {
+        messages: messagesForAPI,
+        model,
+        jsonResponse
+    };
+    contextManager.setToolState('ai', toolState, userId);
     
     const response = await openai.chat.completions.create({
         model: model,
@@ -85,18 +135,44 @@ Never respond with an empty message.
         console.log("No response from AI");
         console.log(response);
         console.log(response.choices[0]);
+        
+        // Store error in tool state
+        toolState.lastError = "No response from AI";
+        contextManager.setToolState('ai', toolState, userId);
+        
         return;
     }
 
+    const responseContent = response.choices[0].message.content;
+    
+    // Store response in tool state
+    toolState.responses.push({
+        prompt,
+        response: responseContent.substring(0, 500) + (responseContent.length > 500 ? "..." : ""),
+        timestamp: Date.now(),
+        model: model
+    });
+    
+    // Limit history size
+    if (toolState.responses.length > 50) {
+        toolState.responses = toolState.responses.slice(-50);
+    }
+    if (toolState.prompts.length > 50) {
+        toolState.prompts = toolState.prompts.slice(-50);
+    }
+    
+    // Save updated tool state
+    contextManager.setToolState('ai', toolState, userId);
+
     if(jsonResponse){
-        const result = parseJSON(response.choices[0].message.content);
+        const result = parseJSON(responseContent);
         
         // Use proper JSON stringification for logging
         console.log(JSON.stringify(result, null, 2));
         
         return result;
     } else {
-        return response.choices[0].message.content;
+        return responseContent;
     }
 }
 

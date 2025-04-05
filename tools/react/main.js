@@ -1,4 +1,5 @@
 const ai = require('../AI/ai');
+const contextManager = require('../../utils/context');
 
 /**
  * ReAct module - implements the Reasoning + Acting pattern
@@ -10,19 +11,19 @@ const ai = require('../AI/ai');
  * 4. Repeat
  */
 
-// Store thought chain for each session
-let thoughtChain = [];
-
 /**
  * Process a step using the ReAct pattern before execution
  * @param {Object} step - The step to process
- * @param {Array} stepsOutput - Previous step outputs
- * @param {Object} plan - The overall plan
- * @param {Number} currentStepIndex - Current position in plan
- * @param {String} question - Original user question
+ * @param {String} userId - User identifier for multi-user support
  * @returns {Object} Enhanced step with reasoning
  */
-async function processStep(step, stepsOutput, plan, currentStepIndex, question) {
+async function processStep(step, userId = 'default') {
+  const context = contextManager.getContext(userId);
+  const stepsOutput = context.stepsOutput;
+  const plan = context.plan;
+  const currentStepIndex = context.currentStepIndex;
+  const question = context.question;
+  
   // Create a reasoning prompt that asks the AI to think about this step
   const prompt = `
 You are an autonomous AI agent using the ReAct (Reasoning + Acting) framework.
@@ -59,11 +60,11 @@ Return your reasoning in this JSON format:
   // Get the AI reasoning
   const reasoning = await ai.callAI(prompt, "", []);
   
-  // Store in thought chain
-  thoughtChain.push({
+  // Store in thought chain using context manager
+  contextManager.addToThoughtChain({
     step: currentStepIndex + 1,
     reasoning: reasoning
-  });
+  }, userId);
   
   // Enhance the step with reasoning
   const enhancedStep = {
@@ -80,12 +81,17 @@ Return your reasoning in this JSON format:
  * Reflect on the results of a step after execution
  * @param {Object} step - The executed step
  * @param {Object} result - The step result
- * @param {Array} stepsOutput - All previous outputs
- * @param {Object} plan - The overall plan
- * @param {Number} currentStepIndex - Current position in plan
+ * @param {String} userId - User identifier for multi-user support
  * @returns {Object} Reflection with potential plan adjustments
  */
-async function reflectOnResult(step, result, stepsOutput, plan, currentStepIndex, question) {
+async function reflectOnResult(step, result, userId = 'default') {
+  const context = contextManager.getContext(userId);
+  const stepsOutput = context.stepsOutput;
+  const plan = context.plan;
+  const currentStepIndex = context.currentStepIndex;
+  const question = context.question;
+  const thoughtChain = context.thoughtChain;
+  
   // Create a reflection prompt
   const prompt = `
 You are an autonomous AI agent using the ReAct (Reasoning + Acting) framework.
@@ -123,38 +129,26 @@ Return your reflection in this JSON format:
   // Get the AI reflection
   const reflection = await ai.callAI(prompt, "", []);
   
-  // Store in thought chain
-  thoughtChain[thoughtChain.length - 1].reflection = reflection;
+  // Store in thought chain using context manager
+  const lastThoughtIndex = thoughtChain.length - 1;
+  contextManager.updateThoughtChain(lastThoughtIndex, { reflection }, userId);
   
   return reflection;
 }
 
 /**
- * Get the complete thought chain
- * @returns {Array} The thought chain
- */
-function getThoughtChain() {
-  return thoughtChain;
-}
-
-/**
- * Reset the thought chain
- */
-function resetThoughtChain() {
-  thoughtChain = [];
-}
-
-/**
  * Save the thought chain to a file using the filesystem tool
  * @param {Object} fileSystem - The filesystem tool
+ * @param {String} userId - User identifier for multi-user support
  */
-async function saveThoughtChain(fileSystem) {
+async function saveThoughtChain(fileSystem, userId = 'default') {
   try {
+    const thoughtChain = contextManager.getThoughtChain(userId);
     const thoughtChainJSON = JSON.stringify(thoughtChain, null, 2);
     
-    // Use the runTask method of fileSystem instead of direct writeFile
+    // Use the runTask method of fileSystem
     await fileSystem.runTask(
-      `Save the ReAct thought chain to output/thought_chain.json. Expected output: output/thought_chain.json`,
+      `Save the ReAct thought chain to output/thought_chain_${userId}.json. Expected output: output/thought_chain_${userId}.json`,
       thoughtChainJSON
     );
     
@@ -168,7 +162,5 @@ async function saveThoughtChain(fileSystem) {
 module.exports = {
   processStep,
   reflectOnResult,
-  getThoughtChain,
-  resetThoughtChain,
   saveThoughtChain
 }; 
