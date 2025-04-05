@@ -11,6 +11,7 @@ const ascii = require('./utils/ascii');
 const fs = require('fs');
 const { improvePrompt } = require('./tools/prompting/promptImprover');
 const writer = require('./tools/writer/main');
+const react = require('./tools/react/main');
 let plan = [];
 let history = [];
 
@@ -134,6 +135,9 @@ async function centralOrchestrator(question){
     question = await improvePrompt(question);
     console.log("[X] Improving prompt");
 
+    // Reset ReAct thought chain for new session
+    react.resetThoughtChain();
+
     let prompt = `
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
     ${globalPrompt}
@@ -164,12 +168,18 @@ async function centralOrchestrator(question){
     // Continue executing steps until we've completed all steps in the plan
     while (currentStepIndex < plan.length) {
       const step = plan[currentStepIndex];
-      console.log(`[ ] ${step.step} using ${step.action}`);
+      
+      // ReAct: Process step with reasoning before execution
+      console.log(`[ ] Reasoning about step: ${step.step} using ${step.action}`);
+      const enhancedStep = await react.processStep(step, stepsOutput, plan, currentStepIndex, question);
+      console.log(`[X] Reasoning complete`);
+      
+      console.log(`[ ] ${enhancedStep.step} using ${enhancedStep.action}`);
       
       // Filter stepsOutput based on usingData parameter
       let filteredStepsOutput = [];
-      if (step.usingData && step.usingData !== "none") {
-        const requestedTools = step.usingData.split(",").map(tool => tool.trim());
+      if (enhancedStep.usingData && enhancedStep.usingData !== "none") {
+        const requestedTools = enhancedStep.usingData.split(",").map(tool => tool.trim());
         
         if (requestedTools.includes("all")) {
           filteredStepsOutput = stepsOutput;
@@ -180,48 +190,33 @@ async function centralOrchestrator(question){
         }
       }
       
-      const inputData = step.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
+      const inputData = enhancedStep.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
       
       let summary;
-      switch(step.action) {
+      switch(enhancedStep.action) {
         case "webBrowser":
           summary = await browser.runTask(
-            `${step.step} Expected output: ${step.expectedOutput}`, 
+            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData, 
             (summary) => {
-              console.log(`[X] ${step.step}`);
+              console.log(`[X] ${enhancedStep.step}`);
             }
           );
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
-          });
           break;
 
         case "fileSystem":
           summary = await fileSystem.runTask(
-            `${step.step} Expected output: ${step.expectedOutput}`, 
+            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData, 
             (summary) => {
-              console.log(`[X] ${step.step}`);
+              console.log(`[X] ${enhancedStep.step}`);
             }
           );
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
-          });
           break;
 
         case "chatCompletion":
-          summary = await ai.callAI(step.step, inputData, []);
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
-          });
-          console.log(`[X] ${step.step}`);
+          summary = await ai.callAI(enhancedStep.step, inputData, []);
+          console.log(`[X] ${enhancedStep.step}`);
           history.push({
             role: "assistant", 
             content: [
@@ -231,74 +226,44 @@ async function centralOrchestrator(question){
           break;
 
         case "deepResearch":
-          summary = await deepSearch.runTask(step.step, inputData, (summary) => {
-            console.log(`[X] ${step.step}`);
-          });
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
+          summary = await deepSearch.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
           });
           break;
 
         case "webSearch":
-          summary = await webSearch.runTask(step.step, inputData, (summary) => {
-            console.log(`[X] ${step.step}`);
-          });
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
+          summary = await webSearch.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
           });
           break;
 
         case "execute":
-          summary = await pythonExecute.runTask(step.step, inputData, (summary) => {
-            console.log(`[X] ${step.step}`);
-          });
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
+          summary = await pythonExecute.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
           });
           break;
 
         case "bash":
-          summary = await bash.runTask(step.step, inputData, (summary) => {
-            console.log(`[X] ${step.step}`);
-          });
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
+          summary = await bash.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
           });
           break;
 
         case "imageGeneration":
-          summary = await imageGeneration.runTask(step.step, inputData, (summary) => {
-            console.log(`[X] ${step.step}`);
-          });
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
+          summary = await imageGeneration.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
           });
           break;
 
         case "math":
-          summary = await math.runTask(step.step, inputData, (summary) => {
-            console.log(`[X] ${step.step}`);
-          });
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
+          summary = await math.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
           });
           break;
 
         case "writer":
           summary = await writer.write(
-            `${step.step} Expected output: ${step.expectedOutput}`, 
+            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData
           );
           
@@ -312,34 +277,49 @@ async function centralOrchestrator(question){
             };
           }
           
-          stepsOutput.push({
-            step: step.step,
-            action: step.action,
-            output: summary
-          });
-          console.log(`[X] ${step.step}`);
+          console.log(`[X] ${enhancedStep.step}`);
           break;
         
         default:
-          console.log(`Unknown action: ${step.action}`);
+          console.log(`Unknown action: ${enhancedStep.action}`);
           break;
       }
+      
+      // Add to stepsOutput after execution
+      stepsOutput.push({
+        step: enhancedStep.step,
+        action: enhancedStep.action,
+        output: summary
+      });
+      
+      // ReAct: Reflect on result after execution
+      console.log(`[ ] Reflecting on result of step ${currentStepIndex + 1}`);
+      const reflection = await react.reflectOnResult(enhancedStep, summary, stepsOutput, plan, currentStepIndex, question);
+      console.log(`[X] Reflection complete`);
       
       // Advance to next step
       currentStepIndex++;
       
-      // Check progress and potentially update the plan
-      try {
-        const updatedPlan = await checkProgress(question, plan, stepsOutput, currentStepIndex);
-        
-        // If the plan was updated, use the new plan but keep our current position
-        if (updatedPlan !== plan) {
-          console.log("Plan was updated based on progress check");
-          plan = updatedPlan;
+      // Check if reflection suggests a plan change
+      if (reflection && reflection.changePlan === true) {
+        console.log(`[ ] Reflection suggests changing plan: ${reflection.explanation}`);
+        try {
+          const updatedPlan = await checkProgress(question, plan, stepsOutput, currentStepIndex);
+          
+          // If the plan was updated, use the new plan but keep our current position
+          if (updatedPlan !== plan) {
+            console.log("Plan was updated based on reflection");
+            plan = updatedPlan;
+          }
+        } catch (error) {
+          console.error("Error updating plan based on reflection:", error.message);
+          // Continue with original plan on error
         }
-      } catch (error) {
-        console.error("Error checking progress:", error.message);
-        // Continue with original plan on error
+      }
+      
+      // Save the thought chain periodically
+      if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length) {
+        await react.saveThoughtChain(fileSystem);
       }
     }
     
