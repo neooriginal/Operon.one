@@ -14,6 +14,11 @@ const writer = require('./tools/writer/main');
 const react = require('./tools/react/main');
 const contextManager = require('./utils/context');
 const path = require('path');
+// Import socket.io
+const io = require('./socket');
+
+// Screenshot interval in milliseconds
+const SCREENSHOT_INTERVAL = 5000;
 
 let globalPrompt = `
 
@@ -139,6 +144,9 @@ async function centralOrchestrator(question, userId = 'default'){
     // Initialize context for this user
     contextManager.resetContext(userId);
     
+    // Emit task received event
+    io.emit('task_received', { userId, task: question });
+    
     await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
     
@@ -160,6 +168,7 @@ async function centralOrchestrator(question, userId = 'default'){
     fs.mkdirSync(userOutputDir, { recursive: true });
     
     console.log("[X] Cleaning workspace");
+    io.emit('status_update', { userId, status: 'Improving prompt' });
     console.log("[ ] Improving prompt")
     question = await improvePrompt(question);
     console.log("[X] Improving prompt");
@@ -172,6 +181,7 @@ async function centralOrchestrator(question, userId = 'default'){
     ${globalPrompt}
     `
     console.log("[ ] Planning...");
+    io.emit('status_update', { userId, status: 'Planning task execution' });
 
     let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId);
     // Convert the plan object into an array
@@ -196,7 +206,23 @@ async function centralOrchestrator(question, userId = 'default'){
     }, userId);
     
     console.log("[X] Planning...");
+    io.emit('steps', { userId, plan });
    
+    // Start screenshot interval if browser is used in the plan
+    let screenshotInterval = null;
+    if (plan.some(step => step.action === "webBrowser")) {
+      screenshotInterval = setInterval(async () => {
+        try {
+          const screenshot = await browser.takeScreenshot(userId);
+          if (screenshot) {
+            io.emit('browser_screenshot', { userId, screenshot });
+          }
+        } catch (error) {
+          console.error("Error taking screenshot:", error.message);
+        }
+      }, SCREENSHOT_INTERVAL);
+    }
+    
     // Continue executing steps until we've completed all steps in the plan
     while (contextManager.getCurrentStepIndex(userId) < plan.length) {
       const currentStepIndex = contextManager.getCurrentStepIndex(userId);
@@ -204,10 +230,12 @@ async function centralOrchestrator(question, userId = 'default'){
       
       // ReAct: Process step with reasoning before execution
       console.log(`[ ] Reasoning about step: ${step.step} using ${step.action}`);
+      io.emit('status_update', { userId, status: `Reasoning about: ${step.step}` });
       const enhancedStep = await react.processStep(step, userId);
       console.log(`[X] Reasoning complete`);
       
       console.log(`[ ] ${enhancedStep.step} using ${enhancedStep.action}`);
+      io.emit('status_update', { userId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
       
       // Get filtered steps output from context
       const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId);
@@ -222,6 +250,19 @@ async function centralOrchestrator(question, userId = 'default'){
             inputData, 
             (summary) => {
               console.log(`[X] ${enhancedStep.step}`);
+              io.emit('step_completed', { 
+                userId, 
+                step: enhancedStep.step, 
+                action: enhancedStep.action,
+                metrics: {
+                  stepIndex: currentStepIndex,
+                  stepCount: currentStepIndex + 1,
+                  totalSteps: plan.length,
+                  successCount: contextManager.getStepsOutput(userId).filter(step => 
+                    step && step.output && !step.output.error && step.output.success !== false
+                  ).length
+                }
+              });
             },
             userId
           );
@@ -233,6 +274,27 @@ async function centralOrchestrator(question, userId = 'default'){
             inputData, 
             (summary) => {
               console.log(`[X] ${enhancedStep.step}`);
+              io.emit('step_completed', { 
+                userId, 
+                step: enhancedStep.step, 
+                action: enhancedStep.action,
+                metrics: {
+                  stepIndex: currentStepIndex,
+                  stepCount: currentStepIndex + 1,
+                  totalSteps: plan.length,
+                  successCount: contextManager.getStepsOutput(userId).filter(step => 
+                    step && step.output && !step.output.error && step.output.success !== false
+                  ).length
+                }
+              });
+              // If a file is created or updated, emit file event
+              if (summary && summary.filePath) {
+                io.emit('file_updated', { 
+                  userId, 
+                  filePath: summary.filePath, 
+                  content: summary.content || 'File created/updated'
+                });
+              }
             },
             userId
           );
@@ -244,6 +306,27 @@ async function centralOrchestrator(question, userId = 'default'){
             inputData, 
             (summary) => {
               console.log(`[X] ${enhancedStep.step}`);
+              io.emit('step_completed', { 
+                userId, 
+                step: enhancedStep.step, 
+                action: enhancedStep.action,
+                metrics: {
+                  stepIndex: currentStepIndex,
+                  stepCount: currentStepIndex + 1,
+                  totalSteps: plan.length,
+                  successCount: contextManager.getStepsOutput(userId).filter(step => 
+                    step && step.output && !step.output.error && step.output.success !== false
+                  ).length
+                }
+              });
+              // If a file is created or updated, emit file event
+              if (summary && summary.filePath) {
+                io.emit('file_updated', { 
+                  userId, 
+                  filePath: summary.filePath, 
+                  content: summary.content || 'File created/updated'
+                });
+              }
             },
             userId
           );
@@ -252,6 +335,19 @@ async function centralOrchestrator(question, userId = 'default'){
         case "chatCompletion":
           summary = await ai.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId);
           console.log(`[X] ${enhancedStep.step}`);
+          io.emit('step_completed', { 
+            userId, 
+            step: enhancedStep.step, 
+            action: enhancedStep.action,
+            metrics: {
+              stepIndex: currentStepIndex,
+              stepCount: currentStepIndex + 1,
+              totalSteps: plan.length,
+              successCount: contextManager.getStepsOutput(userId).filter(step => 
+                step && step.output && !step.output.error && step.output.success !== false
+              ).length
+            }
+          });
           contextManager.addToHistory({
             role: "assistant", 
             content: [
@@ -263,36 +359,114 @@ async function centralOrchestrator(question, userId = 'default'){
         case "deepResearch":
           summary = await deepSearch.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
           }, userId);
           break;
 
         case "webSearch":
           summary = await webSearch.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
           }, userId);
           break;
 
         case "execute":
           summary = await pythonExecute.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
           }, userId);
           break;
 
         case "bash":
           summary = await bash.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
           }, userId);
           break;
 
         case "imageGeneration":
           summary = await imageGeneration.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
           }, userId);
           break;
 
         case "math":
           summary = await math.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
           }, userId);
           break;
 
@@ -314,6 +488,19 @@ async function centralOrchestrator(question, userId = 'default'){
           }
           
           console.log(`[X] ${enhancedStep.step}`);
+          io.emit('step_completed', { 
+            userId, 
+            step: enhancedStep.step, 
+            action: enhancedStep.action,
+            metrics: {
+              stepIndex: currentStepIndex,
+              stepCount: currentStepIndex + 1,
+              totalSteps: plan.length,
+              successCount: contextManager.getStepsOutput(userId).filter(step => 
+                step && step.output && !step.output.error && step.output.success !== false
+              ).length
+            }
+          });
           break;
         
         default:
@@ -326,6 +513,7 @@ async function centralOrchestrator(question, userId = 'default'){
       
       // ReAct: Reflect on result after execution
       console.log(`[ ] Reflecting on result of step ${currentStepIndex + 1}`);
+      io.emit('status_update', { userId, status: `Reflecting on result of step ${currentStepIndex + 1}` });
       const reflection = await react.reflectOnResult(enhancedStep, summary, userId);
       console.log(`[X] Reflection complete`);
       
@@ -342,6 +530,7 @@ async function centralOrchestrator(question, userId = 'default'){
           if (updatedPlan !== plan) {
             console.log("Plan was updated based on reflection");
             contextManager.updatePlan(updatedPlan, userId);
+            io.emit('steps', { userId, plan: updatedPlan });
           }
         } catch (error) {
           console.error("Error updating plan based on reflection:", error.message);
@@ -353,6 +542,11 @@ async function centralOrchestrator(question, userId = 'default'){
       if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {
         await react.saveThoughtChain(fileSystem, userId);
       }
+    }
+    
+    // Clear screenshot interval if it was set
+    if (screenshotInterval) {
+      clearInterval(screenshotInterval);
     }
     
     // After the loop completes, finalize the task
@@ -368,9 +562,48 @@ async function centralOrchestrator(question, userId = 'default'){
       }, null, 2));
       console.log(finalOutput);
       
+      // Get task duration using the context manager
+      const duration = contextManager.getTaskDuration(userId);
+      
+      // Get output files if they exist
+      const outputFiles = [];
+      try {
+        const outputDir = path.join(__dirname, 'output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+        if (fs.existsSync(outputDir)) {
+          const files = fs.readdirSync(outputDir);
+          files.forEach(file => {
+            outputFiles.push({
+              fileName: file,
+              path: path.join('output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'), file)
+            });
+          });
+        }
+      } catch (error) {
+        console.error("Error getting output files:", error.message);
+      }
+      
+      // Emit task completion event with enhanced data
+      io.emit('task_completed', { 
+        userId, 
+        result: finalOutput,
+        duration: duration,
+        completedAt: new Date().toISOString(),
+        outputFiles: outputFiles,
+        metrics: {
+          stepCount: contextManager.getStepsOutput(userId).length,
+          successCount: contextManager.getStepsOutput(userId).filter(step => 
+            step && step.output && !step.output.error && step.output.success !== false
+          ).length,
+          totalSteps: plan.length,
+          durationSeconds: Math.round(duration / 1000),
+          averageStepTime: Math.round(duration / contextManager.getStepsOutput(userId).length / 1000)
+        }
+      });
+      
     } catch (error) {
       console.error("Error finalizing task:", error.message);
       finalOutput = "Task completed but could not be finalized: " + error.message;
+      io.emit('task_error', { userId, error: error.message });
     }
     
     // Cleanup resources for this user
@@ -379,6 +612,9 @@ async function centralOrchestrator(question, userId = 'default'){
     return finalOutput;
   } catch (error) {
     console.error("Critical error in orchestration:", error.message);
+    
+    // Emit error event
+    io.emit('task_error', { userId, error: error.message });
     
     // Ensure cleanup even on error
     try {
@@ -571,13 +807,30 @@ async function cleanupUserResources(userId) {
   }
 }
 
-// Export the centralOrchestrator function for the tester
+// Export the centralOrchestrator function for use in test-server.js
 module.exports = {
   centralOrchestrator
 };
 
 // Run the orchestrator if this file is executed directly
 if (require.main === module) {
+  // Set up socket event listener for receiving tasks
+  io.on('connection', (socket) => {
+    console.log('Client connected');
+    
+    socket.on('submit_task', async (data) => {
+      const { task, userId = `socket_${Date.now()}` } = data;
+      console.log(`Received task from socket for user ${userId}: ${task}`);
+      
+      // Execute the task
+      centralOrchestrator(task, userId);
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('Client disconnected');
+    });
+  });
+  
   // Generate a timestamp-based userId for direct execution
   const directUserId = `direct_${Date.now()}`;
   centralOrchestrator("make a super clean, modern and highly animated homepage for my new project 'operon.one'. basically an ai that can do stuff for you (eg browsing the web, editing files, research, complete actions on the web and so much more). all of that automated and in a nice dashboard. so create the homepage / landingpage for it and make it extremly animated with world class top notch animations like never seen before. has to make a good first impression and be impressive to anyone. it should be written in html,css,js.", directUserId);

@@ -710,6 +710,34 @@ async function close(userId = 'default'){
 }
 
 /**
+ * Takes a screenshot of the current browser page for real-time updates
+ * @param {string} userId - The user identifier
+ * @returns {Promise<string|null>} - Base64 encoded screenshot or null if browser not available
+ */
+async function takeScreenshot(userId = 'default') {
+    try {
+        // Check if page exists for this user
+        if (!pageInstances.has(userId)) {
+            return null;
+        }
+        
+        const page = pageInstances.get(userId);
+        
+        // Take screenshot at lower quality for faster transfer
+        const screenshot = await page.screenshot({ 
+            type: 'jpeg', 
+            quality: SCREENSHOT_QUALITY,
+            encoding: 'base64'
+        });
+        
+        return screenshot;
+    } catch (error) {
+        console.error(`Error taking screenshot for user ${userId}:`, error.message);
+        return null;
+    }
+}
+
+/**
  * Clean up browser resources for a specific user
  * @param {string} userId - User identifier
  * @returns {Promise<boolean>} - Success status
@@ -739,5 +767,6 @@ module.exports = {
     runTask,
     close,
     initialize,
-    cleanupResources
+    cleanupResources,
+    takeScreenshot
 };

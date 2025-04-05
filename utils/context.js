@@ -24,7 +24,8 @@ class Context {
         currentStepIndex: 0,
         question: '',
         toolStates: new Map(),
-        variables: new Map()
+        variables: new Map(),
+        startTime: Date.now()
       });
     }
     return this.getContext(userId);
@@ -200,8 +201,24 @@ class Context {
       question: context.question,
       thoughtChain: context.thoughtChain,
       toolStates: Object.fromEntries(context.toolStates),
-      variables: Object.fromEntries(context.variables)
+      variables: Object.fromEntries(context.variables),
+      startTime: context.startTime
     };
+  }
+
+  // Time tracking
+  getStartTime(userId = 'default') {
+    return this.getContext(userId).startTime;
+  }
+  
+  setStartTime(time = Date.now(), userId = 'default') {
+    this.getContext(userId).startTime = time;
+    return time;
+  }
+  
+  getTaskDuration(userId = 'default') {
+    const startTime = this.getStartTime(userId);
+    return Date.now() - startTime;
   }
 }
 
