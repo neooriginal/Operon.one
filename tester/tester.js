@@ -30,6 +30,26 @@ const testPrompts = [
   // "Calculate the area of a circle with radius 5cm",
   "Convert 100 USD to euros using current exchange rates",
   //"Create a weekly workout schedule for beginners",
+
+  //user queries
+    // Medical Protocols & Cheat Sheets
+    "Summarize local EMS protocols and national standards for [specific treatment]. Format the data into a concise reference sheet.",
+    "Create a quick-reference guide for [medication] dosages, contraindications, and mixing instructions.",
+    "Generate a step-by-step guide for preparing a dopamine drip, including dosage calculations and administration guidelines.",
+  
+    // Equipment Research & Justification
+    "Summarize research on the benefits of [specific piece of equipment] for firefighter/paramedic use. Include studies, case studies, and cost-benefit analysis.",
+    "Draft a proposal for why [equipment] should be added to department resources, including efficiency, safety, and long-term savings.",
+  
+    // Health & Fitness Justifications
+    "Find studies on how playing pickleball impacts firefighter fitness, injury prevention, and longevity in the profession.",
+    "Create a report on workplace injury reduction through physical activity programs for first responders.",
+    "Compare the physical benefits of pickleball to traditional firefighter fitness training.",
+  
+    // General Research & Summarization
+    "Summarize the latest updates in EMS best practices for [specific medical condition].",
+    "Generate a comparison of different fire department SOPs for [specific emergency scenario].",
+    "Create a cheat sheet for handling rare but critical EMS scenarios.",
   
   // Trip planning
   "Plan a 7-day trip to Japan including flights, accommodation, and daily activities",

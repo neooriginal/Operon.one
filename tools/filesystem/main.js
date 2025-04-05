@@ -357,6 +357,13 @@ async function runStep(task, otherAIData, userId = 'default'){
     }
 }
 
+async function writeFileDirectly(content, userPath, filename, userId = 'default'){
+    ensureBaseDirectoryExists();
+    const dirPath = securePath(userPath);
+    const filePath = path.join(dirPath, filename);
+    fs.writeFileSync(filePath, content);
+}
+
 async function runTask(task, otherAIData, callback, userId = 'default'){
     // Initialize tool state
     const toolState = contextManager.getToolState('fileSystem', userId) || { 
@@ -410,6 +417,7 @@ module.exports = {
     listDirectories,
     createDirectory,
     deleteFile,
-    deleteDirectory
+    deleteDirectory,
+    writeFileDirectly
 };
 

@@ -21,6 +21,7 @@ let globalPrompt = `
 >
 > - webBrowser: for complex web browsing tasks that require interaction
 > - fileSystem: for saving, loading, and writing files
+> - writeFileDirectly: for writing files directly without AI rework (in case you already have the content)
 > - chatCompletion: for answering questions, generating ideas, or performing logical reasoning
 > - webSearch: for quick information gathering (DuckDuckGo-based)
 > - deepResearch: for deep topic research (DuckDuckGo-based)
@@ -200,6 +201,16 @@ async function centralOrchestrator(question, userId = 'default'){
 
         case "fileSystem":
           summary = await fileSystem.runTask(
+            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
+            inputData, 
+            (summary) => {
+              console.log(`[X] ${enhancedStep.step}`);
+            }
+          );
+          break;
+
+        case "writeFileDirectly":
+          summary = await fileSystem.writeFileDirectly(
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData, 
             (summary) => {
