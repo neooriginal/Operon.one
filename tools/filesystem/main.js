@@ -8,7 +8,9 @@ function getBaseDirectory(userId = 'default') {
     const outputDir = path.join(applicationBaseDir, 'output');
     
     // User-specific directory inside output
-    return path.join(outputDir, userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+    // Sanitize userId to prevent any directory traversal
+    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return path.join(outputDir, sanitizedUserId);
 }
 
 // Ensure the base directory exists, now with user-specific path
@@ -26,29 +28,58 @@ function ensureBaseDirectoryExists(userId = 'default') {
     }
 }
 
+// Enhanced security: Validate path and ensure it's within user directory
+function validatePath(fullPath, baseDir) {
+    // Normalize paths to handle any directory traversal attempts
+    const normalizedPath = path.normalize(fullPath);
+    const normalizedBaseDir = path.normalize(baseDir);
+    
+    // Ensure the full path is still within the base directory after normalization
+    if (!normalizedPath.startsWith(normalizedBaseDir)) {
+        throw new Error(`Security violation: Path "${fullPath}" is outside the allowed directory "${baseDir}"`);
+    }
+    
+    return normalizedPath;
+}
+
 // Sanitize and resolve paths to prevent directory traversal, with user-specific base
 function securePath(userPath, userId = 'default') {
+    // Get the base directory for this user
+    const baseDir = getBaseDirectory(userId);
+    
     // If path is empty or undefined, return the user's base directory
     if (!userPath || userPath.trim() === '') {
-        return getBaseDirectory(userId);
+        return baseDir;
+    }
+    
+    // Handle absolute paths - reject any absolute paths immediately
+    if (path.isAbsolute(userPath)) {
+        throw new Error('Security violation: Absolute paths are not allowed');
     }
     
     // Remove any leading slashes and normalize path
     const normalizedPath = path.normalize(userPath.replace(/^[\/\\]+/, ''));
     
-    // Resolve the full path, using user-specific base
-    const fullPath = path.resolve(getBaseDirectory(userId), normalizedPath);
-    
-    // Ensure the path is within the user's base directory
-    if (!fullPath.startsWith(getBaseDirectory(userId))) {
-        throw new Error('Security violation: Attempted to access path outside of allowed directory');
+    // Check for path traversal attempts using ..
+    if (normalizedPath.includes('..')) {
+        throw new Error('Security violation: Directory traversal attempts are not allowed');
     }
     
-    return fullPath;
+    // Resolve the full path, using user-specific base
+    const fullPath = path.resolve(baseDir, normalizedPath);
+    
+    // Final validation to ensure path is within user's directory
+    return validatePath(fullPath, baseDir);
 }
 
 function saveToFile(content, userPath, filename, userId = 'default') {
+    // First make sure user directory exists
     ensureBaseDirectoryExists(userId);
+    
+    // Sanitize filename to prevent directory traversal
+    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
+    
+    // Get secure path for the directory
     const dirPath = securePath(userPath, userId);
     
     // Ensure the directory exists
@@ -56,26 +87,26 @@ function saveToFile(content, userPath, filename, userId = 'default') {
         fs.mkdirSync(dirPath, { recursive: true });
     }
     
-    const filePath = path.join(dirPath, filename);
+    const filePath = path.join(dirPath, sanitizedFilename);
+    
     // Final security check on complete path
-    if (!filePath.startsWith(getBaseDirectory(userId))) {
-        throw new Error('Security violation: Attempted to access path outside of allowed directory');
-    }
+    validatePath(filePath, getBaseDirectory(userId));
     
     fs.writeFileSync(filePath, content);
 }
 
 function readFile(userPath, filename, userId = 'default') {
+    // Sanitize filename to prevent directory traversal
+    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
+    
     const dirPath = securePath(userPath, userId);
-    const filePath = path.join(dirPath, filename);
+    const filePath = path.join(dirPath, sanitizedFilename);
     
     // Final security check on complete path
-    if (!filePath.startsWith(getBaseDirectory(userId))) {
-        throw new Error('Security violation: Attempted to access path outside of allowed directory');
-    }
+    validatePath(filePath, getBaseDirectory(userId));
     
     if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filename}`);
+        throw new Error(`File not found: ${sanitizedFilename}`);
     }
     
     return fs.readFileSync(filePath, 'utf8');
@@ -88,13 +119,14 @@ function createDirectory(userPath, userId = 'default') {
 }
 
 function deleteFile(userPath, filename, userId = 'default') {
+    // Sanitize filename to prevent directory traversal
+    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
+    
     const dirPath = securePath(userPath, userId);
-    const filePath = path.join(dirPath, filename);
+    const filePath = path.join(dirPath, sanitizedFilename);
     
     // Final security check on complete path
-    if (!filePath.startsWith(getBaseDirectory(userId))) {
-        throw new Error('Security violation: Attempted to access path outside of allowed directory');
-    }
+    validatePath(filePath, getBaseDirectory(userId));
     
     if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -103,6 +135,13 @@ function deleteFile(userPath, filename, userId = 'default') {
 
 function deleteDirectory(userPath, userId = 'default') {
     const dirPath = securePath(userPath, userId);
+    
+    // Extra checks to prevent deleting the user's root directory
+    const baseDir = getBaseDirectory(userId);
+    if (path.normalize(dirPath) === path.normalize(baseDir)) {
+        throw new Error('Security violation: Cannot delete user root directory');
+    }
+    
     if (fs.existsSync(dirPath)) {
         fs.rmSync(dirPath, { recursive: true, force: true });
     }
@@ -128,6 +167,40 @@ function listDirectories(userPath, userId = 'default') {
     );
 }
 
+// Function to log security events
+function logSecurityEvent(userId, action, details) {
+    console.warn(`[SECURITY] User: ${userId}, Action: ${action}, Details: ${details}`);
+    // Could add additional logging to a security log file if needed
+}
+
+// Block potentially unsafe operations on paths
+function validateSafePath(pathStr) {
+    // List of patterns that might indicate unsafe operations
+    const unsafePatterns = [
+        /\.\./,                    // Directory traversal
+        /^[\/\\]/,                 // Absolute paths starting with / or \
+        /^[a-zA-Z]:[\/\\]/,        // Windows absolute paths like C:\ or C:/
+        /^~/,                      // Home directory
+        /proc/i,                   // Linux proc filesystem
+        /dev/i,                    // Device files
+        /etc/i,                    // System configuration
+        /sys/i,                    // System files
+        /bin/i,                    // Binary directories
+        /windows/i,                // Windows system directories
+        /program\s*files/i,        // Program files
+        /AppData/i,                // Application data
+    ];
+    
+    // Check for unsafe patterns
+    for (const pattern of unsafePatterns) {
+        if (pattern.test(pathStr)) {
+            throw new Error(`Security violation: Path "${pathStr}" contains unsafe pattern`);
+        }
+    }
+    
+    return true;
+}
+
 async function runStep(task, otherAIData, userId = 'default'){
     // Get tool state from context
     const toolState = contextManager.getToolState('fileSystem', userId) || { 
@@ -136,8 +209,16 @@ async function runStep(task, otherAIData, userId = 'default'){
     };
 
     let prompt = `
-    You are an AI agent that can execute complex tasks. You are ment to control a the filesystem.
+    You are an AI agent that can execute complex tasks. You are meant to control the filesystem.
     Do your best to complete the task provided by the user. 
+    
+    SECURITY CRITICAL: You MUST follow these strict guidelines:
+    1. ONLY operate within the user's allowed directory
+    2. NEVER attempt to access files outside the user directory
+    3. NEVER use absolute paths
+    4. NEVER use path traversal techniques (like ../ or ..\)
+    5. NEVER try to access system directories or sensitive files
+    
     Respond in a JSON format with the following format. Only respond with one at a time:
     {
         "action": "saveToFile",
@@ -209,6 +290,14 @@ async function runStep(task, otherAIData, userId = 'default'){
 
     try {
         let operationResult;
+        
+        // Pre-validate any paths in the result to catch attempts to access outside dirs
+        if (result.path) {
+            validateSafePath(result.path);
+        }
+        if (result.filename) {
+            validateSafePath(result.filename);
+        }
 
         if(result.action === "saveToFile"){
             saveToFile(result.content, result.path || '', result.filename, userId);
@@ -351,6 +440,11 @@ async function runStep(task, otherAIData, userId = 'default'){
     } catch (error) {
         console.error('Error in file operation:', error.message);
         
+        // Log security violations
+        if (error.message.includes('Security violation')) {
+            logSecurityEvent(userId, result?.action || 'unknown', error.message);
+        }
+        
         // Add error to history
         toolState.history.push({
             role: "system", 
@@ -369,8 +463,20 @@ async function runStep(task, otherAIData, userId = 'default'){
 
 async function writeFileDirectly(content, userPath, filename, userId = 'default'){
     ensureBaseDirectoryExists(userId);
+    // Sanitize filename to prevent directory traversal
+    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
+    
     const dirPath = securePath(userPath, userId);
-    const filePath = path.join(dirPath, filename);
+    const filePath = path.join(dirPath, sanitizedFilename);
+    
+    // Final security check
+    validatePath(filePath, getBaseDirectory(userId));
+    
+    // Create directories if they don't exist
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+    
     fs.writeFileSync(filePath, content);
 }
 
@@ -406,6 +512,11 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
         return summary;
     } catch (error) {
         console.error("Error in fileSystem tool:", error);
+        
+        // Log security violations
+        if (error.message.includes('Security violation')) {
+            logSecurityEvent(userId, 'task_execution', error.message);
+        }
         
         if (callback) {
             callback({

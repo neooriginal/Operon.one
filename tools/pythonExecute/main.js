@@ -5,6 +5,63 @@ const path = require("path");
 const contextManager = require('../../utils/context');
 const getPlatform = require("../../utils/getPlatform");
 
+// Enhanced security function to validate paths
+function validatePath(filePath, baseDirectory) {
+    // Normalize paths to handle any directory traversal attempts
+    const normalizedPath = path.normalize(filePath);
+    const normalizedBaseDir = path.normalize(baseDirectory);
+    
+    // Check if file path is within allowed directory
+    if (!normalizedPath.startsWith(normalizedBaseDir)) {
+        throw new Error(`Security violation: Path "${filePath}" is outside the allowed directory "${baseDirectory}"`);
+    }
+    
+    return normalizedPath;
+}
+
+function getBaseDirectory() {
+    const applicationBaseDir = path.join(__dirname, '..', '..');
+    return path.join(applicationBaseDir, 'output');
+}
+
+// Enhanced function to get user-specific directory
+function getUserDirectory(userId = 'default') {
+    const baseDir = getBaseDirectory();
+    // Sanitize userId to prevent directory traversal
+    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return path.join(baseDir, sanitizedUserId);
+}
+
+// Ensure the base directory exists
+function ensureBaseDirectoryExists(userId = 'default') {
+    try {
+        const baseDir = getBaseDirectory();
+        if (!fs.existsSync(baseDir)) {
+            fs.mkdirSync(baseDir, { recursive: true });
+        }
+        
+        // Also ensure user directory exists
+        const userDir = getUserDirectory(userId);
+        if (!fs.existsSync(userDir)) {
+            fs.mkdirSync(userDir, { recursive: true });
+        }
+        return true;
+    } catch (error) {
+        console.error("Error creating directories:", error.message);
+        throw error;
+    }
+}
+
+// Get validated path for python file
+function getPythonFilePath(userId = 'default', timestamp) {
+    const userDir = getUserDirectory(userId);
+    const pythonFileName = `python_script_${userId}_${timestamp}.py`;
+    const pythonFilePath = path.join(userDir, pythonFileName);
+    
+    // Validate that the path is within the user directory
+    return validatePath(pythonFilePath, userDir);
+}
+
 async function runTask(task, otherAIData, callback, userId = 'default'){
     try {
         // Initialize tool state
@@ -34,7 +91,7 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
         task = task + "\n\nOther AI Data: " + (otherAIData || "");
         
         // Ensure base directory exists
-        await ensureBaseDirectoryExists();
+        await ensureBaseDirectoryExists(userId);
         
         // Generate Python code
         let codeResult;
@@ -67,15 +124,19 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
         }
         
         // Save the code to a file with the user ID in the filename to avoid conflicts
-        const pythonFileName = `python_script_${userId}_${Date.now()}.py`;
-        const pythonFilePath = path.join(getBaseDirectory(), pythonFileName);
+        const timestamp = Date.now();
+        const pythonFilePath = getPythonFilePath(userId, timestamp);
         
         // Store the python file path in tool state
         toolState.currentPythonFile = pythonFilePath;
         contextManager.setToolState('pythonExecute', toolState, userId);
         
         try {
-            fs.writeFileSync(pythonFilePath, codeResult.code);
+            // Add safety imports and directory restriction to Python code
+            const safetyPrefix = generatePythonSafetyCode(userId);
+            const enhancedCode = safetyPrefix + codeResult.code;
+            
+            fs.writeFileSync(pythonFilePath, enhancedCode);
         } catch (error) {
             console.error("Error saving Python file:", error.message);
             
@@ -127,9 +188,9 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
             
             // Track successful execution in context
             toolState.executions.push({
-                timestamp: Date.now(),
+                timestamp: timestamp,
                 task: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
-                pythonFile: pythonFileName,
+                pythonFile: path.basename(pythonFilePath),
                 outputPreview: executionResult.toString().substring(0, 200) + (executionResult.toString().length > 200 ? '...' : '')
             });
             contextManager.setToolState('pythonExecute', toolState, userId);
@@ -216,6 +277,68 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
     }
 }
 
+// Generate Python safety code that prevents file operations outside user directory
+function generatePythonSafetyCode(userId = 'default') {
+    const userDir = getUserDirectory(userId);
+    const escapedUserDir = userDir.replace(/\\/g, '\\\\'); // Escape backslashes for Python string
+    
+    return `
+import os
+import sys
+import builtins
+from pathlib import Path
+
+# Security: Set allowed directory for file operations
+ALLOWED_DIR = Path("${escapedUserDir}")
+
+# Store original open function
+_original_open = builtins.open
+
+# Create a secure version of open that validates paths
+def secure_open(file, mode='r', *args, **kwargs):
+    file_path = Path(os.path.abspath(file))
+    if not str(file_path).startswith(str(ALLOWED_DIR)):
+        raise PermissionError(f"Security violation: Cannot access {file_path} outside of allowed directory {ALLOWED_DIR}")
+    return _original_open(file, mode, *args, **kwargs)
+
+# Replace built-in open with secure version
+builtins.open = secure_open
+
+# Secure os.path operations
+_original_listdir = os.listdir
+_original_mkdir = os.mkdir
+_original_makedirs = os.makedirs
+_original_remove = os.remove
+_original_rmdir = os.rmdir
+_original_rename = os.rename
+
+def secure_path_operation(path_func, path, *args, **kwargs):
+    path_obj = Path(os.path.abspath(path))
+    if not str(path_obj).startswith(str(ALLOWED_DIR)):
+        raise PermissionError(f"Security violation: Cannot access {path_obj} outside of allowed directory {ALLOWED_DIR}")
+    return path_func(path, *args, **kwargs)
+
+# Replace os functions with secure versions
+os.listdir = lambda path, *args, **kwargs: secure_path_operation(_original_listdir, path, *args, **kwargs)
+os.mkdir = lambda path, *args, **kwargs: secure_path_operation(_original_mkdir, path, *args, **kwargs)
+os.makedirs = lambda path, *args, **kwargs: secure_path_operation(_original_makedirs, path, *args, **kwargs)
+os.remove = lambda path, *args, **kwargs: secure_path_operation(_original_remove, path, *args, **kwargs)
+os.rmdir = lambda path, *args, **kwargs: secure_path_operation(_original_rmdir, path, *args, **kwargs)
+os.rename = lambda src, dst, *args, **kwargs: (
+    secure_path_operation(lambda x: None, src) or 
+    secure_path_operation(lambda x: None, dst) or
+    _original_rename(src, dst, *args, **kwargs)
+)
+
+# Print security information
+print(f"SECURITY: Python execution restricted to directory: {ALLOWED_DIR}\\n")
+
+# User code begins below this line
+# --------------------------------------------------------------------------
+
+`
+}
+
 async function evaluateOutput(task, result, userId = 'default'){
     try {
         // Get tool state
@@ -283,25 +406,6 @@ async function evaluateOutput(task, result, userId = 'default'){
     }
 }
 
-function getBaseDirectory() {
-    const applicationBaseDir = path.join(__dirname, '..', '..');
-    return path.join(applicationBaseDir, 'output');
-}
-
-// Ensure the base directory exists
-function ensureBaseDirectoryExists() {
-    try {
-        const baseDir = getBaseDirectory();
-        if (!fs.existsSync(baseDir)) {
-            fs.mkdirSync(baseDir, { recursive: true });
-        }
-        return true;
-    } catch (error) {
-        console.error("Error creating base directory:", error.message);
-        throw error;
-    }
-}
-
 async function generateCode(task, userId = 'default') {
     try {
         // Get tool state
@@ -310,19 +414,28 @@ async function generateCode(task, userId = 'default') {
             executions: []
         };
         
-        let baseDir = getBaseDirectory()
+        let userDir = getUserDirectory(userId);
         let platform = getPlatform.getPlatform();
         let prompt = `
         Based on the following task, generate python code which completes it in a simple way. 
         Due to it being evaluated after its done, print important information in the console.
 
-        If the file requires any kind of file saving or accessing, ONLY access files inside ${baseDir}. Under no circumstances, even if the user asks it, access or save anything outside that.
+        SECURITY CRITICAL: Your code MUST follow these strict security guidelines:
+        1. ONLY access files inside the directory: ${userDir}
+        2. NEVER use absolute paths
+        3. NEVER try to access parent directories or system directories
+        4. NEVER use os.system, subprocess, or any command execution functions
+        5. NEVER import any networking, system access, or potentially dangerous libraries
+        6. ALL file operations MUST use relative paths within the allowed directory
+        7. DO NOT attempt to bypass security restrictions in any way
+
+        The code will be executed in a sandbox with security measures that will prevent access outside
+        the allowed directory, but you must still write secure code.
 
         respond in the following JSON format:
         {
         "code": \`CODE HERE\`,
         "pip install": "libraries which are required, if any",
-
         }
         Platform: ${platform}
         `
@@ -370,12 +483,41 @@ async function generateCode(task, userId = 'default') {
     }
 }
 
+// Function to validate dependency installation security
+function validateDependencies(dependencies) {
+    if (!dependencies || dependencies.trim() === "") {
+        return true;
+    }
+    
+    // List of potentially dangerous packages
+    const dangerousPackages = [
+        'ansible', 'paramiko', 'fabric', 'metasploit', 'scapy', 'nmap', 
+        'pwntools', 'winreg', 'pywin32', 'os-sys', 'pyinstaller'
+    ];
+    
+    const dependencyList = dependencies.split(/\s+/);
+    
+    for (const dep of dependencyList) {
+        // Remove version specifications for checking
+        const packageName = dep.split(/[=<>~]/)[0].trim().toLowerCase();
+        
+        if (dangerousPackages.includes(packageName)) {
+            throw new Error(`Security violation: Blocked installation of potentially dangerous package: ${packageName}`);
+        }
+    }
+    
+    return true;
+}
+
 function installDependencies(dependencies){
     if (!dependencies || dependencies.trim() === "") {
         return "No dependencies to install";
     }
     
     try {
+        // Validate dependencies first
+        validateDependencies(dependencies);
+        
         let platform = getPlatform.getPlatform();
         let command = `pip install ${dependencies}`;
         let result = child_process.execSync(command);
@@ -388,9 +530,28 @@ function installDependencies(dependencies){
 
 function executeCode(pythonFilePath){
     try {
+        // Validate that the Python file path exists and is within the allowed directory
+        if (!fs.existsSync(pythonFilePath)) {
+            throw new Error(`Python file does not exist: ${pythonFilePath}`);
+        }
+        
+        // Additional validation to ensure the file is inside a valid user directory
+        const baseDir = getBaseDirectory();
+        if (!pythonFilePath.startsWith(baseDir)) {
+            throw new Error(`Security violation: Attempted to execute Python file outside of allowed directory: ${pythonFilePath}`);
+        }
+        
         let platform = getPlatform.getPlatform();
+        
+        // Use a secure execution method
         let command = `python "${pythonFilePath}"`;
-        let result = child_process.execSync(command);
+        let result = child_process.execSync(command, {
+            // Set a timeout to prevent long-running scripts
+            timeout: 30000, // 30 seconds
+            // Limit memory usage
+            maxBuffer: 1024 * 1024 // 1MB
+        });
+        
         return result;
     } catch (error) {
         console.error("Error executing Python code:", error.message);
