@@ -35,6 +35,7 @@ let globalPrompt = `
 > - bash: for executing shell commands
 > - writer: for generating detailed written content
 > - math: for performing complex mathematical operations
+> - directAnswer: for immediately answering simple, chit-chat style questions without execution steps
 
 ### ⚙️ Core Directives:
 
@@ -49,6 +50,7 @@ let globalPrompt = `
 - **When generating code, always implement error handling and validation checks.**
 - **Consider edge cases and provide fallback behaviors for all functions.**
 - **Always test your outputs with specific examples before submitting final solutions.**
+- **For simple questions that don't require complex processing, use directAnswer to respond immediately.**
 
 ---
 
@@ -72,11 +74,15 @@ let globalPrompt = `
 - Structure it properly and output all documents using fileSystem.
 - **Focus on quality and correctness of content rather than extensive explanations.**
 
+#### Simple Q&A
+- For straightforward questions, conversational queries, or chit-chat, use directAnswer.
+- This provides an immediate response without complex planning or execution steps.
+
 ---
 
 ### 📦 Output Format (JSON):
 
-Return a JSON object structured like this:
+For complex tasks, return a JSON object structured like this:
 {
   "step1": {
     "step": "Brief explanation of what the step does",
@@ -91,11 +97,17 @@ Return a JSON object structured like this:
   ...
 }
 
+For simple questions or chit-chat, return:
+{
+  "directAnswer": true,
+  "answer": "Your complete answer to the question"
+}
+
 ---
 
 ### 🧾 Example Input + Output:
 
-**User Input:**
+**User Input (Complex Task):**
 > Research about the history of the internet and create a research paper.
 
 **Expected JSON Output:**
@@ -135,6 +147,15 @@ Return a JSON object structured like this:
     "usingData": "writer",
     "validations": "Verify file is written correctly with full content"
   }
+}
+
+**User Input (Simple Question):**
+> What's the weather like today?
+
+**Expected JSON Output:**
+{
+  "directAnswer": true,
+  "answer": "I don't have access to current weather information without using a search tool. Would you like me to search for weather information for your location? If so, please provide your city or region."
 }
 
 `
@@ -184,7 +205,50 @@ async function centralOrchestrator(question, userId = 'default'){
     io.emit('status_update', { userId, status: 'Planning task execution' });
 
     let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId);
-    // Convert the plan object into an array
+    
+    // Check if this is a direct answer request
+    if (planObject.directAnswer === true && planObject.answer) {
+      console.log("[X] Direct answer provided");
+      io.emit('status_update', { userId, status: 'Direct answer provided' });
+      
+      // Store the response in context
+      contextManager.addToHistory({
+        role: "user", 
+        content: [
+            {type: "text", text: question}
+        ]
+      }, userId);
+      
+      contextManager.addToHistory({
+        role: "assistant", 
+        content: [
+            {type: "text", text: planObject.answer}
+        ]
+      }, userId);
+      
+      // Emit task completion event
+      io.emit('task_completed', { 
+        userId, 
+        result: planObject.answer,
+        duration: 0,
+        completedAt: new Date().toISOString(),
+        outputFiles: [],
+        metrics: {
+          stepCount: 1,
+          successCount: 1,
+          totalSteps: 1,
+          durationSeconds: 0,
+          averageStepTime: 0
+        }
+      });
+      
+      // Clean up resources
+      await cleanupUserResources(userId);
+      
+      return planObject.answer;
+    }
+    
+    // Convert the plan object into an array for regular task execution
     const plan = Object.values(planObject).filter(item => item && typeof item === 'object');
     
     // Store plan in context
