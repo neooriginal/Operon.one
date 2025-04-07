@@ -1,0 +1,658 @@
+/* Root Variables for consistency with landing page */
+:root {
+    --primary: #6366f1;
+    --primary-dark: #4f46e5;
+    --secondary: #ec4899;
+    --dark: #0f172a;
+    --darker: #030712;
+    --light: #f8fafc;
+    --dark-light: #1e293b;
+    --gray: #94a3b8;
+    --gray-light: #cbd5e1;
+    --gray-dark: #334155;
+    --success: #10b981;
+    --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.4);
+    --shadow: 0 4px 6px rgba(0,0,0,0.2);
+    --shadow-lg: 0 10px 25px rgba(0,0,0,0.3);
+    --shadow-xl: 0 20px 40px rgba(0,0,0,0.4);
+    --border-radius: 8px;
+}
+
+body {
+    font-family: var(--font-main);
+    margin: 0;
+    padding: 0;
+    background-color: var(--dark);
+    color: var(--light);
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Noise Background Effect */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    opacity: 0.03;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+.app-container {
+    display: flex;
+    height: 100vh;
+}
+
+/* --- Sidebar Styling --- */
+.sidebar {
+    width: 240px;
+    background-color: var(--dark-light);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+}
+
+.sidebar-header {
+    padding: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.logo-text {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    padding-left: 5px;
+}
+
+.accent {
+    color: var(--primary);
+}
+
+#new-task-button {
+    width: 100%;
+    padding: 10px 15px;
+    background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+    color: var(--light);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.95em;
+    transition: var(--transition);
+    font-weight: 500;
+}
+
+#new-task-button i {
+    margin-right: 8px;
+}
+
+#new-task-button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.sidebar-menu {
+    list-style: none;
+    padding: 15px 0;
+    margin: 0;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.sidebar-menu li a {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    color: var(--gray-light);
+    text-decoration: none;
+    font-size: 0.9em;
+    transition: var(--transition);
+    position: relative;
+}
+
+.sidebar-menu li a i {
+    margin-right: 12px;
+    width: 18px;
+    text-align: center;
+}
+
+.sidebar-menu li a:hover {
+    color: var(--primary);
+}
+
+.sidebar-menu li a:hover::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 20px;
+    width: 30px;
+    height: 2px;
+    background-color: var(--primary);
+    transition: var(--transition);
+}
+
+.sidebar-menu li.active a {
+    background-color: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.sidebar-menu li.active a::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 20px;
+    width: 30px;
+    height: 2px;
+    background-color: var(--primary);
+}
+
+.sidebar-footer {
+    padding: 15px 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.8em;
+    color: var(--gray);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.social-links {
+    display: flex;
+    gap: 15px;
+    margin-top: 5px;
+}
+
+.social-links a {
+    color: var(--gray);
+    font-size: 1.2em;
+    transition: var(--transition);
+}
+
+.social-links a:hover {
+    color: var(--primary);
+    transform: translateY(-2px);
+}
+
+/* --- Chat Container Anpassungen --- */
+.chat-container {
+    width: 100%;
+    height: 100vh;
+    background-color: var(--dark);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chat-header {
+    padding: 15px 20px;
+    background-color: var(--dark-light);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(10px);
+}
+
+.chat-header h1 {
+    margin: 0;
+    font-size: 1.4em;
+    color: var(--light);
+}
+
+.chat-header h1 span {
+    color: var(--primary);
+}
+
+/* Styling für den Statusbereich */
+.status-display {
+    padding: 8px 20px;
+    background-color: var(--darker);
+    color: var(--gray);
+    font-size: 0.85em;
+    min-height: 1.5em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: var(--transition);
+}
+
+.status-display.active {
+    background-color: var(--dark-light);
+}
+
+.status-display i {
+    color: var(--gray);
+}
+
+.status-display i.fa-spinner {
+    color: var(--primary);
+}
+
+.chat-messages {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Styling for Scrollbar */
+.chat-messages::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+    background: var(--dark);
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background-color: var(--dark-light);
+    border-radius: 4px;
+}
+
+.message {
+    padding: 12px 18px;
+    border-radius: 18px;
+    max-width: 70%;
+    word-wrap: break-word;
+    line-height: 1.4;
+}
+
+.message.user {
+    background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+    color: var(--light);
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+    box-shadow: var(--shadow-sm);
+}
+
+.message.ai {
+    background-color: var(--dark-light);
+    color: var(--light);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* Verbessertes Styling für Aktions-Elemente */
+.action-element {
+    background-color: var(--dark-light);
+    padding: 12px 18px;
+    border-radius: var(--border-radius);
+    margin: 10px 0;
+    border: none;
+    border-left: 3px solid var(--primary);
+    align-self: flex-start;
+    width: calc(100% - 40px);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+}
+
+.action-element:hover {
+    background-color: var(--dark-light);
+}
+
+.action-element .action-icon {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--gray-light);
+    font-size: 1.1em;
+    text-align: center;
+}
+
+.action-element .action-details {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+.action-element .action-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--gray-light);
+    font-size: 0.95em;
+}
+
+.action-element .action-content {
+    font-size: 0.85em;
+    color: var(--gray-light);
+    line-height: 1.3;
+}
+
+.chat-input {
+    display: flex;
+    padding: 15px;
+    background-color: var(--dark-light);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#message-input {
+    flex-grow: 1;
+    padding: 12px 15px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--border-radius);
+    color: var(--light);
+    font-size: 0.95em;
+    margin-right: 10px;
+    transition: var(--transition);
+}
+
+#message-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+}
+
+#message-input::placeholder {
+    color: var(--gray);
+}
+
+#send-button {
+    padding: 12px 20px;
+    background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+    color: var(--light);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+#send-button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+/* Styling für Schritt-Gruppen (Hierarchie) */
+.step-group {
+    background-color: var(--dark-light);
+    border-radius: var(--border-radius);
+    margin: 15px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+    align-self: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.step-group-header {
+    padding: 10px 15px;
+    background-color: var(--dark-light);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--gray-light);
+    font-weight: 600;
+}
+
+.step-group-header i {
+    margin-left: 10px;
+    transition: transform 0.3s ease;
+}
+
+.step-group.collapsed .step-group-header i {
+    transform: rotate(-90deg);
+}
+
+.step-group-content {
+    padding: 5px 15px 15px 30px;
+    max-height: 5000px;
+    overflow: hidden;
+    transition: max-height 0.4s ease-out, padding 0.4s ease-out;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.step-group.collapsed .step-group-content {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.step-group-content .action-element {
+    width: 100%;
+    margin: 0;
+    background-color: var(--dark-light);
+    border-left: 3px solid var(--primary);
+}
+
+.step-group-content .action-element.action-plan-step {
+    padding: 4px 10px 4px 35px;
+    gap: 8px;
+    border-left: none;
+    background-color: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    margin: 0 -15px 0 -30px;
+    width: auto;
+}
+
+.step-group-content .action-element.action-plan-step:last-child {
+    border-bottom: none;
+}
+
+.step-group-content .action-element.action-plan-step .action-icon {
+    font-size: 0.8em;
+    color: var(--gray-light);
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+    line-height: 16px;
+}
+
+.step-group-content .action-element.action-plan-step .action-details {
+}
+
+.step-group-content .action-element.action-plan-step .action-title {
+    font-size: 0.75em;
+    font-weight: 400;
+    color: var(--gray-light);
+    margin-bottom: 0px;
+    line-height: 1.2;
+}
+
+.step-group-content .action-element.action-plan-step .action-content {
+    font-size: 0.65em;
+    color: var(--gray-light);
+    line-height: 1.1;
+}
+
+.step-group-content .action-element.action-plan-step:hover {
+    background-color: transparent;
+}
+
+.message.system {
+    background-color: rgba(99, 102, 241, 0.1);
+    color: var(--light);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--border-radius);
+    width: 90%;
+    margin: 10px auto;
+    align-self: center;
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+/* --- Markdown Styling für AI-Nachrichten --- */
+.message.ai p {
+    margin-top: 0;
+    margin-bottom: 0.5em;
+}
+
+.message.ai p:last-child {
+    margin-bottom: 0;
+}
+
+.message.ai ul,
+.message.ai ol {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    padding-left: 2em;
+}
+
+.message.ai li {
+    margin-bottom: 0.25em;
+}
+
+.message.ai code {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: var(--primary);
+}
+
+.message.ai pre {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    border-radius: var(--border-radius);
+    overflow-x: auto;
+    margin: 15px 0;
+    border-left: 3px solid var(--primary);
+}
+
+.message.ai pre code {
+    background-color: transparent;
+    padding: 0;
+    color: var(--light);
+}
+
+.message.ai blockquote {
+    border-left: 3px solid var(--primary);
+    padding-left: 1em;
+    margin-left: 0;
+    color: var(--gray-light);
+    font-style: italic;
+}
+
+.message.ai h1,
+.message.ai h2,
+.message.ai h3,
+.message.ai h4 {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    border-bottom: 1px solid var(--primary);
+    padding-bottom: 0.2em;
+}
+
+.message.ai h1 { font-size: 1.4em; }
+.message.ai h2 { font-size: 1.3em; }
+.message.ai h3 { font-size: 1.2em; }
+.message.ai h4 { font-size: 1.1em; }
+
+.message.ai strong,
+.message.ai b {
+    font-weight: 600;
+}
+
+.message.ai a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.message.ai a:hover {
+    text-decoration: underline;
+}
+
+/* --- Ende Markdown Styling --- */
+
+/* --- Styling für Dateianzeige-Elemente --- */
+.file-display-element {
+    background-color: var(--dark-light);
+    border-radius: var(--border-radius);
+    padding: 12px 18px;
+    margin: 10px 0;
+    border-left: 3px solid var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    align-self: flex-start;
+    width: calc(100% - 40px);
+    box-sizing: border-box;
+}
+
+.file-display-element .file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.file-display-element .file-info i {
+    color: var(--gray-light);
+    font-size: 1.2em;
+    flex-shrink: 0;
+}
+
+.file-display-element .file-info span {
+    color: var(--gray-light);
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-display-element .download-button {
+    padding: 5px 12px;
+    background-color: var(--dark-light);
+    color: var(--gray-light);
+    border: 1px solid var(--primary);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 0.8em;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.file-display-element .download-button:hover {
+    background-color: var(--dark-light);
+}
+
+/* Styling für File-Display-Elemente INNERHALB einer Gruppe sicherstellen */
+.step-group-content .file-display-element {
+    width: 100%;
+    margin: 0;
+    background-color: var(--dark-light);
+    border-left: 3px solid var(--primary);
+    padding: 10px 15px;
+    box-sizing: border-box;
+}
+
+/* Gradient text effect */
+.gradient-text {
+    background: linear-gradient(90deg, var(--primary), var(--secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-fill-color: transparent;
+} 

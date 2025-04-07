@@ -3,57 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Operon.one Chat</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Operon.one Dashboard</title>
+    <link rel="stylesheet" href="/dashboard/style.css">
     <!-- Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-container">
         <!-- Left Sidebar -->
         <nav class="sidebar">
             <div class="sidebar-header">
-                <!-- Optional: Logo or Title -->
-                 <button id="new-task-button"><i class="fas fa-plus"></i> New Task</button>
+                <div class="logo-text">Operon<span class="accent">.one</span></div>
+                <button id="new-task-button"><i class="fas fa-plus"></i> New Task</button>
             </div>
             <ul class="sidebar-menu">
                 <!-- Example menu items (can be loaded dynamically) -->
                 <li class="active"><a href="#"><i class="fas fa-comments"></i> Current Chat</a></li>
                 <li><a href="#"><i class="fas fa-history"></i> History</a></li>
+                <li><a href="#"><i class="fas fa-robot"></i> Agents</a></li>
+                <li><a href="#"><i class="fas fa-folder"></i> Projects</a></li>
                 <li><a href="#"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
-             <div class="sidebar-footer">
+            <div class="sidebar-footer">
                 <!-- Optional: User Info or other links -->
                 <span>User: John Doe</span>
+                <div class="social-links">
+                    <a href="https://x.com/neo_original_x"><i class="fab fa-x"></i></a>
+                    <a href="https://github.com/neooriginal"><i class="fab fa-github"></i></a>
+                    <a href="https://discord.gg/eUdJ5xdw8Q"><i class="fab fa-discord"></i></a>
+                </div>
             </div>
         </nav>
 
         <!-- Main Chat Area -->
         <div class="chat-container">
             <div class="chat-header">
-                <h1>Operon.one</h1>
-                <!-- Add any header elements like status indicators or options here -->
+                <h1>Operon<span class="accent">.one</span> <span class="gradient-text">Dashboard</span></h1>
             </div>
             <!-- Status Display Area -->
             <div id="status-display" class="status-display">
-                <!-- Status will be inserted here via JS -->
+                <i class="fas fa-info-circle"></i> Ready to help with complex tasks
             </div>
             <div class="chat-messages" id="chat-messages">
                 <!-- Chat messages will be appended here -->
                 <div class="message ai">
-                   Hello! How can I help you today?
+                   Hello! I'm your <span class="gradient-text">Operon.one</span> assistant. How can I help you today?
                 </div>
             </div>
             <div class="chat-input">
-                <input type="text" id="message-input" placeholder="Enter message...">
+                <input type="text" id="message-input" placeholder="Enter your task or question...">
                 <button id="send-button">Send</button>
             </div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="/dashboard/script.js"></script>
     <!-- Socket.IO Client Library -->
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
     <!-- Marked.js for Markdown Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </body>

@@ -23,6 +23,26 @@ io.on("connection", (socket) => {
     console.log("a user connected");
 });
 
+app.get("/dashboard", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
+});
+
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "landingpage", "index.html"));
+});
+
+app.get("/legal/terms", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "legal", "terms-of-service.html"));
+});
+
+app.get("/legal/privacy", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "legal", "privacy-policy.html"));
+});
+
+app.get("/legal/cookies", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "legal", "cookie-policy.html"));
+});
+
 // Download-Route
 app.get('/download', (req, res) => {
     const userId = req.query.userId;
