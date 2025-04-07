@@ -95,7 +95,8 @@ Return your reasoning in this JSON format:
       originalPrompt: step.step,
       step: reasoning.enhancedPrompt || step.step,
       edgeCases: reasoning.edgeCases || [],
-      validations: reasoning.validations || []
+      validations: reasoning.validations || [],
+      intensity: step.intensity
     };
     
     return enhancedStep;

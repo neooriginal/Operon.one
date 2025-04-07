@@ -30,7 +30,7 @@ let globalPrompt = `
 > - writeFileDirectly: for writing files directly without AI rework (in case you already have the content)
 > - chatCompletion: for answering questions, generating ideas, or performing logical reasoning
 > - webSearch: for quick information gathering (DuckDuckGo-based)
-> - deepResearch: for deep topic research (DuckDuckGo-based)
+> - deepResearch: for deep topic research (DuckDuckGo-based) - you can specify 'intensity' parameter (1-10) to control the number of websites to analyze
 > - execute: for writing and running Python code
 > - bash: for executing shell commands
 > - writer: for generating detailed written content
@@ -89,7 +89,8 @@ For complex tasks, return a JSON object structured like this:
     "action": "Tool to use (e.g., chatCompletion, fileSystem, etc.)",
     "expectedOutput": "What will be produced",
     "usingData": "List of tools or data sources used (default: all)",
-    "validations": "How you will validate the output for correctness" 
+    "validations": "How you will validate the output for correctness",
+    "intensity": "Optional: For deepResearch, specify a number 1-10 to control search depth" 
   },
   "step2": {
     ...
@@ -131,7 +132,8 @@ For simple questions or chit-chat, return:
     "action": "deepResearch",
     "expectedOutput": "Detailed research content",
     "usingData": "none",
-    "validations": "Verify timeframe coverage and identify primary sources"
+    "validations": "Verify timeframe coverage and identify primary sources",
+    "intensity": 5
   },
   "step4": {
     "step": "Write a structured research paper using writer based on the gathered material",
@@ -416,6 +418,8 @@ async function centralOrchestrator(question, userId = 'default'){
           break;
 
         case "deepResearch":
+          // Extract intensity parameter if provided (default to undefined if not specified)
+          const intensity = enhancedStep.intensity || undefined;
           summary = await deepSearch.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
@@ -431,7 +435,7 @@ async function centralOrchestrator(question, userId = 'default'){
                 ).length
               }
             });
-          }, userId);
+          }, userId, intensity);
           break;
 
         case "webSearch":
