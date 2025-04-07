@@ -2,7 +2,7 @@ const axios = require("axios");
 const ai = require("../AI/ai");
 const contextManager = require("../../utils/context");
 
-async function runTask(task, otherAIData, callback, userId = 'default'){
+async function runTask(task, otherAIData, callback, userId = 'default', intensity){
     try {
         // Get or initialize user-specific context
         let userContext = contextManager.getContext(userId);
@@ -14,12 +14,13 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
             contextManager.updateContext(userId, userContext);
         }
 
-        let webData = await searchWeb(task, userId);
+        let webData = await searchWeb(task, userId, intensity);
         
         // Store search in history
         userContext.deepSearch.searchHistory.push({
             task,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            intensity: intensity
         });
         contextManager.updateContext(userId, userContext);
         
@@ -31,11 +32,14 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
     }
 }
 
-async function getQuery(task, userId = 'default'){
+async function getQuery(task, userId = 'default', intensity){
     try {
+        // Determine the maximum number of queries based on intensity
+        const maxQueries = intensity ? Math.min(Math.max(3, intensity * 3), 30) : 15;
+        
         let prompt = `
         You are an AI agent that can execute complex tasks. For this task, the user will provide a task and you are supposed to return queries for searching the web.
-        Maximum of 30 queries.
+        Maximum of ${maxQueries} queries.
         JSON Format:
         {
             "queries": ["query1", "query2", "query3"]
@@ -93,11 +97,15 @@ async function evaluatewithAI(task, webData, userId = 'default'){
     }
 }
 
-async function searchWeb(task, userId = 'default'){
+async function searchWeb(task, userId = 'default', intensity){
     try {
         let urls = [];
         let webData = [];
-        let queries = await getQuery(task, userId);
+        let queries = await getQuery(task, userId, intensity);
+        
+        // Limit number of queries based on intensity (default is 5 if not specified)
+        const queryLimit = intensity ? Math.min(Math.max(1, intensity), 10) : 5;
+        queries = queries.slice(0, queryLimit);
         
         for(let query of queries){
             try {
@@ -110,7 +118,9 @@ async function searchWeb(task, userId = 'default'){
                 try {
                     // For now, let's use a more reliable public API - Wikipedia's API for related articles
                     if (wikipediaArticle) {
-                        const relatedArticlesUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=5`;
+                        // Adjust the number of related articles based on intensity
+                        const relatedLimit = intensity ? Math.min(Math.max(1, intensity), 10) : 5;
+                        const relatedArticlesUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=${relatedLimit}`;
                         const relatedResponse = await axios.get(relatedArticlesUrl, { timeout: 15000 });
                         
                         if (relatedResponse.data.query && relatedResponse.data.query.search) {
