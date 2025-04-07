@@ -180,11 +180,6 @@ async function centralOrchestrator(question, userId = 'default'){
       fs.mkdirSync(outputDir, { recursive: true });
     }
     
-    // Clean up user directory if it exists
-    if(fs.existsSync(userOutputDir)){
-      fs.rmdirSync(userOutputDir, {recursive: true});
-    }
-    
     // Create fresh user directory
     fs.mkdirSync(userOutputDir, { recursive: true });
     
@@ -624,7 +619,8 @@ async function centralOrchestrator(question, userId = 'default'){
           step && step.output && !step.output.error && step.output.success !== false
         ).length
       }, null, 2));
-      console.log(finalOutput);
+      const userFiles = await getUserFiles(userId);
+      io.emit('user_files', { userId, files: userFiles });
       
       // Get task duration using the context manager
       const duration = contextManager.getTaskDuration(userId);
@@ -819,56 +815,25 @@ async function finalizeTask(question, stepsOutput, userId = 'default') {
   }
 }
 
+async function getUserFiles(userId) {
+  const outputDir = path.join(__dirname, 'output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
+  if (fs.existsSync(outputDir)) {
+    return fs.readdirSync(outputDir);
+  }
+  return [];
+}
+
 /**
  * Clean up resources for a specific user after task completion
  * @param {string} userId - User identifier
  */
 async function cleanupUserResources(userId) {
-  try {
-    console.log(`[ ] Cleaning up resources for user: ${userId}`);
-    
     // Close any browser instances using the browser module
     try {
       await browser.cleanupResources(userId);
     } catch (browserError) {
       console.error("Error closing browser instance:", browserError.message);
     }
-    
-    // Save the thought chain one final time
-    try {
-      await react.saveThoughtChain(fileSystem, userId);
-    } catch (error) {
-      console.error("Error saving final thought chain:", error.message);
-    }
-    
-    // Create a final report of the session
-    const context = contextManager.getContext(userId);
-    const finalReport = {
-      userId,
-      completedAt: new Date().toISOString(),
-      question: context.question,
-      stepsCompleted: context.stepsOutput.length,
-      planSize: context.plan.length,
-    };
-    
-    // Save the final report to a file in user-specific directory
-    try {
-      await fileSystem.runTask(
-        `Save session report to session_report.json`,
-        JSON.stringify(finalReport, null, 2),
-        null,
-        userId
-      );
-    } catch (error) {
-      console.error("Error saving session report:", error.message);
-    }
-    
-    console.log(`[X] Resources cleaned up for user: ${userId}`);
-    return true;
-  } catch (error) {
-    console.error(`Error cleaning up resources for user ${userId}:`, error.message);
-    return false;
-  }
 }
 
 // Export the centralOrchestrator function for use in test-server.js
@@ -894,8 +859,4 @@ if (require.main === module) {
       console.log('Client disconnected');
     });
   });
-  
-  // Generate a timestamp-based userId for direct execution
-  const directUserId = `direct_${Date.now()}`;
-  centralOrchestrator("make a super clean, modern and highly animated homepage for my new project 'operon.one'. basically an ai that can do stuff for you (eg browsing the web, editing files, research, complete actions on the web and so much more). all of that automated and in a nice dashboard. so create the homepage / landingpage for it and make it extremly animated with world class top notch animations like never seen before. has to make a good first impression and be impressive to anyone. it should be written in html,css,js.", directUserId);
 }

@@ -14,7 +14,8 @@ async function improvePrompt(question, userId = 'default'){
     let prompt = `
     You are an AI agent that can improve a prompt.
     The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific, detailed, and structured.
-    
+    You only need to improve the prompt if it requires a lot of steps to complete. You do not need to improve "chit chat" prompts. Return the same prompt if it is already good.
+
     Specifically, you should:
     1. Break down multi-step tasks into clearly enumerated steps
     2. Identify and clarify any ambiguous terms or requirements
