@@ -266,6 +266,32 @@ class DockerManager {
         });
     }
 
+    async downloadFile(containerName, containerPath, localPath) {
+        return await this._retry(async () => {
+            // Normalize the path for Docker
+            const normalizedContainerPath = normalizePathForDocker(containerPath);
+            
+            // Ensure the target directory exists
+            const targetDir = path.dirname(localPath);
+            if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+            }
+            
+            // For Windows using WSL, we need special path handling
+            const destPath = isWindows ? 
+                localPath.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '/mnt/$1').toLowerCase() : 
+                localPath;
+            
+            // Copy the file from the container to the local system
+            const copyCmd = isWindows ? 
+                `wsl docker cp ${containerName}:${normalizedContainerPath} "${destPath}"` : 
+                `${dockerCMD} cp ${containerName}:${normalizedContainerPath} "${localPath}"`;
+            
+            await execAsync(copyCmd);
+            return { success: true, path: localPath };
+        });
+    }
+
     // Clean up all containers created by this manager
     async cleanupAllContainers() {
         const errors = [];
