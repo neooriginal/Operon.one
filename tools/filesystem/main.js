@@ -1,3 +1,4 @@
+const docker = require('../docker');
 const fs = require('fs');
 const path = require('path');
 const ai = require('../AI/ai');
@@ -72,99 +73,117 @@ function securePath(userPath, userId = 'default') {
     return validatePath(fullPath, baseDir);
 }
 
-function saveToFile(content, userPath, filename, userId = 'default') {
-    // First make sure user directory exists
-    ensureBaseDirectoryExists(userId);
+// Container management with better error handling
+async function getContainer(userId = 'default', retries = 3) {
+    let lastError;
     
-    // Sanitize filename to prevent directory traversal
-    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
-    
-    // Get secure path for the directory
-    const dirPath = securePath(userPath, userId);
-    
-    // Ensure the directory exists
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const containerName = await docker.createContainer(userId);
+            return containerName;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Failed to get container (attempt ${attempt}/${retries}): ${error.message}`);
+            
+            // Wait before retrying (exponential backoff)
+            if (attempt < retries) {
+                const delay = Math.min(100 * Math.pow(2, attempt), 2000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
     }
     
-    const filePath = path.join(dirPath, sanitizedFilename);
-    
-    // Final security check on complete path
-    validatePath(filePath, getBaseDirectory(userId));
-    
-    fs.writeFileSync(filePath, content);
+    throw new Error(`Failed to get container after ${retries} attempts: ${lastError?.message || 'Unknown error'}`);
 }
 
-function readFile(userPath, filename, userId = 'default') {
-    // Sanitize filename to prevent directory traversal
-    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
+async function safeExecute(operation, userId = 'default') {
+    let containerName;
+    let containerCreated = false;
     
-    const dirPath = securePath(userPath, userId);
-    const filePath = path.join(dirPath, sanitizedFilename);
-    
-    // Final security check on complete path
-    validatePath(filePath, getBaseDirectory(userId));
-    
-    if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${sanitizedFilename}`);
-    }
-    
-    return fs.readFileSync(filePath, 'utf8');
-}
-
-function createDirectory(userPath, userId = 'default') {
-    ensureBaseDirectoryExists(userId);
-    const dirPath = securePath(userPath, userId);
-    fs.mkdirSync(dirPath, { recursive: true });
-}
-
-function deleteFile(userPath, filename, userId = 'default') {
-    // Sanitize filename to prevent directory traversal
-    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
-    
-    const dirPath = securePath(userPath, userId);
-    const filePath = path.join(dirPath, sanitizedFilename);
-    
-    // Final security check on complete path
-    validatePath(filePath, getBaseDirectory(userId));
-    
-    if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    try {
+        containerName = await getContainer(userId);
+        containerCreated = true;
+        return await operation(containerName);
+    } catch (error) {
+        throw error;
+    } finally {
+        // Only remove the container if we created it and it's a temporary operation
+        if (containerCreated && containerName) {
+            try {
+                await docker.removeContainer(containerName);
+            } catch (cleanupError) {
+                console.error(`Error cleaning up container: ${cleanupError.message}`);
+            }
+        }
     }
 }
 
-function deleteDirectory(userPath, userId = 'default') {
-    const dirPath = securePath(userPath, userId);
-    
-    // Extra checks to prevent deleting the user's root directory
-    const baseDir = getBaseDirectory(userId);
-    if (path.normalize(dirPath) === path.normalize(baseDir)) {
-        throw new Error('Security violation: Cannot delete user root directory');
-    }
-    
-    if (fs.existsSync(dirPath)) {
-        fs.rmSync(dirPath, { recursive: true, force: true });
-    }
+async function saveToFile(content, userPath, filename, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize paths for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '';
+        const normalizedFilename = filename?.replace(/\\/g, '/') || '';
+        const filePath = path.posix.join(normalizedPath, normalizedFilename);
+        await docker.writeFile(containerName, filePath, content);
+        return true;
+    }, userId);
 }
 
-function listFiles(userPath, userId = 'default') {
-    const dirPath = securePath(userPath, userId);
-    if (!fs.existsSync(dirPath)) {
-        return [];
-    }
-    return fs.readdirSync(dirPath).filter(item => 
-        fs.statSync(path.join(dirPath, item)).isFile()
-    );
+async function readFile(userPath, filename, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize paths for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '';
+        const normalizedFilename = filename?.replace(/\\/g, '/') || '';
+        const filePath = path.posix.join(normalizedPath, normalizedFilename);
+        return await docker.readFile(containerName, filePath);
+    }, userId);
 }
 
-function listDirectories(userPath, userId = 'default') {
-    const dirPath = securePath(userPath, userId);
-    if (!fs.existsSync(dirPath)) {
-        return [];
-    }
-    return fs.readdirSync(dirPath).filter(item => 
-        fs.statSync(path.join(dirPath, item)).isDirectory()
-    );
+async function createDirectory(userPath, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize path for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '/';
+        await docker.executeCommand(containerName, `mkdir -p ${normalizedPath}`);
+        return true;
+    }, userId);
+}
+
+async function deleteFile(userPath, filename, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize paths for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '';
+        const normalizedFilename = filename?.replace(/\\/g, '/') || '';
+        const filePath = path.posix.join(normalizedPath, normalizedFilename);
+        await docker.executeCommand(containerName, `rm -f ${filePath}`);
+        return true;
+    }, userId);
+}
+
+async function deleteDirectory(userPath, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize path for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '/';
+        await docker.executeCommand(containerName, `rm -rf ${normalizedPath}`);
+        return true;
+    }, userId);
+}
+
+async function listFiles(userPath, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize path for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '/';
+        const { stdout } = await docker.executeCommand(containerName, `find ${normalizedPath} -maxdepth 1 -type f -printf "%f\n"`);
+        return stdout.split('\n').filter(Boolean);
+    }, userId);
+}
+
+async function listDirectories(userPath, userId = 'default') {
+    return await safeExecute(async (containerName) => {
+        // Normalize path for Docker (forward slashes)
+        const normalizedPath = userPath?.replace(/\\/g, '/') || '/';
+        const { stdout } = await docker.executeCommand(containerName, `find ${normalizedPath} -maxdepth 1 -type d -not -path "${normalizedPath}" -printf "%f\n"`);
+        return stdout.split('\n').filter(Boolean);
+    }, userId);
 }
 
 // Function to log security events
@@ -201,8 +220,7 @@ function validateSafePath(pathStr) {
     return true;
 }
 
-async function runStep(task, otherAIData, userId = 'default'){
-    // Get tool state from context
+async function runStep(task, otherAIData, userId = 'default') {
     const toolState = contextManager.getToolState('fileSystem', userId) || { 
         history: [], 
         operations: []
@@ -300,7 +318,7 @@ async function runStep(task, otherAIData, userId = 'default'){
         }
 
         if(result.action === "saveToFile"){
-            saveToFile(result.content, result.path || '', result.filename, userId);
+            await saveToFile(result.content, result.path || '', result.filename, userId);
             operationResult = `File saved: ${result.filename} to path: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -310,7 +328,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 filename: result.filename
             });
         }else if(result.action === "deleteFile"){
-            deleteFile(result.path || '', result.filename, userId);
+            await deleteFile(result.path || '', result.filename, userId);
             operationResult = `File deleted: ${result.filename} from path: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -320,7 +338,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 filename: result.filename
             });
         }else if(result.action === "createDirectory"){
-            createDirectory(result.path || '', userId);
+            await createDirectory(result.path || '', userId);
             operationResult = `Directory created: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -329,7 +347,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 path: result.path || ''
             });
         }else if(result.action === "deleteDirectory"){
-            deleteDirectory(result.path || '', userId);
+            await deleteDirectory(result.path || '', userId);
             operationResult = `Directory deleted: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -338,7 +356,7 @@ async function runStep(task, otherAIData, userId = 'default'){
                 path: result.path || ''
             });
         }else if(result.action === "listFiles"){
-            const files = listFiles(result.path || '', userId);
+            const files = await listFiles(result.path || '', userId);
             operationResult = `Files in ${result.path || ''}: ${JSON.stringify(files)}`;
             
             // Track operation in tool state
@@ -362,7 +380,7 @@ async function runStep(task, otherAIData, userId = 'default'){
             // Continue with next step
             return runStep(task, otherAIData, userId).then(() => files);
         }else if(result.action === "listDirectories"){
-            const directories = listDirectories(result.path || '', userId);
+            const directories = await listDirectories(result.path || '', userId);
             operationResult = `Directories in ${result.path || ''}: ${JSON.stringify(directories)}`;
             
             // Track operation in tool state
@@ -386,7 +404,7 @@ async function runStep(task, otherAIData, userId = 'default'){
             // Continue with next step
             return runStep(task, otherAIData, userId).then(() => directories);
         }else if(result.action === "readFile"){
-            const content = readFile(result.path || '', result.filename, userId);
+            const content = await readFile(result.path || '', result.filename, userId);
             operationResult = `File read: ${result.filename} from path: ${result.path || ''}`;
             
             // Track operation in tool state
@@ -461,87 +479,59 @@ async function runStep(task, otherAIData, userId = 'default'){
     }
 }
 
-async function writeFileDirectly(content, userPath, filename, userId = 'default'){
-    ensureBaseDirectoryExists(userId);
-    // Sanitize filename to prevent directory traversal
-    const sanitizedFilename = filename.replace(/[\/\\]/g, '_');
-    
-    const dirPath = securePath(userPath, userId);
-    const filePath = path.join(dirPath, sanitizedFilename);
-    
-    // Final security check
-    validatePath(filePath, getBaseDirectory(userId));
-    
-    // Create directories if they don't exist
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-    }
-    
-    fs.writeFileSync(filePath, content);
+async function writeFileDirectly(content, userPath, filename, userId = 'default') {
+    return await saveToFile(content, userPath, filename, userId);
 }
 
-async function runTask(task, otherAIData, callback, userId = 'default'){
-    // Initialize tool state
-    const toolState = contextManager.getToolState('fileSystem', userId) || { 
-        history: [], 
-        operations: []
-    };
-    
-    // Reset operations for new task
-    toolState.operations = [];
-    
-    // If history is too long, trim it
-    if (toolState.history.length > 20) {
-        toolState.history = toolState.history.slice(-10);
-    }
-    
-    // Save initial state
-    contextManager.setToolState('fileSystem', toolState, userId);
-    
-    // Ensure user directory exists
-    ensureBaseDirectoryExists(userId);
+async function runTask(task, otherAIData, callback, userId = 'default') {
+    let containerName = null;
     
     try {
-        // Store callback for later use
-        const summary = await runStep(task, otherAIData, userId);
-        
-        if (callback) {
-            callback(summary);
+        // Start by checking Docker availability
+        if (!await docker.checkDockerAvailability()) {
+            throw new Error('Docker is not available or not running');
         }
         
-        return summary;
+        const result = await runStep(task, otherAIData, userId);
+        
+        if (callback) {
+            callback(result);
+        }
+        
+        return result;
     } catch (error) {
-        console.error("Error in fileSystem tool:", error);
+        console.error(`Error in filesystem task: ${error.message}`);
         
-        // Log security violations
-        if (error.message.includes('Security violation')) {
-            logSecurityEvent(userId, 'task_execution', error.message);
-        }
+        const errorResult = { 
+            error: error.message, 
+            success: false 
+        };
         
         if (callback) {
-            callback({
-                error: error.message,
-                success: false
-            });
+            callback(errorResult);
         }
         
-        return {
-            error: error.message,
-            success: false
-        };
+        return errorResult;
+    } finally {
+        // Clean up all containers for this user
+        try {
+            const containers = await docker.cleanupAllContainers();
+        } catch (cleanupError) {
+            console.error(`Error during cleanup: ${cleanupError.message}`);
+        }
     }
 }
 
 module.exports = {
-    runTask,
-    // Export these functions for direct use
     saveToFile,
     readFile,
-    listFiles,
-    listDirectories,
     createDirectory,
     deleteFile,
     deleteDirectory,
-    writeFileDirectly
+    listFiles,
+    listDirectories,
+    runStep,
+    writeFileDirectly,
+    runTask
 };
 

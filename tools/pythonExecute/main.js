@@ -1,9 +1,11 @@
 const ai = require("../AI/ai");
+const docker = require("../docker");
 const child_process = require("child_process")
 const fs = require("fs");
 const path = require("path");
 const contextManager = require('../../utils/context');
 const getPlatform = require("../../utils/getPlatform");
+const crypto = require('crypto');
 
 // Enhanced security function to validate paths
 function validatePath(filePath, baseDirectory) {
@@ -62,7 +64,48 @@ function getPythonFilePath(userId = 'default', timestamp) {
     return validatePath(pythonFilePath, userDir);
 }
 
-async function runTask(task, otherAIData, callback, userId = 'default'){
+// Execute an operation in a Docker container with proper error handling
+async function safeExecute(operation, userId = 'default', retries = 3) {
+    let containerName = null;
+    let containerCreated = false;
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            // Create a new container for this operation
+            containerName = await docker.createContainer(userId);
+            containerCreated = true;
+            
+            // Execute the operation
+            return await operation(containerName);
+        } catch (error) {
+            lastError = error;
+            console.warn(`Python operation failed (attempt ${attempt}/${retries}): ${error.message}`);
+            
+            // If container was created, try to clean it up
+            if (containerCreated && containerName) {
+                try {
+                    await docker.removeContainer(containerName);
+                } catch (cleanupError) {
+                    console.error(`Failed to clean up container: ${cleanupError.message}`);
+                }
+            }
+            
+            containerCreated = false;
+            containerName = null;
+            
+            // Wait before retrying (exponential backoff)
+            if (attempt < retries) {
+                const delay = Math.min(100 * Math.pow(2, attempt), 2000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    
+    throw lastError || new Error('Operation failed after multiple retries');
+}
+
+async function runTask(task, otherAIData, callback, userId = 'default') {
     try {
         // Initialize tool state
         let toolState = contextManager.getToolState('pythonExecute', userId) || {
@@ -77,11 +120,8 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
         // Validate inputs
         if (!task || typeof task !== 'string') {
             console.error("Python Execute: Invalid task provided");
-            
-            // Track error in context
             toolState.lastError = "Invalid task format";
             contextManager.setToolState('pythonExecute', toolState, userId);
-            
             const errorResult = { error: "Invalid task format", success: false };
             if (callback) callback(errorResult);
             return errorResult;
@@ -89,9 +129,6 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
         
         // Format the task with other AI data
         task = task + "\n\nOther AI Data: " + (otherAIData || "");
-        
-        // Ensure base directory exists
-        await ensureBaseDirectoryExists(userId);
         
         // Generate Python code
         let codeResult;
@@ -101,11 +138,8 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
             if (!codeResult || codeResult.error) {
                 console.error("Failed to generate Python code:", codeResult?.error || "Unknown error");
                 const errorMsg = "Failed to generate Python code: " + (codeResult?.error || "Unknown error");
-                
-                // Track error in context
                 toolState.lastError = errorMsg;
                 contextManager.setToolState('pythonExecute', toolState, userId);
-                
                 const errorResult = { error: errorMsg, success: false };
                 if (callback) callback(errorResult);
                 return errorResult;
@@ -113,165 +147,61 @@ async function runTask(task, otherAIData, callback, userId = 'default'){
         } catch (error) {
             console.error("Error generating code:", error.message);
             const errorMsg = "Error generating code: " + error.message;
-            
-            // Track error in context
             toolState.lastError = errorMsg;
             contextManager.setToolState('pythonExecute', toolState, userId);
-            
             const errorResult = { error: errorMsg, success: false };
             if (callback) callback(errorResult);
             return errorResult;
         }
         
-        // Save the code to a file with the user ID in the filename to avoid conflicts
-        const timestamp = Date.now();
-        const pythonFilePath = getPythonFilePath(userId, timestamp);
-        
-        // Store the python file path in tool state
-        toolState.currentPythonFile = pythonFilePath;
-        contextManager.setToolState('pythonExecute', toolState, userId);
-        
+        // Execute the Python code in a Docker container
         try {
-            // Add safety imports and directory restriction to Python code
-            const safetyPrefix = generatePythonSafetyCode(userId);
-            const enhancedCode = safetyPrefix + codeResult.code;
+            const scriptPath = `/app/script_${crypto.randomBytes(4).toString('hex')}.py`;
             
-            fs.writeFileSync(pythonFilePath, enhancedCode);
-        } catch (error) {
-            console.error("Error saving Python file:", error.message);
-            
-            // Track error in context
-            toolState.lastError = "Error saving Python file: " + error.message;
-            contextManager.setToolState('pythonExecute', toolState, userId);
-            
-            const errorResult = { error: "Error saving Python file: " + error.message, success: false };
-            if (callback) callback(errorResult);
-            return errorResult;
-        }
-        
-        // Install dependencies
-        let dependenciesResult;
-        try {
-            dependenciesResult = installDependencies(codeResult["pip install"]);
-            console.log("Dependencies result:", dependenciesResult);
-            
-            // Track dependencies in context
-            toolState.lastDependencies = codeResult["pip install"];
-            contextManager.setToolState('pythonExecute', toolState, userId);
-        } catch (error) {
-            console.error("Error installing dependencies:", error.message);
-            // Non-critical error, can continue
-            dependenciesResult = "Error installing dependencies: " + error.message;
-            
-            // Track error in context
-            toolState.dependencyError = error.message;
-            contextManager.setToolState('pythonExecute', toolState, userId);
-        }
-        
-        // Execute code
-        let executionResult;
-        try {
-            executionResult = executeCode(pythonFilePath);
-            
-            if (typeof executionResult === 'string' && executionResult.startsWith("Error:")) {
-                console.error("Python execution failed:", executionResult);
-                const errorMsg = "Python execution failed: " + executionResult;
+            const result = await safeExecute(async (containerName) => {
+                // Write the Python script to the container
+                await docker.writeFile(containerName, scriptPath, codeResult.code);
                 
-                // Track error in context
-                toolState.executionError = executionResult;
+                // Install dependencies if any
+                if (codeResult["pip install"] && codeResult["pip install"].length > 0) {
+                    const pipCommand = `pip install ${codeResult["pip install"].join(' ')}`;
+                    await docker.executeCommand(containerName, pipCommand);
+                }
+                
+                // Execute the Python script
+                const { stdout, stderr } = await docker.executePython(containerName, scriptPath);
+                
+                // Store execution result
+                toolState.executions.push({
+                    timestamp: Date.now(),
+                    task: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                    outputPreview: stdout.substring(0, 200) + (stdout.length > 200 ? '...' : '')
+                });
                 contextManager.setToolState('pythonExecute', toolState, userId);
                 
-                const errorResult = { error: errorMsg, partial: executionResult, success: false };
-                if (callback) callback(errorResult);
-                return errorResult;
-            }
-            
-            // Track successful execution in context
-            toolState.executions.push({
-                timestamp: timestamp,
-                task: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
-                pythonFile: path.basename(pythonFilePath),
-                outputPreview: executionResult.toString().substring(0, 200) + (executionResult.toString().length > 200 ? '...' : '')
-            });
-            contextManager.setToolState('pythonExecute', toolState, userId);
-        } catch (error) {
-            console.error("Error executing Python code:", error.message);
-            const errorMsg = "Error executing Python code: " + error.message;
-            
-            // Track error in context
-            toolState.executionError = error.message;
-            contextManager.setToolState('pythonExecute', toolState, userId);
-            
-            const errorResult = { error: errorMsg, success: false };
-            if (callback) callback(errorResult);
-            return errorResult;
-        }
-        
-        // Evaluate output
-        let summary;
-        try {
-            summary = await evaluateOutput(task, executionResult, userId);
-            
-            if (!summary || summary.error) {
-                console.error("Failed to evaluate output:", summary?.error || "Unknown error");
-                // Return a partial result
-                const result = {
-                    result: executionResult.toString(),
-                    dependencies: dependenciesResult,
-                    success: false,
-                    error: "Failed to evaluate output"
-                };
-                
-                // Track evaluation failure in context
-                toolState.evaluationError = "Failed to evaluate output";
-                contextManager.setToolState('pythonExecute', toolState, userId);
-                
-                if (callback) callback(result);
-                return result;
-            }
-            
-            // Store evaluation in context
-            toolState.lastEvaluation = summary;
-            contextManager.setToolState('pythonExecute', toolState, userId);
-        } catch (error) {
-            console.error("Error evaluating output:", error.message);
-            // Return a partial result with raw execution data
-            const result = {
-                result: executionResult.toString(),
-                dependencies: dependenciesResult,
-                success: false,
-                error: "Error evaluating output: " + error.message
-            };
-            
-            // Track evaluation error in context
-            toolState.evaluationError = error.message;
-            contextManager.setToolState('pythonExecute', toolState, userId);
+                // Evaluate output
+                const summary = await evaluateOutput(task, stdout, userId);
+                return summary;
+            }, userId);
             
             if (callback) callback(result);
             return result;
+        } catch (error) {
+            console.error("Error in Python execution:", error.message);
+            const errorResult = { error: error.message, success: false };
+            if (callback) callback(errorResult);
+            return errorResult;
+        } finally {
+            // Ensure cleanup of all containers
+            try {
+                await docker.cleanupAllContainers();
+            } catch (cleanupError) {
+                console.error(`Error during cleanup: ${cleanupError.message}`);
+            }
         }
-        
-        // Limit history size
-        if (toolState.executions.length > 10) {
-            toolState.executions = toolState.executions.slice(-10);
-        }
-        
-        // Save final tool state
-        contextManager.setToolState('pythonExecute', toolState, userId);
-        
-        // Execute callback and return
-        if (callback) callback(summary);
-        return summary;
     } catch (error) {
         console.error("Critical error in Python execution:", error.message);
-        const errorMsg = "Critical error in Python execution: " + error.message;
-        
-        // Track critical error in context
-        let toolState = contextManager.getToolState('pythonExecute', userId) || { history: [] };
-        toolState.criticalError = error.message;
-        contextManager.setToolState('pythonExecute', toolState, userId);
-        
-        const errorResult = { error: errorMsg, success: false };
+        const errorResult = { error: error.message, success: false };
         if (callback) callback(errorResult);
         return errorResult;
     }
@@ -339,12 +269,10 @@ print(f"SECURITY: Python execution restricted to directory: {ALLOWED_DIR}\\n")
 `
 }
 
-async function evaluateOutput(task, result, userId = 'default'){
+async function evaluateOutput(task, result, userId = 'default') {
     try {
         // Get tool state
         let toolState = contextManager.getToolState('pythonExecute', userId);
-        
-        let platform = getPlatform.getPlatform();
         
         // Ensure result is converted to string for evaluation
         const resultStr = typeof result === 'object' ? 
@@ -360,7 +288,7 @@ async function evaluateOutput(task, result, userId = 'default'){
             "summary": \`SUMMARY HERE\`,
             "success": true/false
         }
-        `
+        `;
         const summary = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
         
         // Add evaluation to history
@@ -414,31 +342,18 @@ async function generateCode(task, userId = 'default') {
             executions: []
         };
         
-        let userDir = getUserDirectory(userId);
-        let platform = getPlatform.getPlatform();
         let prompt = `
         Based on the following task, generate python code which completes it in a simple way. 
         Due to it being evaluated after its done, print important information in the console.
 
-        SECURITY CRITICAL: Your code MUST follow these strict security guidelines:
-        1. ONLY access files inside the directory: ${userDir}
-        2. NEVER use absolute paths
-        3. NEVER try to access parent directories or system directories
-        4. NEVER use os.system, subprocess, or any command execution functions
-        5. NEVER import any networking, system access, or potentially dangerous libraries
-        6. ALL file operations MUST use relative paths within the allowed directory
-        7. DO NOT attempt to bypass security restrictions in any way
-
-        The code will be executed in a sandbox with security measures that will prevent access outside
-        the allowed directory, but you must still write secure code.
+        Your code will be executed in a Docker container with Python installed.
 
         respond in the following JSON format:
         {
         "code": \`CODE HERE\`,
         "pip install": "libraries which are required, if any",
         }
-        Platform: ${platform}
-        `
+        `;
 
         const code = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
         
@@ -559,4 +474,4 @@ function executeCode(pythonFilePath){
     }
 }
 
-module.exports = {runTask};
+module.exports = { runTask };
