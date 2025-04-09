@@ -351,7 +351,17 @@ async function goToPage(url, userId = 'default'){
     let toolState = contextManager.getToolState('browser', userId);
     
     try {
-        await page.goto(url);
+        // Increase timeout and modify navigation settings for better reliability
+        await page.setDefaultNavigationTimeout(90000); // Increase timeout from default
+        
+        // Set up a more flexible navigation strategy
+        await page.goto(url, { 
+            timeout: 60000, 
+            waitUntil: ['load', 'domcontentloaded'] // Changed from networkidle0 to more reliable options
+        });
+        
+        // Give the page extra time to settle 
+        await sleep(2000);
         
         // Record page in active session
         if (toolState.activeSession) {
@@ -617,20 +627,35 @@ async function getContent(userId = 'default') {
     const page = pageInstances.get(userId);
     
     try {
+        // Add a small wait for the page to potentially stabilize after navigation
+        await sleep(500);
+
         // Inject our custom element numbering script
         await page.evaluate(elementNumberingScript);
-        
-        // Get numbered elements
-        const elements = await page.evaluate(() => {
-            return Object.keys(window.numberedElements).map(key => {
-                const el = window.numberedElements[key];
-                return `${key}: ${el.tagName}${el.id ? ' id=' + el.id : ''}${el.className ? ' class=' + el.className : ''}`;
-            }).join(', ');
-        });
-        
-        // Get text content with reduced tokens
-        const websiteTextContent = await page.evaluate(() => {
-            return document.body.innerText.substring(0, 1000);  // Limit text extraction
+
+        // Combine element gathering and text content extraction into a single evaluate call
+        const pageData = await page.evaluate(() => {
+            let elementsString = '';
+            // Check if numberedElements exists and is an object before processing
+            if (window.numberedElements && typeof window.numberedElements === 'object') {
+                elementsString = Object.keys(window.numberedElements).map(key => {
+                    const el = window.numberedElements[key];
+                    // Ensure el exists before accessing properties
+                    if (el) {
+                      return `${key}: ${el.tagName}${el.id ? ' id=' + el.id : ''}${el.className ? ' class=' + el.className : ''}`;
+                    }
+                    return `${key}: Element not found`; // Handle case where element might be missing
+                }).join(', ');
+            } else {
+                 elementsString = ''; // Return empty string if numberedElements is not ready
+            }
+
+            const textContent = document.body.innerText.substring(0, 1000); // Limit text extraction
+
+            return {
+                elements: elementsString,
+                websiteTextContent: textContent
+            };
         });
         
         // Take screenshot with lower quality
@@ -650,8 +675,8 @@ async function getContent(userId = 'default') {
                 toolState.sessions[sessionIndex].contentSnapshots = toolState.sessions[sessionIndex].contentSnapshots || [];
                 toolState.sessions[sessionIndex].contentSnapshots.push({
                     url: page.url(),
-                    elementCount: Object.keys(elements).length,
-                    textPreview: websiteTextContent.substring(0, 100) + '...',
+                    elementCount: Object.keys(pageData.elements).length,
+                    textPreview: pageData.websiteTextContent.substring(0, 100) + '...',
                     timestamp: Date.now()
                 });
             }
@@ -661,8 +686,8 @@ async function getContent(userId = 'default') {
         contextManager.setToolState('browser', toolState, userId);
         
         return {
-            elements,
-            websiteTextContent,
+            elements: pageData.elements,
+            websiteTextContent: pageData.websiteTextContent,
             screenshot: 'data:image/jpeg;base64,' + screenshot
         };
     } catch (error) {

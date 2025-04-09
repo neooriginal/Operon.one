@@ -76,9 +76,31 @@ class Context {
   }
 
   // Step output management
-  addStepOutput(step, action, output, userId = 'default') {
+  addStepOutput(stepParam, actionParam, outputParam, userId = 'default') {
     const context = this.getContext(userId);
-    const stepOutput = { step, action, output };
+    let stepOutput;
+    
+    // Handle both old format (separate parameters) and new object format
+    if (typeof stepParam === 'object' && stepParam !== null) {
+      // New format: passed an object with all properties
+      stepOutput = {
+        step: stepParam.step,
+        action: stepParam.action,
+        output: stepParam.output,
+        success: stepParam.success !== false, // Default to true if not specified
+        error: stepParam.error || null
+      };
+    } else {
+      // Old format: separate parameters
+      stepOutput = { 
+        step: stepParam, 
+        action: actionParam, 
+        output: outputParam,
+        success: outputParam && outputParam.error === undefined,
+        error: outputParam && outputParam.error ? outputParam.error : null
+      };
+    }
+    
     context.stepsOutput.push(stepOutput);
     return stepOutput;
   }
