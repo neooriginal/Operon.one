@@ -429,6 +429,18 @@ async function centralOrchestrator(question, userId = 'default'){
               }
             });
           }, userId);
+          // --- Start Modification: Track created container files ---
+          if (summary && Array.isArray(summary.createdContainerFiles)) {
+            for (const containerPath of summary.createdContainerFiles) {
+              try {
+                // Assuming fileSystem.trackContainerFile exists - we'll add it later
+                await fileSystem.trackContainerFile(userId, containerPath);
+              } catch (trackingError) {
+                console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
+              }
+            }
+          }
+          // --- End Modification ---
           break;
 
         case "bash":
@@ -448,6 +460,18 @@ async function centralOrchestrator(question, userId = 'default'){
               }
             });
           }, userId);
+          // --- Start Modification: Track created container files ---
+          if (summary && Array.isArray(summary.createdContainerFiles)) {
+            for (const containerPath of summary.createdContainerFiles) {
+              try {
+                // Assuming fileSystem.trackContainerFile exists - we'll add it later
+                await fileSystem.trackContainerFile(userId, containerPath);
+              } catch (trackingError) {
+                console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
+              }
+            }
+          }
+          // --- End Modification ---
           break;
 
         case "imageGeneration":
@@ -590,8 +614,13 @@ async function centralOrchestrator(question, userId = 'default'){
       const duration = contextManager.getTaskDuration(userId);
       
       // Get output files from the file system tool's tracked list
-      const outputFiles = await fileSystem.getWrittenFiles(userId); 
-      console.log(`[ ] Output files tracked: ${outputFiles.length}`);
+      // --- Start Modification: Handle new getWrittenFiles format ---
+      const trackedFiles = await fileSystem.getWrittenFiles(userId);
+      // Assuming getWrittenFiles now returns { hostFiles: [...], containerFiles: [...] }
+      const hostFiles = trackedFiles.hostFiles || [];
+      const containerFiles = trackedFiles.containerFiles || [];
+      console.log(`[ ] Host files tracked: ${hostFiles.length}, Container files tracked: ${containerFiles.length}`);
+      // --- End Modification ---
 
       
       // Emit task completion event with enhanced data
@@ -600,7 +629,10 @@ async function centralOrchestrator(question, userId = 'default'){
         result: finalOutput,
         duration: duration,
         completedAt: new Date().toISOString(),
-        outputFiles: outputFiles,
+        outputFiles: {
+          host: hostFiles,
+          container: containerFiles
+        },
         metrics: {
           stepCount: contextManager.getStepsOutput(userId).length,
           successCount: contextManager.getStepsOutput(userId).filter(step => 

@@ -278,6 +278,17 @@ async function evaluateOutput(task, result, userId = 'default') {
         const resultStr = typeof result === 'object' ? 
             JSON.stringify(result, null, 2) : String(result || '');
         
+        const createdContainerFiles = [];
+        const outputLines = resultStr.split('\\n'); // Split by newline
+        for (const line of outputLines) {
+            if (line.startsWith('CREATED_FILE:')) {
+                const filePath = line.substring('CREATED_FILE:'.length).trim();
+                if (filePath) {
+                    createdContainerFiles.push(filePath);
+                }
+            }
+        }
+
         let prompt = `
         Based on the following task, evaluate the output of the code and return a summary of the output in a JSON format.
         Task: ${task}
@@ -320,7 +331,13 @@ async function evaluateOutput(task, result, userId = 'default') {
         
         // Add raw output for reference
         summary.rawOutput = resultStr.substring(0, 1000);
-        
+
+        // --- Start Modification: Add created files to summary ---
+        if (createdContainerFiles.length > 0) {
+            summary.createdContainerFiles = createdContainerFiles;
+        }
+        // --- End Modification ---
+
         return summary;
     } catch (error) {
         console.error("Error evaluating output:", error.message);
@@ -348,10 +365,12 @@ async function generateCode(task, userId = 'default') {
 
         Your code will be executed in a Docker container with Python installed.
 
+        **IMPORTANT**: If your code creates any files, print their absolute paths within the container on separate lines, each prefixed with 'CREATED_FILE:' (e.g., 'print("CREATED_FILE:/app/result.txt")').
+
         respond in the following JSON format:
         {
         "code": \`CODE HERE\`,
-        "pip install": "libraries which are required, if any",
+        "pip install": ["list", "of", "libraries"] // List libraries required, if any. Empty list if none.
         }
         `;
 
@@ -367,6 +386,13 @@ async function generateCode(task, userId = 'default') {
             console.error("Generated code missing 'code' field");
             return { error: "Generated code missing required 'code' field", fallback: true };
         }
+        
+        // --- Start Modification: Validate pip install format ---
+        // Ensure "pip install" is always an array, even if empty or null
+        if (!Array.isArray(code["pip install"])) {
+            code["pip install"] = [];
+        }
+        // --- End Modification ---
         
         // Add to history
         toolState.history.push({

@@ -3,20 +3,6 @@ const ai = require("../AI/ai");
 const docker = require("../docker");
 const contextManager = require("../../utils/context");
 const path = require('path');
-const crypto = require('crypto');
-
-function getBaseDirectory() {
-    const applicationBaseDir = path.join(__dirname, '..', '..');
-    return path.join(applicationBaseDir, 'output');
-}
-
-// Ensure the base directory exists
-function ensureBaseDirectoryExists() {
-    const baseDir = getBaseDirectory();
-    if (!fs.existsSync(baseDir)) {
-        fs.mkdirSync(baseDir, { recursive: true });
-    }
-}
 
 // Execute a bash command in a Docker container with proper error handling
 async function safeExecuteInContainer(command, userId = 'default', retries = 3) {
@@ -128,16 +114,34 @@ async function evaluateOutput(task, result, userId = 'default') {
     // Get tool state
     let toolState = contextManager.getToolState('bash', userId);
     
+    const createdContainerFiles = [];
+    const resultStr = String(result || ''); // Ensure string
+    const outputLines = resultStr.split('\n');
+    for (const line of outputLines) {
+        if (line.startsWith('CREATED_FILE:')) {
+            const filePath = line.substring('CREATED_FILE:'.length).trim();
+            if (filePath) {
+                createdContainerFiles.push(filePath);
+            }
+        }
+    }
+
     let prompt = `
     You are an AI agent that can evaluate the output of a bash code.
     The user will provide the task. Reply in the following JSON Format:
     {
-    "summary": \`SUMMARY HERE\`,
+    "summary": \"SUMMARY HERE\",
     "success": true/false //task completed?
     }
-    Result: ${result}
-    `
-    let summary = await ai.callAI(prompt, task, toolState.history || []);
+    Result: ${resultStr} // Use resultStr here
+    `;
+    let summary;
+    try {
+      summary = await ai.callAI(prompt, task, toolState.history || [], undefined, true, 'auto', userId);
+    } catch (aiError) {
+      console.error(`AI call failed during bash evaluation: ${aiError.message}`);
+      summary = { summary: `Evaluation failed due to AI error: ${aiError.message}`, success: false };
+    }
     
     // Update history in tool state
     toolState.history.push({
@@ -161,7 +165,23 @@ async function evaluateOutput(task, result, userId = 'default') {
     
     // Save updated tool state
     contextManager.setToolState('bash', toolState, userId);
-    
+
+    // --- Start Modification: Add created files to summary ---
+    // Ensure summary is a valid object before adding property
+    if (typeof summary !== 'object' || summary === null) {
+        console.warn('Bash evaluateOutput received non-object summary, creating default.');
+        // If summary is not an object (e.g., string error from AI), wrap it
+        const originalSummaryContent = typeof summary === 'string' ? summary : 'Invalid content';
+        summary = { 
+            summary: `Evaluation failed or produced invalid format. Original output hint: ${originalSummaryContent.substring(0,100)}`, 
+            success: false 
+        };
+    }
+    if (createdContainerFiles.length > 0) {
+        summary.createdContainerFiles = createdContainerFiles;
+    }
+    // --- End Modification ---
+
     return summary;
 }
 
@@ -171,7 +191,7 @@ async function generateBashCode(task, userId = 'default') {
     
     let prompt = `
     You are an AI agent that can execute complex tasks. For this task, the user will provide a task and you are supposed to generate the bash code to complete it.
-    
+
     Task: ${task}
 
     Format:
@@ -182,8 +202,9 @@ async function generateBashCode(task, userId = 'default') {
     IMPORTANT: Your code will be executed in a Docker container based on Linux with Python installed.
     You have full access to the container's filesystem.
     Your code should be compatible with a typical Linux environment.
-    `
-    let code = await ai.callAI(prompt, task, toolState.history || []);
+    **IMPORTANT**: If your code creates any files, echo their absolute paths within the container on separate lines, each prefixed with 'CREATED_FILE:' (e.g., 'echo "CREATED_FILE:/app/result.txt"').
+    `;
+    let code = await ai.callAI(prompt, task, toolState.history || [], undefined, true, 'auto', userId);
     
     // Update history in tool state
     toolState.history.push({
