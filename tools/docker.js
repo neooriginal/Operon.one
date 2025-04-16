@@ -295,6 +295,48 @@ class DockerManager {
         });
     }
 
+    async getOutputFiles(taskId) {
+        // Check if we have a container for this task
+        if (!this.activeContainers.has(taskId)) {
+            console.warn(`No active container found for task ${taskId}`);
+            return []; // Return empty list if no container found
+        }
+        const containerName = this.activeContainers.get(taskId);
+        const containerOutputDir = '/app/output'; // Standard output directory inside the container
+
+        return await this._retry(async () => {
+            // Command to list files (not directories) in the output directory and print just filenames
+            const command = `find ${containerOutputDir} -maxdepth 1 -type f -printf '%f\\n'`;
+
+            try {
+                const { stdout, stderr } = await this.executeCommand(containerName, command);
+
+                // Check stderr for "No such file or directory" specifically
+                if (stderr && stderr.includes('No such file or directory')) {
+                    console.log(`Output directory ${containerOutputDir} not found in container ${containerName}.`);
+                    return []; // Return empty list if directory doesn't exist
+                } else if (stderr) {
+                    // Log other stderr messages as warnings
+                    console.warn(`Stderr while listing files in ${containerName}:${containerOutputDir}: ${stderr}`);
+                }
+
+                // Parse the stdout to get filenames, filtering out empty lines
+                const files = stdout.trim().split('\\n').filter(file => file.length > 0);
+                return files;
+
+            } catch (error) {
+                // Handle errors from executeCommand, especially if the directory doesn't exist after retries
+                 if (error.message.includes('No such file or directory')) {
+                     console.log(`Output directory ${containerOutputDir} not found in container ${containerName} after retries.`);
+                     return [];
+                 }
+                 // Log and re-throw other errors
+                console.error(`Failed to list files in container ${containerName}:${containerOutputDir}: ${error.message}`);
+                throw error;
+            }
+        });
+    }
+
     // Clean up all containers created by this manager
     async cleanupAllContainers() {
         const errors = [];

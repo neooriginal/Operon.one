@@ -617,28 +617,15 @@ async function centralOrchestrator(question, userId = 'default'){
           step && step.output && !step.output.error && step.output.success !== false
         ).length
       }, null, 2));
-      const userFiles = await getUserFiles(userId);
-      io.emit('user_files', { userId, files: userFiles });
+    
       
       // Get task duration using the context manager
       const duration = contextManager.getTaskDuration(userId);
       
-      // Get output files if they exist
-      const outputFiles = [];
-      try {
-        const outputDir = path.join(__dirname, 'output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
-        if (fs.existsSync(outputDir)) {
-          const files = fs.readdirSync(outputDir);
-          files.forEach(file => {
-            outputFiles.push({
-              fileName: file,
-              path: path.join('output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'), file)
-            });
-          });
-        }
-      } catch (error) {
-        console.error("Error getting output files:", error.message);
-      }
+      // Get output files from docker container
+      const outputFiles = await docker.getOutputFiles(userId);
+      console.log(`[ ] Output files: ${outputFiles.length}`);
+
       
       // Emit task completion event with enhanced data
       io.emit('task_completed', { 
@@ -813,13 +800,7 @@ async function finalizeTask(question, stepsOutput, userId = 'default') {
   }
 }
 
-async function getUserFiles(userId) {
-  const outputDir = path.join(__dirname, 'output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
-  if (fs.existsSync(outputDir)) {
-    return fs.readdirSync(outputDir);
-  }
-  return [];
-}
+
 
 /**
  * Clean up resources for a specific user after task completion
