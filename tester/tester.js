@@ -18,7 +18,7 @@ if (!fs.existsSync(REPORTS_DIR)) {
 // Test prompts from basic to complex
 const testPrompts = [
 
-  "manually create some files in the output directory for testing",
+  "manually create some files in the output directory for testing. quick and easy.",
 
   "Create a comprehensive business plan for a small coffee shop including market analysis, financial projections, and marketing strategy",
   

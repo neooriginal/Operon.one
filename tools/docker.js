@@ -174,16 +174,22 @@ class DockerManager {
 
     async executeCommand(containerName, command) {
         return await this._retry(async () => {
-            // Escape characters needed for double-quoted "sh -c" execution: \, ", $, `
-            const escapedCommand = command
-                .replace(/\\/g, '\\\\') // Escape backslashes first
-                .replace(/"/g, '\\"')   // Escape double quotes
-                .replace(/\$/g, '\\$')  // Escape dollar signs
-                .replace(/`/g, '\\`');  // Escape backticks
+            // Encode the command in base64 to avoid shell interpretation issues
+            const encodedCommand = Buffer.from(command).toString('base64');
             
-            // Use double quotes for the sh -c command wrapper
-            const fullCommand = `${dockerCMD} exec ${containerName} sh -c "${escapedCommand}"`;
-            console.log(`Executing Docker command: ${fullCommand}`); // Log the command for debugging
+            // Decode and execute the command inside the container using sh -c
+            // This prevents issues with quotes, backslashes, dollar signs, etc.
+            const commandToExecuteInsideShell = `echo '${encodedCommand}' | base64 -d | sh`;
+
+            // Escape the command for the outer shell (if necessary, though base64 helps a lot)
+            // Primarily escaping double quotes for the outer sh -c "..." wrapper
+            const escapedInnerCommand = commandToExecuteInsideShell.replace(/\"/g, '\\\\"');
+
+            // Construct the full command
+            const fullCommand = `${dockerCMD} exec ${containerName} sh -c "${escapedInnerCommand}"`;
+            console.log(`Executing Docker command (using base64): ${command}`); // Log original command for clarity
+            
+            // Execute the command
             const { stdout, stderr } = await execAsync(fullCommand);
             return { stdout, stderr };
         });
