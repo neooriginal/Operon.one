@@ -350,35 +350,42 @@ async function centralOrchestrator(question, userId = 'default'){
           break;
 
         case "writeFileDirectly":
-          summary = await fileSystem.writeFileDirectly(
-            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
-            inputData, 
-            (summary) => {
-              console.log(`[X] ${enhancedStep.step}`);
-              io.emit('step_completed', { 
-                userId, 
-                step: enhancedStep.step, 
-                action: enhancedStep.action,
-                metrics: {
-                  stepIndex: currentStepIndex,
-                  stepCount: currentStepIndex + 1,
-                  totalSteps: plan.length,
-                  successCount: contextManager.getStepsOutput(userId).filter(step => 
-                    step && step.output && !step.output.error && step.output.success !== false
-                  ).length
-                }
-              });
-              // If a file is created or updated, emit file event
-              if (summary && summary.filePath) {
-                io.emit('file_updated', { 
-                  userId, 
-                  filePath: summary.filePath, 
-                  content: summary.content || 'File created/updated'
-                });
-              }
-            },
-            userId
-          );
+          // Ensure the required properties exist in the step definition
+          if (!enhancedStep.content || !enhancedStep.filename) {
+            summary = { error: "writeFileDirectly requires 'content' and 'filename' properties in the step definition.", success: false };
+          } else {
+            summary = await fileSystem.writeFileDirectly(
+              enhancedStep.content, // Pass content directly from the step
+              enhancedStep.path,    // Pass path from the step (optional, defaults in writeFileDirectly)
+              enhancedStep.filename,  // Pass filename from the step
+              userId              // Pass userId
+            );
+          }
+          // Log completion and emit event after the await completes
+          console.log(`[X] ${enhancedStep.step}`);
+          io.emit('step_completed', { 
+            userId, 
+            step: enhancedStep.step, 
+            action: enhancedStep.action,
+            metrics: {
+              stepIndex: currentStepIndex,
+              stepCount: currentStepIndex + 1,
+              totalSteps: plan.length,
+              successCount: contextManager.getStepsOutput(userId).filter(step => 
+                step && step.output && !step.output.error && step.output.success !== false
+              ).length
+            }
+          });
+          // Emit file update event if successful and path exists (writeFileDirectly returns path)
+          if (summary && !summary.error && typeof summary === 'string') { 
+            io.emit('file_updated', { 
+              userId, 
+              filePath: summary, // summary is the absolute path on success
+              content: 'File created/updated directly'
+            });
+          } else if (summary && summary.error) {
+             console.error(`writeFileDirectly Error: ${summary.error}`);
+          }
           break;
 
         case "chatCompletion":
