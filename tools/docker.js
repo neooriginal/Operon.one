@@ -174,8 +174,8 @@ class DockerManager {
 
     async executeCommand(containerName, command) {
         return await this._retry(async () => {
-            // Escape single quotes and backslashes in the command for 'sh -c'
-            const escapedCommand = command.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "'\\\\''");
+            // Escape single quotes for 'sh -c'. The correct replacement is ' -> '\''.
+            const escapedCommand = command.replace(/'/g, "'\\''"); 
             const fullCommand = `${dockerCMD} exec ${containerName} sh -c '${escapedCommand}'`;
             console.log(`Executing Docker command: ${fullCommand}`); // Log the command for debugging
             const { stdout, stderr } = await execAsync(fullCommand);
