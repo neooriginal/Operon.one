@@ -27,7 +27,6 @@ let globalPrompt = `
 >
 > - webBrowser: for complex web browsing tasks that require interaction
 > - fileSystem: for saving, loading, and writing files
-> - writeFileDirectly: for writing files directly without AI rework (in case you already have the content)
 > - chatCompletion: for answering questions, generating ideas, or performing logical reasoning
 > - webSearch: for quick information gathering (DuckDuckGo-based)
 > - deepResearch: for deep topic research (DuckDuckGo-based) - you can specify 'intensity' parameter (1-10) to control the number of websites to analyze
@@ -283,7 +282,7 @@ async function centralOrchestrator(question, userId = 'default'){
       const enhancedStep = await react.processStep(step, userId);
       console.log(`[X] Reasoning complete`);
       
-      console.log(`[ ] ${enhancedStep.step} using ${enhancedStep.action}`);
+      console.log(`[ ] (${enhancedStep.action}) ${enhancedStep.step} `);
       io.emit('status_update', { userId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
       
       // Get filtered steps output from context
@@ -347,45 +346,6 @@ async function centralOrchestrator(question, userId = 'default'){
             },
             userId
           );
-          break;
-
-        case "writeFileDirectly":
-          // Ensure the required properties exist in the step definition
-          if (!enhancedStep.content || !enhancedStep.filename) {
-            summary = { error: "writeFileDirectly requires 'content' and 'filename' properties in the step definition.", success: false };
-          } else {
-            summary = await fileSystem.writeFileDirectly(
-              enhancedStep.content, // Pass content directly from the step
-              enhancedStep.path,    // Pass path from the step (optional, defaults in writeFileDirectly)
-              enhancedStep.filename,  // Pass filename from the step
-              userId              // Pass userId
-            );
-          }
-          // Log completion and emit event after the await completes
-          console.log(`[X] ${enhancedStep.step}`);
-          io.emit('step_completed', { 
-            userId, 
-            step: enhancedStep.step, 
-            action: enhancedStep.action,
-            metrics: {
-              stepIndex: currentStepIndex,
-              stepCount: currentStepIndex + 1,
-              totalSteps: plan.length,
-              successCount: contextManager.getStepsOutput(userId).filter(step => 
-                step && step.output && !step.output.error && step.output.success !== false
-              ).length
-            }
-          });
-          // Emit file update event if successful and path exists (writeFileDirectly returns path)
-          if (summary && !summary.error && typeof summary === 'string') { 
-            io.emit('file_updated', { 
-              userId, 
-              filePath: summary, // summary is the absolute path on success
-              content: 'File created/updated directly'
-            });
-          } else if (summary && summary.error) {
-             console.error(`writeFileDirectly Error: ${summary.error}`);
-          }
           break;
 
         case "chatCompletion":
