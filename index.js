@@ -622,9 +622,9 @@ async function centralOrchestrator(question, userId = 'default'){
       // Get task duration using the context manager
       const duration = contextManager.getTaskDuration(userId);
       
-      // Get output files from docker container
-      const outputFiles = await docker.getOutputFiles(userId);
-      console.log(`[ ] Output files: ${outputFiles.length}`);
+      // Get output files from the file system tool's tracked list
+      const outputFiles = await fileSystem.getWrittenFiles(userId); 
+      console.log(`[ ] Output files tracked: ${outputFiles.length}`);
 
       
       // Emit task completion event with enhanced data
