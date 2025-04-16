@@ -127,11 +127,11 @@ const testPrompts = [
 ];
 
 // Function to evaluate a test result using AI
-async function evaluateTestResult(prompt, testResult, logs, outputContents, testDuration) {
+async function evaluateTestResult(prompt, testResult, logs, outputContents, testDuration, existingContext = null) {
   console.log('Evaluating test result with AI...');
   
-  // Prepare evaluation context
-  const evaluationContext = {
+  // Use existing context if provided, otherwise create a new one
+  const evaluationContext = existingContext || {
     prompt,
     executionTimeMs: testDuration,
     // Increase log size limit significantly
@@ -437,6 +437,9 @@ async function runTest(prompt, index) {
     originalConsoleLog(message);
   };
   
+  // Define evaluationContext at this scope so it's available throughout the function
+  let evaluationContext = null;
+  
   try {
     await cleanWorkspace();
     
@@ -508,11 +511,28 @@ async function runTest(prompt, index) {
     const validationResults = await validateOutputArtifacts(outputDir, outputContents);
     console.log(`Validation results: ${validationResults.verifiedArtifacts}/${validationResults.totalArtifacts} artifacts verified`);
     
-    // Include validation results in the evaluation context
-    evaluationContext.validation = validationResults;
+    // Create evaluationContext here for success case
+    evaluationContext = {
+      prompt,
+      executionTimeMs: testDuration,
+      // Increase log size limit significantly
+      logs: logs.join('\n').substring(0, 10000), 
+      outputFiles: Object.keys(outputContents),
+      // Include more content from each file and provide file sizes
+      outputSamples: Object.entries(outputContents)
+        .map(([file, content]) => {
+          const fullSize = content.length;
+          const sample = content.substring(0, 2000);
+          return `${file} (${fullSize} bytes): ${sample}${fullSize > 2000 ? '... (truncated)' : ''}`;
+        })
+        .join('\n\n'),
+      success: true,
+      error: null,
+      validation: validationResults
+    };
     
     // Evaluate the test result using AI
-    const aiEvaluation = await evaluateTestResult(prompt, { success: true }, logs, outputContents, testDuration);
+    const aiEvaluation = await evaluateTestResult(prompt, { success: true }, logs, outputContents, testDuration, evaluationContext);
     
     // Helper function to ensure arrays are stringified properly
     const safeStringify = (item) => {
@@ -613,8 +633,25 @@ async function runTest(prompt, index) {
       }
     }
     
+    // Create evaluationContext here for error case
+    evaluationContext = {
+      prompt,
+      executionTimeMs: Date.now() - testStart,
+      logs: logs.join('\n').substring(0, 10000),
+      outputFiles: Object.keys(outputContents),
+      outputSamples: Object.entries(outputContents)
+        .map(([file, content]) => {
+          const fullSize = content.length;
+          const sample = content.substring(0, 2000);
+          return `${file} (${fullSize} bytes): ${sample}${fullSize > 2000 ? '... (truncated)' : ''}`;
+        })
+        .join('\n\n'),
+      success: false,
+      error: error.message
+    };
+    
     // Evaluate the failed test result using AI
-    const aiEvaluation = await evaluateTestResult(prompt, { success: false, error: error.message }, logs, outputContents, Date.now() - testStart);
+    const aiEvaluation = await evaluateTestResult(prompt, { success: false, error: error.message }, logs, outputContents, Date.now() - testStart, evaluationContext);
     
     // Helper function to ensure arrays are stringified properly
     const safeStringify = (item) => {

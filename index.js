@@ -173,18 +173,6 @@ async function centralOrchestrator(question, userId = 'default'){
     await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
     
-    // Create a user-specific output directory
-    const outputDir = path.join(__dirname, 'output');
-    const userOutputDir = path.join(outputDir, userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
-    
-    // Ensure main output dir exists
-    if(!fs.existsSync(outputDir)){
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
-    
-    // Create fresh user directory
-    fs.mkdirSync(userOutputDir, { recursive: true });
-    
     console.log("[X] Cleaning workspace");
     io.emit('status_update', { userId, status: 'Improving prompt' });
     console.log("[ ] Improving prompt")
@@ -567,30 +555,33 @@ async function centralOrchestrator(question, userId = 'default'){
           break;
         
         default:
-          console.log(`Unknown action: ${enhancedStep.action}`);
+          console.warn(`[!] Unknown action type: ${enhancedStep.action}`);
+          summary = { error: `Unknown action type: ${enhancedStep.action}`, success: false };
           break;
       }
       
-      // Add to stepsOutput after execution using context manager
-      contextManager.addStepOutput(enhancedStep.step, enhancedStep.action, summary, userId);
+      // Store the output of the step
+      contextManager.addStepOutput({
+        step: enhancedStep.step,
+        action: enhancedStep.action,
+        output: summary // Store the actual result
+      }, userId);
       
-      // ReAct: Reflect on result after execution
-      console.log(`[ ] Reflecting on result of step ${currentStepIndex + 1}`);
-      io.emit('status_update', { userId, status: `Reflecting on result of step ${currentStepIndex + 1}` });
+      // ReAct: Reflect on the result after execution
+      console.log(`[ ] Reflecting on result for step: ${enhancedStep.step}`);
+      io.emit('status_update', { userId, status: `Reflecting on: ${enhancedStep.step}` });
       const reflection = await react.reflectOnResult(enhancedStep, summary, userId);
       console.log(`[X] Reflection complete`);
       
-      // Increment step index in context
-      contextManager.incrementStepIndex(userId);
+      // Check progress and potentially update plan
+      const currentPlan = contextManager.getPlan(userId);
       
       // Check if reflection suggests a plan change
       if (reflection && reflection.changePlan === true) {
         console.log(`[ ] Reflection suggests changing plan: ${reflection.explanation}`);
         try {
-          const updatedPlan = await checkProgress(question, plan, contextManager.getStepsOutput(userId), contextManager.getCurrentStepIndex(userId), userId);
-          
-          // If the plan was updated, update it in context
-          if (updatedPlan !== plan) {
+          const updatedPlan = await checkProgress(question, currentPlan, contextManager.getStepsOutput(userId), contextManager.getCurrentStepIndex(userId), userId);
+          if (updatedPlan !== currentPlan) {
             console.log("Plan was updated based on reflection");
             contextManager.updatePlan(updatedPlan, userId);
             io.emit('steps', { userId, plan: updatedPlan });
@@ -600,6 +591,9 @@ async function centralOrchestrator(question, userId = 'default'){
           // Continue with original plan on error
         }
       }
+      
+      // Increment step index in context
+      contextManager.incrementStepIndex(userId);
       
       // Save the thought chain periodically
       if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {

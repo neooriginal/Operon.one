@@ -174,8 +174,11 @@ class DockerManager {
 
     async executeCommand(containerName, command) {
         return await this._retry(async () => {
-            // Command doesn't need path escaping
-            const { stdout, stderr } = await execAsync(`${dockerCMD} exec ${containerName} ${command}`);
+            // Escape single quotes and backslashes in the command for 'sh -c'
+            const escapedCommand = command.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "'\\\\''");
+            const fullCommand = `${dockerCMD} exec ${containerName} sh -c '${escapedCommand}'`;
+            console.log(`Executing Docker command: ${fullCommand}`); // Log the command for debugging
+            const { stdout, stderr } = await execAsync(fullCommand);
             return { stdout, stderr };
         });
     }
