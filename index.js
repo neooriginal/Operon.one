@@ -11,6 +11,7 @@ const ascii = require('./utils/ascii');
 const fs = require('fs');
 const writer = require('./tools/writer/main');
 const react = require('./tools/react/main');
+const memory = require('./tools/memory/main');
 const contextManager = require('./utils/context');
 const path = require('path');
 // Import socket.io
@@ -539,6 +540,25 @@ async function centralOrchestrator(question, userId = 'default'){
               ).length
             }
           });
+          break;
+        
+        case "memory":
+          summary = await memory.runTask(enhancedStep.step, inputData, (summary) => {
+            console.log(`[X] ${enhancedStep.step}`);
+            io.emit('step_completed', { 
+              userId, 
+              step: enhancedStep.step, 
+              action: enhancedStep.action,
+              metrics: {
+                stepIndex: currentStepIndex,
+                stepCount: currentStepIndex + 1,
+                totalSteps: plan.length,
+                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  step && step.output && !step.output.error && step.output.success !== false
+                ).length
+              }
+            });
+          }, userId);
           break;
         
         default:
