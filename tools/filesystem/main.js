@@ -4,6 +4,9 @@ const path = require('path');
 const ai = require('../AI/ai');
 const contextManager = require('../../utils/context');
 
+// Map to store files created inside containers reported by other tools (bash/python)
+const containerFilesTracked = new Map(); // userId -> Set<containerPath>
+
 // Container management with better error handling
 async function getContainer(userId = 'default', retries = 3) {
     let lastError;
@@ -25,6 +28,20 @@ async function getContainer(userId = 'default', retries = 3) {
     }
     
     throw new Error(`Failed to get container after ${retries} attempts: ${lastError?.message || 'Unknown error'}`);
+}
+
+// NEW Function to Track Container Files reported by other tools
+async function trackContainerFile(userId, containerPath) {
+    if (!userId || !containerPath) return; // Basic validation
+
+    if (!containerFilesTracked.has(userId)) {
+        containerFilesTracked.set(userId, new Set());
+    }
+    const userSet = containerFilesTracked.get(userId);
+    if (!userSet.has(containerPath)) { // Avoid duplicates
+         userSet.add(containerPath);
+         console.log(`[FileSystem] Tracked externally created container file for ${userId}: ${containerPath}`);
+    }
 }
 
 // Modified helper functions to accept containerName and use absolute paths
@@ -490,11 +507,20 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     }
 }
 
-// New function to get the list of written files
 async function getWrittenFiles(userId = 'default') {
+    // 1. Get host files (written directly *by this tool* within the container)
     const toolState = contextManager.getToolState('fileSystem', userId);
-    // Return a unique list of written files, ensure it's an array
-    return toolState ? [...new Set(toolState.writtenFiles || [])] : [];
+    const hostFiles = Array.from(toolState?.writtenFiles || []); // Use existing tracking
+
+    // 2. Get container files (reported by bash/python)
+    const containerFilesSet = containerFilesTracked.get(userId) || new Set();
+    const containerFiles = Array.from(containerFilesSet);
+
+    // 3. Return the combined structure
+    return {
+        hostFiles: hostFiles, // Renaming for clarity, these are container paths written by fileSystem tool
+        containerFiles: containerFiles // These are container paths reported by other tools
+    };
 }
 
 module.exports = {
@@ -509,6 +535,7 @@ module.exports = {
     runStep, // Keep if needed externally, but runTask is the main entry point
     writeFileDirectly, // Keep this exported function
     runTask,
-    getWrittenFiles // Export the new function
+    getWrittenFiles, // Export the new function
+    trackContainerFile // Ensure this is exported
 };
 

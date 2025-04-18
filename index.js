@@ -9,7 +9,6 @@ const imageGeneration = require('./tools/imageGeneration/main');
 const math = require('./tools/math/main');
 const ascii = require('./utils/ascii');
 const fs = require('fs');
-const { improvePrompt } = require('./tools/prompting/promptImprover');
 const writer = require('./tools/writer/main');
 const react = require('./tools/react/main');
 const contextManager = require('./utils/context');
@@ -174,9 +173,6 @@ async function centralOrchestrator(question, userId = 'default'){
     
     console.log("[X] Cleaning workspace");
     io.emit('status_update', { userId, status: 'Improving prompt' });
-    console.log("[ ] Improving prompt")
-    question = await improvePrompt(question);
-    console.log("[X] Improving prompt");
 
     // Store question in context
     contextManager.setQuestion(question, userId);
