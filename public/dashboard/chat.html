@@ -18,7 +18,7 @@
         <nav class="sidebar">
             <div class="sidebar-header">
                 <div class="logo-text">Operon<span class="accent">.one</span></div>
-                <button id="new-task-button"><i class="fas fa-plus"></i> New Task</button>
+                <button id="new-task-button" onclick="window.location.href='/dashboard'"><i class="fas fa-plus"></i> New Task</button>
             </div>
             <!-- Placeholder for dynamically loaded recent chats -->
             <div class="recent-chats-container" id="recent-chats-list">
@@ -58,9 +58,6 @@
             </div>
             <div class="chat-messages" id="chat-messages">
                 <!-- Chat messages will be appended here -->
-                <div class="message ai">
-                   Hello! I'm your <span class="gradient-text">Operon.one</span> assistant. How can I help you today?
-                </div>
             </div>
             <div class="chat-input">
                 <input type="text" id="message-input" placeholder="Enter your task or question...">

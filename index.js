@@ -161,36 +161,36 @@ For simple questions or chit-chat, return:
 
 `
 
-async function centralOrchestrator(question, userId = 'default'){
+async function centralOrchestrator(question, userId = 'default', chatId = 1){
   try {
-    // Initialize context for this user
-    contextManager.resetContext(userId);
+    // Initialize context for this user and chat
+    contextManager.resetContext(userId, chatId);
     
     // Emit task received event
-    io.emit('task_received', { userId, task: question });
+    io.emit('task_received', { userId, chatId, task: question });
     
     await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
     
     console.log("[X] Cleaning workspace");
-    io.emit('status_update', { userId, status: 'Improving prompt' });
+    io.emit('status_update', { userId, chatId, status: 'Improving prompt' });
 
     // Store question in context
-    contextManager.setQuestion(question, userId);
+    contextManager.setQuestion(question, userId, chatId);
 
     let prompt = `
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
     ${globalPrompt}
     `
     console.log("[ ] Planning...");
-    io.emit('status_update', { userId, status: 'Planning task execution' });
+    io.emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
-    let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId);
+    let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId, chatId);
     
     // Check if this is a direct answer request
     if (planObject.directAnswer === true && planObject.answer) {
       console.log("[X] Direct answer provided");
-      io.emit('status_update', { userId, status: 'Direct answer provided' });
+      io.emit('status_update', { userId, chatId, status: 'Direct answer provided' });
       
       // Store the response in context
       contextManager.addToHistory({
@@ -198,18 +198,19 @@ async function centralOrchestrator(question, userId = 'default'){
         content: [
             {type: "text", text: question}
         ]
-      }, userId);
+      }, userId, chatId);
       
       contextManager.addToHistory({
         role: "assistant", 
         content: [
             {type: "text", text: planObject.answer}
         ]
-      }, userId);
+      }, userId, chatId);
       
       // Emit task completion event
       io.emit('task_completed', { 
         userId, 
+        chatId,
         result: planObject.answer,
         duration: 0,
         completedAt: new Date().toISOString(),
@@ -233,7 +234,7 @@ async function centralOrchestrator(question, userId = 'default'){
     const plan = Object.values(planObject).filter(item => item && typeof item === 'object');
     
     // Store plan in context
-    contextManager.setPlan(plan, userId);
+    contextManager.setPlan(plan, userId, chatId);
     
     // Add to history
     contextManager.addToHistory({
@@ -241,17 +242,17 @@ async function centralOrchestrator(question, userId = 'default'){
       content: [
           {type: "text", text: question}
       ]
-    }, userId);
+    }, userId, chatId);
     
     contextManager.addToHistory({
       role: "assistant", 
       content: [
           {type: "text", text: JSON.stringify(planObject)}
       ]
-    }, userId);
+    }, userId, chatId);
     
     console.log("[X] Planning...");
-    io.emit('steps', { userId, plan });
+    io.emit('steps', { userId, chatId, plan });
    
     // Start screenshot interval if browser is used in the plan
     let screenshotInterval = null;
@@ -260,7 +261,7 @@ async function centralOrchestrator(question, userId = 'default'){
         try {
           const screenshot = await browser.takeScreenshot(userId);
           if (screenshot) {
-            io.emit('browser_screenshot', { userId, screenshot });
+            io.emit('browser_screenshot', { userId, chatId, screenshot });
           }
         } catch (error) {
           console.error("Error taking screenshot:", error.message);
@@ -269,21 +270,21 @@ async function centralOrchestrator(question, userId = 'default'){
     }
     
     // Continue executing steps until we've completed all steps in the plan
-    while (contextManager.getCurrentStepIndex(userId) < plan.length) {
-      const currentStepIndex = contextManager.getCurrentStepIndex(userId);
+    while (contextManager.getCurrentStepIndex(userId, chatId) < plan.length) {
+      const currentStepIndex = contextManager.getCurrentStepIndex(userId, chatId);
       const step = plan[currentStepIndex];
       
       // ReAct: Process step with reasoning before execution
       console.log(`[ ] Reasoning about step: ${step.step} using ${step.action}`);
-      io.emit('status_update', { userId, status: `Reasoning about: ${step.step}` });
-      const enhancedStep = await react.processStep(step, userId);
+      io.emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
+      const enhancedStep = await react.processStep(step, userId, chatId);
       console.log(`[X] Reasoning complete`);
       
       console.log(`[ ] (${enhancedStep.action}) ${enhancedStep.step} `);
-      io.emit('status_update', { userId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
+      io.emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
       
       // Get filtered steps output from context
-      const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId);
+      const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId, chatId);
       
       const inputData = enhancedStep.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
       
@@ -297,19 +298,21 @@ async function centralOrchestrator(question, userId = 'default'){
               console.log(`[X] ${enhancedStep.step}`);
               io.emit('step_completed', { 
                 userId, 
+                chatId,
                 step: enhancedStep.step, 
                 action: enhancedStep.action,
                 metrics: {
                   stepIndex: currentStepIndex,
                   stepCount: currentStepIndex + 1,
                   totalSteps: plan.length,
-                  successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                     step && step.output && !step.output.error && step.output.success !== false
                   ).length
                 }
               });
             },
-            userId
+            userId,
+            chatId
           );
           break;
 
@@ -321,13 +324,14 @@ async function centralOrchestrator(question, userId = 'default'){
               console.log(`[X] ${enhancedStep.step}`);
               io.emit('step_completed', { 
                 userId, 
+                chatId,
                 step: enhancedStep.step, 
                 action: enhancedStep.action,
                 metrics: {
                   stepIndex: currentStepIndex,
                   stepCount: currentStepIndex + 1,
                   totalSteps: plan.length,
-                  successCount: contextManager.getStepsOutput(userId).filter(step => 
+                  successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                     step && step.output && !step.output.error && step.output.success !== false
                   ).length
                 }
@@ -336,27 +340,30 @@ async function centralOrchestrator(question, userId = 'default'){
               if (summary && summary.filePath) {
                 io.emit('file_updated', { 
                   userId, 
+                  chatId,
                   filePath: summary.filePath, 
                   content: summary.content || 'File created/updated'
                 });
               }
             },
-            userId
+            userId,
+            chatId
           );
           break;
 
         case "chatCompletion":
-          summary = await ai.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId);
+          summary = await ai.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId, chatId);
           console.log(`[X] ${enhancedStep.step}`);
           io.emit('step_completed', { 
             userId, 
+            chatId,
             step: enhancedStep.step, 
             action: enhancedStep.action,
             metrics: {
               stepIndex: currentStepIndex,
               stepCount: currentStepIndex + 1,
               totalSteps: plan.length,
-              successCount: contextManager.getStepsOutput(userId).filter(step => 
+              successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                 step && step.output && !step.output.error && step.output.success !== false
               ).length
             }
@@ -366,7 +373,7 @@ async function centralOrchestrator(question, userId = 'default'){
             content: [
               {type: "text", text: JSON.stringify(summary)}
             ]
-          }, userId);
+          }, userId, chatId);
           break;
 
         case "deepResearch":
@@ -376,18 +383,19 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId, intensity);
+          }, userId, chatId, intensity);
           break;
 
         case "webSearch":
@@ -395,18 +403,19 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId);
+          }, userId, chatId);
           break;
 
         case "execute":
@@ -414,24 +423,25 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId);
+          }, userId, chatId);
           // --- Start Modification: Track created container files ---
           if (summary && Array.isArray(summary.createdContainerFiles)) {
             for (const containerPath of summary.createdContainerFiles) {
               try {
                 // Assuming fileSystem.trackContainerFile exists - we'll add it later
-                await fileSystem.trackContainerFile(userId, containerPath);
+                await fileSystem.trackContainerFile(userId, containerPath, chatId);
               } catch (trackingError) {
                 console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
               }
@@ -445,24 +455,25 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId);
+          }, userId, chatId);
           // --- Start Modification: Track created container files ---
           if (summary && Array.isArray(summary.createdContainerFiles)) {
             for (const containerPath of summary.createdContainerFiles) {
               try {
                 // Assuming fileSystem.trackContainerFile exists - we'll add it later
-                await fileSystem.trackContainerFile(userId, containerPath);
+                await fileSystem.trackContainerFile(userId, containerPath, chatId);
               } catch (trackingError) {
                 console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
               }
@@ -476,18 +487,19 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId);
+          }, userId, chatId);
           break;
 
         case "math":
@@ -495,25 +507,27 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId);
+          }, userId, chatId);
           break;
 
         case "writer":
           summary = await writer.write(
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData,
-            userId
+            userId,
+            chatId
           );
           
           // Validate writer output and handle errors
@@ -529,13 +543,14 @@ async function centralOrchestrator(question, userId = 'default'){
           console.log(`[X] ${enhancedStep.step}`);
           io.emit('step_completed', { 
             userId, 
+            chatId,
             step: enhancedStep.step, 
             action: enhancedStep.action,
             metrics: {
               stepIndex: currentStepIndex,
               stepCount: currentStepIndex + 1,
               totalSteps: plan.length,
-              successCount: contextManager.getStepsOutput(userId).filter(step => 
+              successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                 step && step.output && !step.output.error && step.output.success !== false
               ).length
             }
@@ -547,18 +562,19 @@ async function centralOrchestrator(question, userId = 'default'){
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
+              chatId,
               step: enhancedStep.step, 
               action: enhancedStep.action,
               metrics: {
                 stepIndex: currentStepIndex,
                 stepCount: currentStepIndex + 1,
                 totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId).filter(step => 
+                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
                   step && step.output && !step.output.error && step.output.success !== false
                 ).length
               }
             });
-          }, userId);
+          }, userId, chatId);
           break;
         
         default:
@@ -572,26 +588,26 @@ async function centralOrchestrator(question, userId = 'default'){
         step: enhancedStep.step,
         action: enhancedStep.action,
         output: summary // Store the actual result
-      }, userId);
+      }, userId, chatId);
       
       // ReAct: Reflect on the result after execution
       console.log(`[ ] Reflecting on result for step: ${enhancedStep.step}`);
-      io.emit('status_update', { userId, status: `Reflecting on: ${enhancedStep.step}` });
-      const reflection = await react.reflectOnResult(enhancedStep, summary, userId);
+      io.emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
+      const reflection = await react.reflectOnResult(enhancedStep, summary, userId, chatId);
       console.log(`[X] Reflection complete`);
       
       // Check progress and potentially update plan
-      const currentPlan = contextManager.getPlan(userId);
+      const currentPlan = contextManager.getPlan(userId, chatId);
       
       // Check if reflection suggests a plan change
       if (reflection && reflection.changePlan === true) {
         console.log(`[ ] Reflection suggests changing plan: ${reflection.explanation}`);
         try {
-          const updatedPlan = await checkProgress(question, currentPlan, contextManager.getStepsOutput(userId), contextManager.getCurrentStepIndex(userId), userId);
+          const updatedPlan = await checkProgress(question, currentPlan, contextManager.getStepsOutput(userId, chatId), contextManager.getCurrentStepIndex(userId, chatId), userId, chatId);
           if (updatedPlan !== currentPlan) {
             console.log("Plan was updated based on reflection");
-            contextManager.updatePlan(updatedPlan, userId);
-            io.emit('steps', { userId, plan: updatedPlan });
+            contextManager.updatePlan(updatedPlan, userId, chatId);
+            io.emit('steps', { userId, chatId, plan: updatedPlan });
           }
         } catch (error) {
           console.error("Error updating plan based on reflection:", error.message);
@@ -600,11 +616,11 @@ async function centralOrchestrator(question, userId = 'default'){
       }
       
       // Increment step index in context
-      contextManager.incrementStepIndex(userId);
+      contextManager.incrementStepIndex(userId, chatId);
       
       // Save the thought chain periodically
       if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {
-        await react.saveThoughtChain(fileSystem, userId);
+        await react.saveThoughtChain(fileSystem, userId, chatId);
       }
     }
     
@@ -616,22 +632,22 @@ async function centralOrchestrator(question, userId = 'default'){
     // After the loop completes, finalize the task
     let finalOutput;
     try {
-      finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId), userId);
+      finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId, chatId), userId, chatId);
       console.log(JSON.stringify({
         status: "completed",
-        stepCount: contextManager.getStepsOutput(userId).length,
-        successCount: contextManager.getStepsOutput(userId).filter(step => 
+        stepCount: contextManager.getStepsOutput(userId, chatId).length,
+        successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
           step && step.output && !step.output.error && step.output.success !== false
         ).length
       }, null, 2));
     
       
       // Get task duration using the context manager
-      const duration = contextManager.getTaskDuration(userId);
+      const duration = contextManager.getTaskDuration(userId, chatId);
       
       // Get output files from the file system tool's tracked list
       // --- Start Modification: Handle new getWrittenFiles format ---
-      const trackedFiles = await fileSystem.getWrittenFiles(userId);
+      const trackedFiles = await fileSystem.getWrittenFiles(userId, chatId);
       // Assuming getWrittenFiles now returns { hostFiles: [...], containerFiles: [...] }
       const hostFiles = trackedFiles.hostFiles || [];
       const containerFiles = trackedFiles.containerFiles || [];
@@ -642,6 +658,7 @@ async function centralOrchestrator(question, userId = 'default'){
       // Emit task completion event with enhanced data
       io.emit('task_completed', { 
         userId, 
+        chatId,
         result: finalOutput,
         duration: duration,
         completedAt: new Date().toISOString(),
@@ -650,20 +667,20 @@ async function centralOrchestrator(question, userId = 'default'){
           container: containerFiles
         },
         metrics: {
-          stepCount: contextManager.getStepsOutput(userId).length,
-          successCount: contextManager.getStepsOutput(userId).filter(step => 
+          stepCount: contextManager.getStepsOutput(userId, chatId).length,
+          successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
             step && step.output && !step.output.error && step.output.success !== false
           ).length,
           totalSteps: plan.length,
           durationSeconds: Math.round(duration / 1000),
-          averageStepTime: Math.round(duration / contextManager.getStepsOutput(userId).length / 1000)
+          averageStepTime: Math.round(duration / contextManager.getStepsOutput(userId, chatId).length / 1000)
         }
       });
       
     } catch (error) {
       console.error("Error finalizing task:", error.message);
       finalOutput = "Task completed but could not be finalized: " + error.message;
-      io.emit('task_error', { userId, error: error.message });
+      io.emit('task_error', { userId, chatId, error: error.message });
     }
     
     // Cleanup resources for this user
@@ -674,7 +691,7 @@ async function centralOrchestrator(question, userId = 'default'){
     console.error("Critical error in orchestration:", error.message);
     
     // Emit error event
-    io.emit('task_error', { userId, error: error.message });
+    io.emit('task_error', { userId, chatId, error: error.message });
     
     // Ensure cleanup even on error
     try {
@@ -707,7 +724,7 @@ async function withTimeout(promise, timeoutMs = 60000) {
   }
 }
 
-async function checkProgress(question, plan, stepsOutput, currentStepIndex, userId = 'default') {
+async function checkProgress(question, plan, stepsOutput, currentStepIndex, userId = 'default', chatId = 1) {
   try {
     // Skip progress checks if we're too early in the process
     if (currentStepIndex < 2 || plan.length <= 2) {
@@ -747,7 +764,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     `;
     
     const response = await withTimeout(
-      ai.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true, "auto", userId),
+      ai.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true, "auto", userId, chatId),
       30000 // 30-second timeout
     );
     
@@ -773,7 +790,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
   }
 }
 
-async function finalizeTask(question, stepsOutput, userId = 'default') {
+async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 1) {
   try {
     console.log("[ ] Finalizing task");
     
@@ -798,7 +815,7 @@ async function finalizeTask(question, stepsOutput, userId = 'default') {
     `;
     
     const response = await withTimeout(
-      ai.callAI(prompt, "Generate final response", [], undefined, false, "auto", userId),
+      ai.callAI(prompt, "Generate final response", [], undefined, false, "auto", userId, chatId),
       60000 // 60-second timeout
     );
     
@@ -842,11 +859,11 @@ if (require.main === module) {
     console.log('Client connected');
     
     socket.on('submit_task', async (data) => {
-      const { task, userId = `socket_${Date.now()}` } = data;
-      console.log(`Received task from socket for user ${userId}: ${task}`);
+      const { task, userId = `socket_${Date.now()}`, chatId = 1 } = data;
+      console.log(`Received task from socket for user ${userId} in chat ${chatId}: ${task}`);
       
       // Execute the task
-      centralOrchestrator(task, userId);
+      centralOrchestrator(task, userId, chatId);
     });
     
     socket.on('disconnect', () => {

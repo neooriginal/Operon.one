@@ -6,6 +6,7 @@ const fs = require('fs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { router: authRoutes, authenticateToken } = require('./authRoutes');
+const { chatFunctions } = require('./database');
 
 // Serve static files from the public directory
 const app = express();
@@ -55,6 +56,10 @@ io.use((socket, next) => {
 
 // Serve public routes
 app.get("/dashboard", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
+});
+
+app.get("/chat", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
 });
 
@@ -90,6 +95,62 @@ app.get("/legal/cookies", (req, res) => {
 app.get('/api/user/profile', authenticateToken, (req, res) => {
     // Access user info from the token (added by authenticateToken middleware)
     res.json({ user: req.user });
+});
+
+// Chat API routes
+app.get('/api/chats', authenticateToken, async (req, res) => {
+    try {
+        const chats = await chatFunctions.getUserChats(req.user.id);
+        res.json({ chats });
+    } catch (error) {
+        console.error('Error getting chats:', error);
+        res.status(500).json({ error: 'Failed to retrieve chats' });
+    }
+});
+
+app.post('/api/chats', authenticateToken, async (req, res) => {
+    try {
+        const { title } = req.body;
+        const chat = await chatFunctions.createChat(req.user.id, title);
+        res.status(201).json({ chat });
+    } catch (error) {
+        console.error('Error creating chat:', error);
+        res.status(500).json({ error: 'Failed to create chat' });
+    }
+});
+
+app.get('/api/chats/:chatId', authenticateToken, async (req, res) => {
+    try {
+        const chatId = req.params.chatId;
+        const messages = await chatFunctions.getChatHistory(req.user.id, chatId);
+        res.json({ messages });
+    } catch (error) {
+        console.error('Error getting chat history:', error);
+        res.status(500).json({ error: 'Failed to retrieve chat history' });
+    }
+});
+
+app.put('/api/chats/:chatId', authenticateToken, async (req, res) => {
+    try {
+        const chatId = req.params.chatId;
+        const { title } = req.body;
+        await chatFunctions.updateChatTitle(req.user.id, chatId, title);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating chat:', error);
+        res.status(500).json({ error: 'Failed to update chat' });
+    }
+});
+
+app.delete('/api/chats/:chatId', authenticateToken, async (req, res) => {
+    try {
+        const chatId = req.params.chatId;
+        await chatFunctions.deleteChat(req.user.id, chatId);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting chat:', error);
+        res.status(500).json({ error: 'Failed to delete chat' });
+    }
 });
 
 // Download-Route
@@ -148,13 +209,16 @@ io.on('connection', (socketClient) => {
      const userId = socketClient.authenticated ? socketClient.userId : socketClient.id;
      
      socketClient.on('submit_task', async (data) => {
-         const { task } = data;
+         const { task, chatId = 1 } = data; // Default to chat ID 1 if not specified
          // Use the userId from the message if authenticated, otherwise use socket ID
          const taskUserId = socketClient.authenticated ? (data.userId || userId) : socketClient.id;
          
-         console.log(`Task received from ${taskUserId}: ${task}`);
+         console.log(`Task received from ${taskUserId} in chat ${chatId}: ${task}`);
+         // Store current chatId for this user in the socket
+         socketClient.chatId = chatId;
+         
          // Rufe den Orchestrator auf (angenommen, er ist hier verfügbar)
-         // await centralOrchestrator(task, taskUserId);
+         // await centralOrchestrator(task, taskUserId, chatId);
          // Stelle sicher, dass centralOrchestrator ioServer verwendet, um Events zu senden
      });
 

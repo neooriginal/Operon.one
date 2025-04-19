@@ -4,6 +4,7 @@ const smartModelSelector = require('./smartModelSelector');
 const tokenCalculation = require('./tokenCalculation');
 const contextManager = require('../../utils/context');
 const { getPersonalityPrompt } = require('../personalityEngine/getPersonalityPrompt');
+const io = require('../../socket');
 dotenv.config();
 
 const openai = new OpenAI({
@@ -47,12 +48,14 @@ async function generateImage(prompt, userId = 'default'){
     return imageUrl;
 }
 
-async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, model="auto", userId = 'default'){
+async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, model="auto", userId = 'default', chatId = 1){
     // Initialize or get tool state
-    let toolState = contextManager.getToolState('ai', userId) || {
+    const toolState = contextManager.getToolState('ai', userId, chatId) || { 
         history: [],
         prompts: [],
-        responses: []
+        responses: [],
+        lastRequest: null,
+        lastResponse: null
     };
     
     // Add prompt to tool state
@@ -62,7 +65,7 @@ async function callAI(systemMessage, prompt, messages, image=undefined, jsonResp
         timestamp: Date.now(),
         model
     });
-    contextManager.setToolState('ai', toolState, userId);
+    contextManager.setToolState('ai', toolState, userId, chatId);
     
     let modelpicker = await smartModelSelector.getModel(prompt, model);
     model = modelpicker.model
@@ -132,7 +135,7 @@ Consider the entire context and all requirements before generating a response.
         model,
         jsonResponse
     };
-    contextManager.setToolState('ai', toolState, userId);
+    contextManager.setToolState('ai', toolState, userId, chatId);
     
     try {
         // Add retry logic for more reliability
@@ -169,7 +172,7 @@ Consider the entire context and all requirements before generating a response.
             
             // Store error in tool state
             toolState.lastError = "No response from AI";
-            contextManager.setToolState('ai', toolState, userId);
+            contextManager.setToolState('ai', toolState, userId, chatId);
             
             return {
                 error: true,
@@ -197,7 +200,7 @@ Consider the entire context and all requirements before generating a response.
         }
         
         // Save updated tool state
-        contextManager.setToolState('ai', toolState, userId);
+        contextManager.setToolState('ai', toolState, userId, chatId);
 
         if(jsonResponse){
             const result = parseJSON(responseContent);
@@ -208,12 +211,63 @@ Consider the entire context and all requirements before generating a response.
                 if (!validationResult.valid) {
                     console.warn("Response validation failed:", validationResult.message);
                     toolState.lastValidationError = validationResult;
-                    contextManager.setToolState('ai', toolState, userId);
+                    contextManager.setToolState('ai', toolState, userId, chatId);
                 }
             }
             
             // Use proper JSON stringification for logging
             console.log(JSON.stringify(result, null, 2));
+            
+            // If this is a direct response to a user question, emit an event for the frontend
+            if (io && systemMessage.includes("You are an AI agent") && jsonResponse) {
+                try {
+                    // Prepare the text for the UI
+                    let textForUI;
+                    if (jsonResponse) {
+                        if (typeof result === 'object' && result !== null) {
+                            // Check if the object has a direct text field
+                            if (result.text) {
+                                textForUI = result.text;
+                            } else if (result.answer) {
+                                textForUI = result.answer;
+                            } else if (result.result) {
+                                textForUI = result.result;
+                            } else if (result.message) {
+                                textForUI = result.message;
+                            } else if (result.response) {
+                                textForUI = result.response;
+                            } else if (result.content) {
+                                textForUI = result.content;
+                            } else {
+                                // Fallback to JSON string
+                                textForUI = JSON.stringify(result, null, 2);
+                            }
+                        } else {
+                            textForUI = result || responseContent;
+                        }
+                    } else {
+                        textForUI = responseContent;
+                    }
+                    
+                    // Make sure text is a string
+                    if (typeof textForUI !== 'string') {
+                        textForUI = String(textForUI);
+                    }
+                    
+                    // Send the response to the client
+                    io.emit('ai_message', { 
+                        userId, 
+                        chatId,
+                        text: textForUI
+                    });
+                } catch (error) {
+                    console.error("Error sending AI message via Socket.IO:", error);
+                }
+            }
+            
+            // Store response in tool state
+            toolState.lastResponse = result;
+            contextManager.setToolState('ai', toolState, userId, chatId);
             
             return result;
         } else {
@@ -224,7 +278,7 @@ Consider the entire context and all requirements before generating a response.
         
         // Store error in tool state
         toolState.lastError = error.message;
-        contextManager.setToolState('ai', toolState, userId);
+        contextManager.setToolState('ai', toolState, userId, chatId);
         
         // Return a structured error message
         if (jsonResponse) {

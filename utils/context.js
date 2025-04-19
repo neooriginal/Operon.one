@@ -15,10 +15,12 @@ class Context {
   /**
    * Initialize a new context for a user
    * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier (default: 1)
    */
-  initializeContext(userId) {
-    if (!this.contexts.has(userId)) {
-      this.contexts.set(userId, {
+  initializeContext(userId, chatId = 1) {
+    const contextKey = `${userId}_${chatId}`;
+    if (!this.contexts.has(contextKey)) {
+      this.contexts.set(contextKey, {
         history: [],
         stepsOutput: [],
         plan: [],
@@ -27,26 +29,29 @@ class Context {
         question: '',
         toolStates: new Map(),
         variables: new Map(),
-        startTime: Date.now()
+        startTime: Date.now(),
+        chatId: chatId
       });
       
       // Load chat history from database (asynchronously)
-      this.loadHistoryFromDb(userId).catch(err => {
+      this.loadHistoryFromDb(userId, chatId).catch(err => {
         console.error('Error loading history from database:', err.message);
       });
     }
-    return this.getContext(userId);
+    return this.getContext(userId, chatId);
   }
 
   /**
-   * Get context for a specific user
-   * @param {string} userId - User identifier 
+   * Get context for user or initialize if doesn't exist
+   * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier (default: 1)
    */
-  getContext(userId = 'default') {
-    if (!this.contexts.has(userId)) {
-      return this.initializeContext(userId);
+  getContext(userId, chatId = 1) {
+    const contextKey = `${userId}_${chatId}`;
+    if (!this.contexts.has(contextKey)) {
+      return this.initializeContext(userId, chatId);
     }
-    return this.contexts.get(userId);
+    return this.contexts.get(contextKey);
   }
 
   /**
@@ -70,13 +75,14 @@ class Context {
   /**
    * Load chat history from database
    * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier (default: 1)
    */
-  async loadHistoryFromDb(userId = 'default') {
+  async loadHistoryFromDb(userId = 'default', chatId = 1) {
     try {
       if (!userId || userId === 'default') return; // Skip for anonymous/default users
       
-      const messages = await chatFunctions.getChatHistory(userId);
-      const context = this.getContext(userId);
+      const messages = await chatFunctions.getChatHistory(userId, chatId);
+      const context = this.getContext(userId, chatId);
       
       // Transform DB format to context format
       context.history = messages.map(msg => ({
@@ -92,8 +98,8 @@ class Context {
   }
 
   // History management
-  async addToHistory(message, userId = 'default') {
-    const context = this.getContext(userId);
+  async addToHistory(message, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     context.history.push(message);
     
     // Persist to database if it's a valid user
@@ -102,7 +108,8 @@ class Context {
         await chatFunctions.addChatMessage(
           userId,
           message.role,
-          message.content
+          message.content,
+          chatId
         );
       } catch (error) {
         console.error('Error saving message to database:', error.message);
@@ -116,13 +123,13 @@ class Context {
     return this.getContext(userId).history;
   }
 
-  async clearHistory(userId = 'default') {
-    this.getContext(userId).history = [];
+  async clearHistory(userId = 'default', chatId = 1) {
+    this.getContext(userId, chatId).history = [];
     
     // Clear history in database if it's a valid user
     if (userId && userId !== 'default') {
       try {
-        await chatFunctions.clearChatHistory(userId);
+        await chatFunctions.clearChatHistory(userId, chatId);
       } catch (error) {
         console.error('Error clearing history in database:', error.message);
       }

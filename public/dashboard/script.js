@@ -1,13 +1,20 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Get DOM elements with null checks
     const chatMessages = document.getElementById('chat-messages');
     const messageInput = document.getElementById('message-input');
     const sendButton = document.getElementById('send-button');
-    const statusDisplay = document.getElementById('status-display'); // Referenz zum Statusbereich
+    const statusDisplay = document.getElementById('status-display');
+    const recentChatsList = document.getElementById('recent-chats-list');
+    const newTaskButton = document.getElementById('new-task-button');
 
-    // Get user authentication information
-    const userId = localStorage.getItem('userId');
-    const userEmail = localStorage.getItem('userEmail');
-    const authToken = localStorage.getItem('authToken');
+    // Initialize important variables for socket connections and global state
+    const userId = localStorage.getItem('userId') || '';
+    const userEmail = localStorage.getItem('userEmail') || '';
+    const authToken = localStorage.getItem('authToken') || '';
+    let currentChatId = localStorage.getItem('currentChatId') || 'new';
+    
+    // Check if we have an initial query from the welcome page
+    const initialQuery = localStorage.getItem('initialQuery');
 
     // Redirect to login if not authenticated
     if (!userId || !authToken) {
@@ -15,10 +22,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // --- Socket.IO Verbindung herstellen ---
-    // Stelle sicher, dass die URL zu deinem Server passt (wo socket.js läuft)
+    // Set user info in sidebar
+    const userInfoElement = document.getElementById('user-info');
+    if (userInfoElement) {
+        userInfoElement.textContent = `User: ${userEmail || userId}`;
+    }
+
+    // --- Socket.IO Connection ---
+    // Make sure the URL matches your server (where socket.js runs)
     const socket = io('http://localhost:3000', {
-         transports: ['websocket'], // Bevorzuge WebSocket für bessere Performance
+         transports: ['websocket'], // Prefer WebSocket for better performance
          auth: {
              token: authToken,
              userId: userId
@@ -27,18 +40,340 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('connect', () => {
         console.log('Connected to Socket.IO Server! ID:', socket.id);
-        updateStatusDisplay('Ready', 'idle'); // Initial status
+        if (statusDisplay) {
+            updateStatusDisplay('Ready', 'idle'); // Initial status
+        }
+        // Only load chats if we're on the chat page
+        if (recentChatsList && chatMessages) {
+            loadUserChats(); // Load the chats when connected
+        }
     });
 
     socket.on('disconnect', () => {
         console.log('Disconnected from server');
-        updateStatusDisplay('Connection lost', 'error');
+        if (statusDisplay) {
+            updateStatusDisplay('Connection lost', 'error');
+        }
     });
 
     socket.on('connect_error', (err) => {
         console.error('Connection Error:', err.message);
-        updateStatusDisplay(`Connection Error`, 'error');
+        if (statusDisplay) {
+            updateStatusDisplay(`Connection Error`, 'error');
+        }
     });
+
+    // --- Recent Chats Management ---
+    async function loadUserChats() {
+        try {
+            const response = await fetch('/api/chats', {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to load chats');
+            }
+            
+            const data = await response.json();
+            
+            if (recentChatsList) {
+                renderChatList(data.chats);
+            }
+            
+            // Check if we need to create a new chat with initial query
+            if (initialQuery && (currentChatId === 'new' || !currentChatId) && chatMessages && messageInput) {
+                console.log('Starting new chat with initial query:', initialQuery);
+                chatMessages.innerHTML = '';
+                currentChatId = 'new';
+                localStorage.setItem('currentChatId', 'new');
+                
+                // Add the message to the input
+                messageInput.value = initialQuery;
+                // Clear it from localStorage to prevent reuse
+                localStorage.removeItem('initialQuery');
+                // Submit the message
+                setTimeout(() => {
+                    handleSendMessage();
+                }, 100);
+                return;
+            }
+            
+            // Load current chat history if we have a chat
+            if (data.chats.length > 0 && currentChatId !== 'new' && chatMessages) {
+                // Find the current chat in the list, or use the first one
+                let currentChat = data.chats.find(chat => chat.id == currentChatId);
+                
+                // If we don't have a current chat or it wasn't found
+                if (!currentChat) {
+                    // First look for an empty chat (chat with no messages or only system welcome)
+                    const emptyChat = data.chats.find(chat => !chat.messageCount || chat.messageCount <= 1);
+                    
+                    if (emptyChat) {
+                        // Use an existing empty chat instead of creating a new one
+                        currentChat = emptyChat;
+                    } else {
+                        // No empty chats, use the most recent one
+                        currentChat = data.chats[0];
+                    }
+                }
+                
+                currentChatId = currentChat.id;
+                localStorage.setItem('currentChatId', currentChatId);
+                
+                // Set this chat as active in the UI
+                if (recentChatsList) {
+                    setActiveChatInUI(currentChatId);
+                }
+                
+                // Load this chat's history
+                loadChatHistory(currentChatId);
+            } else if (chatMessages) {
+                // If no chats exist or we're starting a new chat, set up for a new chat
+                chatMessages.innerHTML = '';
+                currentChatId = 'new';
+                localStorage.setItem('currentChatId', 'new');
+                
+                // If we have an initial query from the welcome page, auto-submit it
+                if (initialQuery && messageInput) {
+                    messageInput.value = initialQuery;
+                    // Clear it from localStorage to prevent reuse
+                    localStorage.removeItem('initialQuery');
+                    // Small delay to ensure UI is ready
+                    setTimeout(() => {
+                        handleSendMessage();
+                    }, 100);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading chats:', error);
+            if (recentChatsList) {
+                recentChatsList.innerHTML = '<p style="padding: 15px; color: var(--gray);">Failed to load chats</p>';
+            }
+        }
+    }
+    
+    function renderChatList(chats) {
+        // Clear the list first
+        recentChatsList.innerHTML = '';
+        
+        if (chats.length === 0) {
+            recentChatsList.innerHTML = '<p style="padding: 15px; color: var(--gray);">No chats found</p>';
+            return;
+        }
+        
+        // Sort chats by updatedAt (most recent first)
+        chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        
+        // Render each chat
+        chats.forEach(chat => {
+            const chatItem = document.createElement('div');
+            chatItem.className = 'recent-chat-item';
+            chatItem.dataset.chatId = chat.id;
+            
+            // Format date
+            const chatDate = new Date(chat.updatedAt);
+            const today = new Date();
+            let timeDisplay;
+            
+            // Format date: Today, Yesterday, or date
+            if (chatDate.toDateString() === today.toDateString()) {
+                timeDisplay = 'Today';
+            } else if (chatDate.toDateString() === new Date(today - 86400000).toDateString()) {
+                timeDisplay = 'Yesterday';
+            } else {
+                timeDisplay = chatDate.toLocaleDateString();
+            }
+            
+            chatItem.innerHTML = `
+                <span class="chat-title">${chat.title}</span>
+                <span class="chat-timestamp">${timeDisplay}</span>
+            `;
+            
+            // Add click handler to load this chat
+            chatItem.addEventListener('click', () => {
+                currentChatId = chat.id;
+                localStorage.setItem('currentChatId', currentChatId);
+                setActiveChatInUI(currentChatId);
+                loadChatHistory(currentChatId);
+            });
+            
+            recentChatsList.appendChild(chatItem);
+        });
+        
+        // Set active chat
+        setActiveChatInUI(currentChatId);
+    }
+    
+    function setActiveChatInUI(chatId) {
+        // Remove active class from all chats
+        document.querySelectorAll('.recent-chat-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // Add active class to current chat
+        const activeChatItem = document.querySelector(`.recent-chat-item[data-chat-id="${chatId}"]`);
+        if (activeChatItem) {
+            activeChatItem.classList.add('active');
+        }
+    }
+    
+    async function loadChatHistory(chatId) {
+        // If chat messages container doesn't exist, exit early
+        if (!chatMessages) return;
+        
+        try {
+            // Clear current messages
+            chatMessages.innerHTML = '';
+            
+            const response = await fetch(`/api/chats/${chatId}`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to load chat history');
+            }
+            
+            const data = await response.json();
+            console.log('Loaded chat history:', data.messages);
+            
+            // If no messages, prepare for chat but don't add welcome message
+            if (data.messages.length === 0) {
+                return;
+            }
+            
+            // Display messages
+            data.messages.forEach(msg => {
+                let messageContent = msg.content;
+                console.log('Processing message:', msg);
+                
+                // Handle object content
+                if (typeof messageContent === 'object' && messageContent !== null) {
+                    // If it has a text property, use that
+                    if (messageContent.text) {
+                        messageContent = messageContent.text;
+                    } else if (Array.isArray(messageContent) && messageContent.length > 0) {
+                        // If it's an array of content objects (like OpenAI format)
+                        const textContent = messageContent
+                            .filter(item => item.type === 'text')
+                            .map(item => item.text)
+                            .join("\n");
+                        
+                        if (textContent) {
+                            messageContent = textContent;
+                        } else {
+                            // Fallback: stringify the object
+                            messageContent = JSON.stringify(messageContent);
+                        }
+                    } else {
+                        // Fallback: stringify the object
+                        messageContent = JSON.stringify(messageContent);
+                    }
+                }
+                
+                // Map role to expected format - ensure 'assistant' maps to 'ai' and 'user' stays as 'user'
+                let role = msg.role;
+                if (role === 'assistant') {
+                    role = 'ai';
+                }
+                
+                console.log(`Adding message with role ${role}:`, messageContent);
+                
+                // Add message with correct role
+                addMessage(messageContent, role);
+                
+                // Check if message was added correctly
+                const lastMessageElement = chatMessages.lastElementChild;
+                console.log('Added message element:', lastMessageElement);
+            });
+            
+            // Scroll to bottom
+            scrollToBottom();
+        } catch (error) {
+            console.error('Error loading chat history:', error);
+            if (chatMessages) {
+                addMessage('Failed to load chat history', 'system');
+            }
+        }
+    }
+    
+    async function createNewChat() {
+        try {
+            // Clear current messages right away
+            chatMessages.innerHTML = '';
+            
+            // No more welcome message here
+            
+            const response = await fetch('/api/chats', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ title: 'New Conversation' })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to create new chat');
+            }
+            
+            const data = await response.json();
+            currentChatId = data.chat.id;
+            localStorage.setItem('currentChatId', currentChatId);
+            
+            // Reload chat list
+            await loadUserChats();
+            
+            console.log('New chat created:', currentChatId);
+            return data.chat;
+        } catch (error) {
+            console.error('Error creating new chat:', error);
+            updateStatusDisplay('Failed to create new chat', 'error');
+        }
+    }
+    
+    // Only add event listeners if the elements exist
+    if (sendButton && messageInput) {
+        sendButton.addEventListener('click', handleSendMessage);
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                handleSendMessage();
+            }
+        });
+    }
+    
+    // Only add the new task button event listener if it exists
+    if (newTaskButton) {
+        newTaskButton.addEventListener('click', () => {
+            // Only proceed if chatMessages exists (we're on the chat page)
+            if (chatMessages) {
+                // Clear the chat messages but don't actually create a new chat yet
+                chatMessages.innerHTML = '';
+                
+                // Don't add welcome message anymore
+                
+                // Set currentChatId to 'new' to indicate we need to create a chat when user sends message
+                currentChatId = 'new';
+                localStorage.setItem('currentChatId', 'new');
+                
+                // Clear any active chat in the list
+                document.querySelectorAll('.recent-chat-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // Focus the message input if it exists
+                if (messageInput) {
+                    messageInput.focus();
+                }
+            } else {
+                // We're not on the chat page, redirect to index.html
+                window.location.href = 'index.html';
+            }
+        });
+    }
 
     // --- Hilfsfunktion zum Aktualisieren des Statusbereichs ---
     function updateStatusDisplay(text, statusType = 'info') {
@@ -69,31 +404,101 @@ document.addEventListener('DOMContentLoaded', () => {
         statusDisplay.innerHTML = `${iconHtml} <span>${text || '-'}</span>`;
     }
 
-    // --- Nachrichten und Aktionen hinzufügen (Allgemeine Funktionen) ---
+    // Helper function to verify and fix message element structure if needed
+    function verifyMessageStructure(messageElement) {
+        // Check if message has the correct class structure
+        if (!messageElement.classList.contains('message')) {
+            console.warn('Message element missing "message" class, adding it');
+            messageElement.classList.add('message');
+        }
+        
+        // Ensure message has a content div
+        if (!messageElement.querySelector('.message-content')) {
+            console.warn('Message element missing content div, restructuring');
+            
+            // Get all of the element's content
+            const content = messageElement.innerHTML;
+            
+            // Clear the element
+            messageElement.innerHTML = '';
+            
+            // Create a content div
+            const contentDiv = document.createElement('div');
+            contentDiv.classList.add('message-content');
+            contentDiv.innerHTML = content;
+            
+            // Add the content div to the message
+            messageElement.appendChild(contentDiv);
+        }
+        
+        return messageElement;
+    }
+
     function addMessage(text, sender, type = 'text') {
+        // If chat messages container doesn't exist, exit early
+        if (!chatMessages) return;
+        
+        // Handle object text
+        if (typeof text === 'object' && text !== null) {
+            // If it has a text property, use that
+            if (text.text) {
+                text = text.text;
+            } else if (Array.isArray(text) && text.length > 0) {
+                // If it's an array of content objects (like OpenAI format)
+                const textContent = text
+                    .filter(item => item.type === 'text')
+                    .map(item => item.text)
+                    .join("\n");
+                
+                if (textContent) {
+                    text = textContent;
+                } else {
+                    // Fallback: stringify the object
+                    text = JSON.stringify(text);
+                }
+            } else {
+                // Fallback: stringify the object
+                text = JSON.stringify(text, null, 2);
+            }
+        }
+        
         const messageElement = document.createElement('div');
+        
         if (type === 'system') {
             messageElement.classList.add('message', 'system');
             messageElement.textContent = text;
         } else {
+            // Important: Use the correct classes for styling
+            // 'message' for the container, then 'user' or 'ai' for the role
             messageElement.classList.add('message', sender);
+            
+            // Create message content container
+            const contentElement = document.createElement('div');
+            contentElement.classList.add('message-content');
+            
             if (sender === 'ai') {
                 // Parse Markdown für AI-Nachrichten
                 try {
-                     // Setze Optionen für Marked (optional, z.B. für GitHub Flavored Markdown)
-                     marked.setOptions({
-                         gfm: true,
-                         breaks: true // Konvertiert Zeilenumbrüche in <br>
-                     });
-                     messageElement.innerHTML = marked.parse(text);
-                 } catch (e) {
-                     console.error("Fehler beim Parsen von Markdown:", e);
-                     messageElement.textContent = text; // Fallback auf reinen Text
-                 }
+                    // Setze Optionen für Marked (optional, z.B. für GitHub Flavored Markdown)
+                    marked.setOptions({
+                        gfm: true,
+                        breaks: true // Konvertiert Zeilenumbrüche in <br>
+                    });
+                    contentElement.innerHTML = marked.parse(text);
+                } catch (e) {
+                    console.error("Fehler beim Parsen von Markdown:", e);
+                    contentElement.textContent = text; // Fallback auf reinen Text
+                }
             } else {
-                messageElement.textContent = text; // Benutzernachrichten bleiben Text
+                contentElement.textContent = text; // Benutzernachrichten bleiben Text
             }
+            
+            messageElement.appendChild(contentElement);
         }
+        
+        // Verify the message structure before adding to DOM
+        verifyMessageStructure(messageElement);
+        
         chatMessages.appendChild(messageElement);
         scrollToBottom();
     }
@@ -246,53 +651,192 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function scrollToBottom() {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
     }
 
     function scrollToBottomIfNeeded(parentElement) {
         // Nur scrollen, wenn das Element direkt zum Haupt-Chat hinzugefügt wird
-        if (parentElement === chatMessages) {
+        if (parentElement === chatMessages && chatMessages) {
             scrollToBottom();
         }
     }
 
     // --- Nachrichten senden --- 
     function handleSendMessage() {
+        // Check if required elements exist
+        if (!messageInput || !chatMessages) return;
+        
         const message = messageInput.value.trim();
         if (!message) return;
 
-        // Add the user's message to the chat
-        addMessage(message, 'user');
-        messageInput.value = '';
-
-        // Show loading indicator
-        updateStatusDisplay('Processing your request...', 'loading');
-
-        // Submit to server with user ID
-        socket.emit('submit_task', { 
-            task: message, 
-            userId: userId 
-        });
-
-        // Disable input while processing
-        messageInput.disabled = true;
-        sendButton.disabled = true;
+        // If this is a new chat without an ID, create it first
+        if (!currentChatId || currentChatId === 'new') {
+            createNewChat().then(() => {
+                // After chat creation, add the message and send it
+                addMessage(message, 'user');
+                messageInput.value = '';
+                
+                // Show loading indicator
+                updateStatusDisplay('Processing your request...', 'loading');
+                
+                // Submit to server with user ID and chat ID
+                socket.emit('submit_task', { 
+                    task: message,
+                    userId: userId,
+                    chatId: currentChatId
+                });
+                
+                // Try to update the chat title based on this first message
+                updateChatTitleFromContent(currentChatId, message);
+                
+                // Disable input while processing
+                if (messageInput && sendButton) {
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                }
+            });
+        } else {
+            // For existing chats, just add the message and send it
+            addMessage(message, 'user');
+            messageInput.value = '';
+            
+            // Show loading indicator
+            updateStatusDisplay('Processing your request...', 'loading');
+            
+            // Submit to server with user ID and chat ID
+            socket.emit('submit_task', { 
+                task: message,
+                userId: userId,
+                chatId: currentChatId
+            });
+            
+            // If this is the first message in a chat, update the title
+            if (document.querySelectorAll('.message.user-message').length === 1) {
+                updateChatTitleFromContent(currentChatId, message);
+            }
+            
+            // Disable input while processing
+            if (messageInput && sendButton) {
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+            }
+        }
     }
 
-    sendButton.addEventListener('click', handleSendMessage);
-    messageInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter') {
-            handleSendMessage();
-        }
-    });
-
-    // --- Socket Event Listener (vom Server empfangen) ---
-
-    // Listener für einfache Textnachrichten von der AI
+    // Update the socket.on('ai_message') handler to fix duplicate messages and improve chat titles
     socket.on('ai_message', (data) => {
-        addMessage(data.text, 'ai');
-        updateStatusDisplay('Ready', 'idle'); // Reset status after AI replies
+        // Only update UI if this message is for the current chat
+        if (data.chatId && data.chatId !== currentChatId) return;
+        
+        // Handle if text is an object
+        let messageText = data.text;
+        if (typeof messageText === 'object' && messageText !== null) {
+            // Check if it has a result property (AI tool response format)
+            if (messageText.result) {
+                messageText = messageText.result;
+            } else if (messageText.text) {
+                messageText = messageText.text;
+            } else {
+                // Last resort: stringify the object
+                messageText = JSON.stringify(messageText, null, 2);
+            }
+        }
+        
+        // Don't add message if it's empty
+        if (!messageText || messageText.trim() === '') {
+            console.log('Ignoring empty message');
+            return;
+        }
+        
+        // Don't add message if it's already displayed (check the last message)
+        const messages = chatMessages.querySelectorAll('.message.ai');
+        let isDuplicate = false;
+        
+        // Check the last few AI messages to avoid duplicates
+        if (messages.length > 0) {
+            // Start from the most recent and check the last 3 messages at most
+            const messagesToCheck = Math.min(messages.length, 3);
+            for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
+                const msgContent = messages[i].querySelector('.message-content');
+                if (msgContent && msgContent.textContent.trim() === messageText.trim()) {
+                    console.log('Preventing duplicate message');
+                    isDuplicate = true;
+                    break;
+                }
+            }
+        }
+        
+        if (isDuplicate) return;
+        
+        // For new chats: Only add the AI message if it's not the welcome message 
+        // that we've already added in createNewChat()
+        const welcomeText = "Hello! I'm your Operon.one assistant. How can I help you today?";
+        if (messageText.includes(welcomeText) && document.querySelector('.message.ai .message-content')?.textContent.includes(welcomeText)) {
+            console.log('Skipping welcome message in new chat');
+            return;
+        }
+        
+        // Add the message to the UI
+        addMessage(messageText, 'ai');
     });
+
+    // Function to update chat title based on content
+    function updateChatTitleFromContent(chatId, messageText) {
+        // Don't attempt to update title if we don't have a valid chat ID
+        if (!chatId || chatId === 'new') return;
+        
+        // Use the provided message text as the title basis
+        // This is the first user message in a new chat
+        let title = messageText;
+        
+        // Limit to a reasonable length
+        if (title.length > 40) {
+            title = title.substring(0, 37) + '...';
+        }
+        
+        // Update the title in the current chat list item
+        const chatListItem = document.querySelector(`.recent-chat-item[data-chat-id="${chatId}"]`);
+        if (chatListItem) {
+            const chatTitle = chatListItem.querySelector('.chat-title');
+            if (chatTitle) {
+                chatTitle.textContent = title;
+            }
+        }
+        
+        // Update the title in the database
+        updateChatTitle(chatId, title);
+    }
+
+    // Update chat title in the database
+    async function updateChatTitle(chatId, title) {
+        try {
+            const response = await fetch(`/api/chats/${chatId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ title })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to update chat title');
+            }
+            
+            // Update the UI
+            const chatItem = document.querySelector(`.recent-chat-item[data-chat-id="${chatId}"]`);
+            if (chatItem) {
+                const titleElement = chatItem.querySelector('.chat-title');
+                if (titleElement) {
+                    titleElement.textContent = title;
+                }
+            }
+        } catch (error) {
+            console.error('Error updating chat title:', error);
+        }
+    }
 
     // Listener für Status-Updates
     socket.on('status_update', (data) => {
@@ -382,14 +926,49 @@ document.addEventListener('DOMContentLoaded', () => {
          }
      });
 
+    // Add a variable to track the last AI message to prevent duplicates
+    let lastAiMessageId = null;
+
     // Listener for task completion - UPDATED with type check
     socket.on('task_completed', (data) => {
         // Only process events for the current user
         if (data.userId === userId) {
             console.log('Task completed:', data);
-            const result = data.result || 'Task completed successfully';
             
-            addMessage(result, 'ai');
+            // Handle if result is an object
+            let result = data.result || 'Task completed successfully';
+            if (typeof result === 'object' && result !== null) {
+                // If it has a result property (common format from AI tools)
+                if (result.result) {
+                    result = result.result;
+                } else {
+                    // Stringify the object with proper formatting
+                    result = JSON.stringify(result, null, 2);
+                }
+            }
+            
+            // Check if this result was already added by the ai_message event
+            // Only add the message if it's not a duplicate
+            const messages = chatMessages.querySelectorAll('.message.ai');
+            let isDuplicate = false;
+            
+            if (messages.length > 0) {
+                // Check the last few messages for duplicates
+                const messagesToCheck = Math.min(messages.length, 3);
+                for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
+                    const msgContent = messages[i].querySelector('.message-content');
+                    if (msgContent && msgContent.textContent.trim() === result.trim()) {
+                        console.log('Skipping duplicate message in task_completed');
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!isDuplicate) {
+                addMessage(result, 'ai');
+            }
+            
             updateStatusDisplay('Task completed', 'completed');
             
             // Re-enable input
@@ -443,4 +1022,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Beispiel: Initiale Nachricht anzeigen
     // addMessage("Hallo! Verbinde mit Operon.one...", 'ai');
 
+    // Add event listener for logout button
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('userId');
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentChatId');
+            window.location.href = '/login';
+        });
+    }
 }); 

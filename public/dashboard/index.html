@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operon.one Dashboard</title>
+    <link rel="stylesheet" href="/dashboard/style.css">
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Welcome screen specific styles */
+        .welcome-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            padding: 0 2rem;
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .welcome-container h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .welcome-container p {
+            color: var(--gray);
+            margin-bottom: 2.5rem;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        
+        .welcome-input-container {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 1rem;
+        }
+        
+        .welcome-input {
+            width: 100%;
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--gray-dark);
+            background: var(--dark-light);
+            color: var(--light);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+        
+        .welcome-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+        }
+        
+        .welcome-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .welcome-button {
+            padding: 12px 24px;
+            border-radius: var(--border-radius);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .primary-button {
+            background: var(--primary);
+            color: white;
+            border: none;
+        }
+        
+        .primary-button:hover {
+            background: var(--primary-dark);
+        }
+        
+        .secondary-button {
+            background: transparent;
+            color: var(--gray-light);
+            border: 1px solid var(--gray-dark);
+        }
+        
+        .secondary-button:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Sidebar - Same as in chat.html -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-text">Operon<span class="accent">.one</span></div>
+                <button id="new-task-button"><i class="fas fa-plus"></i> New Task</button>
+            </div>
+            <!-- Placeholder for dynamically loaded recent chats -->
+            <div class="recent-chats-container" id="recent-chats-list">
+                <p style="padding: 15px; color: var(--gray);">Loading chats...</p> <!-- Loading indicator -->
+            </div>
+            <div class="sidebar-footer">
+                <!-- User Info -->
+                <div class="user-profile-section">
+                     <span id="user-info">User: Loading...</span>
+                     <!-- Settings Button/Link -->
+                     <a href="/settings" id="settings-link" title="Settings"><i class="fas fa-cog"></i></a>
+                     <!-- Logout Button -->
+                     <button id="logout-button" class="icon-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Welcome Screen (replaces Chat Area) -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>Operon<span class="accent">.one</span> <span class="gradient-text">Dashboard</span></h1>
+            </div>
+            
+            <div class="welcome-container">
+                <h1>Welcome to Operon.one</h1>
+                <p>Enter your task or question to get started with AI-powered assistance. Our system can help you with complex questions, data analysis, and specialized tasks.</p>
+                
+                <div class="welcome-input-container">
+                    <input type="text" class="welcome-input" id="welcome-input" placeholder="What would you like to accomplish today?">
+                    
+                    <div class="welcome-buttons">
+                        <button class="welcome-button primary-button" id="start-button">Begin Task</button>
+                        <button class="welcome-button secondary-button" id="browse-button">Browse Templates</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/dashboard/script.js"></script>
+    <!-- Socket.IO Client Library -->
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <!-- Marked.js for Markdown Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <script>
+        // Authentication check
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is logged in
+            const userId = localStorage.getItem('userId');
+            const userEmail = localStorage.getItem('userEmail');
+            const authToken = localStorage.getItem('authToken');
+            
+            if (!userId || !authToken) {
+                // Redirect to login page if not authenticated
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            // Update user info in the sidebar
+            document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
+            
+            // Set up logout button
+            document.getElementById('logout-button').addEventListener('click', function() {
+                // Clear authentication data
+                localStorage.removeItem('userId');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('authToken');
+                
+                // Redirect to login page
+                window.location.href = 'login.html';
+            });
+            
+            // Load recent chats (reusing functionality from chat.js)
+            // This assumes you have a loadRecentChats function in script.js
+            if (typeof loadRecentChats === 'function') {
+                loadRecentChats();
+            } else {
+                // Fallback implementation for loading chats
+                loadWelcomePageChats();
+            }
+            
+            // Function to load chats directly in the welcome page
+            function loadWelcomePageChats() {
+                fetch('/api/chats', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load chats');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const recentChatsList = document.getElementById('recent-chats-list');
+                    
+                    // Clear the list
+                    recentChatsList.innerHTML = '';
+                    
+                    if (!data.chats || data.chats.length === 0) {
+                        recentChatsList.innerHTML = '<p style="padding: 15px; color: var(--gray);">No chats found</p>';
+                        return;
+                    }
+                    
+                    // Sort chats by updatedAt (most recent first)
+                    data.chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+                    
+                    // Render each chat
+                    data.chats.forEach(chat => {
+                        const chatItem = document.createElement('div');
+                        chatItem.className = 'recent-chat-item';
+                        chatItem.dataset.chatId = chat.id;
+                        
+                        // Format date
+                        const chatDate = new Date(chat.updatedAt);
+                        const today = new Date();
+                        let timeDisplay;
+                        
+                        // Format date: Today, Yesterday, or date
+                        if (chatDate.toDateString() === today.toDateString()) {
+                            timeDisplay = 'Today';
+                        } else if (chatDate.toDateString() === new Date(today - 86400000).toDateString()) {
+                            timeDisplay = 'Yesterday';
+                        } else {
+                            timeDisplay = chatDate.toLocaleDateString();
+                        }
+                        
+                        chatItem.innerHTML = `
+                            <span class="chat-title">${chat.title}</span>
+                            <span class="chat-timestamp">${timeDisplay}</span>
+                        `;
+                        
+                        // Add click handler to load this chat
+                        chatItem.addEventListener('click', () => {
+                            // Save chat ID to localStorage
+                            localStorage.setItem('currentChatId', chat.id);
+                            // Redirect to chat page
+                            window.location.href = 'chat.html';
+                        });
+                        
+                        recentChatsList.appendChild(chatItem);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading chats:', error);
+                    document.getElementById('recent-chats-list').innerHTML = 
+                        '<p style="padding: 15px; color: var(--gray);">Failed to load chats</p>';
+                });
+            }
+            
+            // Set up start button
+            document.getElementById('start-button').addEventListener('click', function() {
+                const input = document.getElementById('welcome-input').value.trim();
+                if (input) {
+                    // Show loading indication if desired
+                    document.getElementById('start-button').disabled = true;
+                    document.getElementById('start-button').textContent = 'Starting...';
+                    
+                    // Set 'new' as the chat ID to create a new chat
+                    localStorage.setItem('currentChatId', 'new');
+                    // Store the initial query to use in chat
+                    localStorage.setItem('initialQuery', input);
+                    
+                    // Redirect to chat page
+                    window.location.href = 'chat.html';
+                }
+            });
+            
+            // Allow pressing Enter to submit
+            document.getElementById('welcome-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('start-button').click();
+                }
+            });
+            
+            // Set up browse button - customize this for your template browsing implementation
+            document.getElementById('browse-button').addEventListener('click', function() {
+                // This could redirect to a templates page or open a modal
+                alert('Template browsing feature coming soon!');
+            });
+            
+            // Set up new task button (redirect to a blank chat)
+            document.getElementById('new-task-button').addEventListener('click', function() {
+                // Clear any existing query to ensure a fresh start
+                localStorage.removeItem('initialQuery');
+                
+                // Reload the current page (dashboard)
+                window.location.href = 'index.html';
+            });
+            
+            // Validate token with server (optional additional security)
+            fetch('/api/validate-token', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            }).catch(error => {
+                console.error('Token validation error:', error);
+                // If we can't reach the server, still allow the user to continue
+            });
+        });
+    </script>
+</body>
+</html> 

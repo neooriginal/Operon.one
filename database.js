@@ -65,15 +65,33 @@ function initDatabase() {
   db.run(`CREATE TABLE IF NOT EXISTS chat_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
+    chatId INTEGER DEFAULT 1,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (userId) REFERENCES users(id)
+    FOREIGN KEY (userId) REFERENCES users(id),
+    FOREIGN KEY (chatId) REFERENCES chats(id)
   )`, (err) => {
     if (err) {
       console.error('Error creating chat_history table:', err.message);
     } else {
       console.log('Chat history table ready');
+    }
+  });
+  
+  // Chats table (for multiple conversations)
+  db.run(`CREATE TABLE IF NOT EXISTS chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT NOT NULL,
+    title TEXT DEFAULT 'New Chat',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id)
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating chats table:', err.message);
+    } else {
+      console.log('Chats table ready');
     }
   });
   
@@ -128,6 +146,73 @@ function initDatabase() {
       console.log('Settings table ready');
     }
   });
+
+  // After creating all tables, migrate existing chat data if needed
+  migrateExistingChatData();
+}
+
+// Migration function to handle chat migration
+function migrateExistingChatData() {
+  console.log('Checking for data migration needs...');
+  
+  // First, check if we need to migrate by looking for users with messages but no chats
+  db.all(
+    `SELECT DISTINCT ch.userId 
+     FROM chat_history ch 
+     LEFT JOIN chats c ON ch.userId = c.userId 
+     WHERE c.id IS NULL`,
+    [],
+    async (err, rows) => {
+      if (err) {
+        console.error('Error checking for migration needs:', err.message);
+        return;
+      }
+      
+      if (rows.length === 0) {
+        console.log('No chat data migration needed');
+        return;
+      }
+      
+      console.log(`Found ${rows.length} users needing chat migration`);
+      
+      // For each user that needs migration
+      for (const row of rows) {
+        const userId = row.userId;
+        
+        try {
+          // Create a default chat for this user
+          db.run(
+            'INSERT INTO chats (userId, title, createdAt, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+            [userId, 'Chat History'],
+            function(err) {
+              if (err) {
+                console.error(`Error creating default chat for user ${userId}:`, err.message);
+                return;
+              }
+              
+              const chatId = this.lastID;
+              console.log(`Created default chat (ID: ${chatId}) for user ${userId}`);
+              
+              // Update all existing messages to belong to this chat
+              db.run(
+                'UPDATE chat_history SET chatId = ? WHERE userId = ?',
+                [chatId, userId],
+                function(err) {
+                  if (err) {
+                    console.error(`Error updating chat history for user ${userId}:`, err.message);
+                  } else {
+                    console.log(`Updated ${this.changes} messages for user ${userId}`);
+                  }
+                }
+              );
+            }
+          );
+        } catch (error) {
+          console.error(`Error migrating data for user ${userId}:`, error.message);
+        }
+      }
+    }
+  );
 }
 
 // User functions
@@ -302,15 +387,18 @@ const memoryFunctions = {
 // Chat history functions
 const chatFunctions = {
   // Add a chat message
-  addChatMessage(userId, role, content) {
+  addChatMessage(userId, role, content, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
-        'INSERT INTO chat_history (userId, role, content) VALUES (?, ?, ?)',
-        [userId, role, typeof content === 'object' ? JSON.stringify(content) : content],
+        'INSERT INTO chat_history (userId, chatId, role, content) VALUES (?, ?, ?, ?)',
+        [userId, chatId, role, typeof content === 'object' ? JSON.stringify(content) : content],
         function(err) {
           if (err) {
             reject(err);
           } else {
+            // Update the chat's updatedAt timestamp
+            db.run('UPDATE chats SET updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND userId = ?', 
+              [chatId, userId]);
             resolve({ id: this.lastID });
           }
         }
@@ -318,12 +406,12 @@ const chatFunctions = {
     });
   },
 
-  // Get chat history for a user
-  getChatHistory(userId, limit = 50) {
+  // Get chat history for a user and specific chat
+  getChatHistory(userId, chatId = 1, limit = 50) {
     return new Promise((resolve, reject) => {
       db.all(
-        'SELECT * FROM chat_history WHERE userId = ? ORDER BY timestamp ASC LIMIT ?',
-        [userId, limit],
+        'SELECT * FROM chat_history WHERE userId = ? AND chatId = ? ORDER BY timestamp ASC LIMIT ?',
+        [userId, chatId, limit],
         (err, messages) => {
           if (err) {
             reject(err);
@@ -340,18 +428,97 @@ const chatFunctions = {
     });
   },
 
-  // Clear chat history for a user
-  clearChatHistory(userId) {
+  // Clear chat history for a specific chat
+  clearChatHistory(userId, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
-        'DELETE FROM chat_history WHERE userId = ?',
-        [userId],
+        'DELETE FROM chat_history WHERE userId = ? AND chatId = ?',
+        [userId, chatId],
         function(err) {
           if (err) {
             reject(err);
           } else {
             resolve({ deleted: this.changes });
           }
+        }
+      );
+    });
+  },
+
+  // Create a new chat
+  createChat(userId, title = 'New Chat') {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO chats (userId, title) VALUES (?, ?)',
+        [userId, title],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ id: this.lastID, title });
+          }
+        }
+      );
+    });
+  },
+
+  // Get all chats for a user
+  getUserChats(userId) {
+    return new Promise((resolve, reject) => {
+      db.all(
+        'SELECT id, title, createdAt, updatedAt FROM chats WHERE userId = ? ORDER BY updatedAt DESC',
+        [userId],
+        (err, chats) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(chats);
+          }
+        }
+      );
+    });
+  },
+
+  // Update chat title
+  updateChatTitle(userId, chatId, title) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE chats SET title = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND userId = ?',
+        [title, chatId, userId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ changes: this.changes });
+          }
+        }
+      );
+    });
+  },
+
+  // Delete a chat and its history
+  deleteChat(userId, chatId) {
+    return new Promise((resolve, reject) => {
+      // First delete chat history
+      db.run('DELETE FROM chat_history WHERE userId = ? AND chatId = ?', 
+        [userId, chatId], 
+        (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          // Then delete the chat
+          db.run('DELETE FROM chats WHERE id = ? AND userId = ?', 
+            [chatId, userId], 
+            function(err) {
+              if (err) {
+                reject(err);
+              } else {
+                resolve({ deleted: this.changes });
+              }
+            }
+          );
         }
       );
     });
