@@ -141,8 +141,8 @@ body::before {
     margin: 2px 10px;
     transition: var(--transition);
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .recent-chat-item:hover {
@@ -151,6 +151,14 @@ body::before {
 
 .recent-chat-item.active {
     background-color: rgba(99, 102, 241, 0.15);
+}
+
+.recent-chat-item .chat-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
 }
 
 .recent-chat-item .chat-title {
@@ -165,6 +173,32 @@ body::before {
 .recent-chat-item .chat-timestamp {
     font-size: 0.75rem;
     color: var(--gray);
+}
+
+.delete-chat-btn {
+    visibility: hidden;
+    opacity: 0;
+    background: none;
+    border: none;
+    color: var(--gray);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 5px;
+    border-radius: 50%;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.recent-chat-item:hover .delete-chat-btn {
+    visibility: visible;
+    opacity: 1;
+}
+
+.delete-chat-btn:hover {
+    background-color: rgba(255, 50, 50, 0.15);
+    color: #ff5050;
 }
 
 .sidebar-footer {
