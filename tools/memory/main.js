@@ -1,7 +1,5 @@
 const ai = require('../AI/ai');
-
-// Placeholder storage (replace with actual DB logic later)
-const userMemories = {};
+const { memoryFunctions } = require('../../database');
 
 /**
  * Stores a memory JSON for a specific user.
@@ -10,25 +8,32 @@ const userMemories = {};
  */
 async function storeMemory(userId, memoryJson) {
     console.log(`[Memory Tool] Storing memory for user ${userId}:`, JSON.stringify(memoryJson).substring(0, 100) + '...');
-    if (!userMemories[userId]) {
-        userMemories[userId] = [];
+    try {
+        await memoryFunctions.storeMemory(userId, memoryJson);
+        return true;
+    } catch (error) {
+        console.error('[Memory Tool] Error storing memory:', error.message);
+        return false;
     }
-    memoryJson.storedAt = new Date().toISOString(); // Add timestamp when stored
-    userMemories[userId].push(memoryJson);
-    // In a real implementation, this would save to a persistent vector database
 }
 
 /**
  * Retrieves memories for a specific user based on a query.
- * Placeholder - currently just returns all memories.
  * @param {string} userId - The user identifier.
- * @param {string} query - The query string (would be converted to vector in real implementation).
+ * @param {string} query - The query string to search memories.
  * @returns {Promise<Array<object>>} - A promise resolving to an array of relevant memories.
  */
 async function retrieveMemories(userId, query) {
     console.log(`[Memory Tool] Retrieving memories for user ${userId} based on query: ${query}`);
-    // In a real implementation, this would perform a vector search against stored memories
-    return userMemories[userId] || [];
+    try {
+        if (query && query.trim()) {
+            return await memoryFunctions.searchMemories(userId, query);
+        }
+        return await memoryFunctions.getMemories(userId);
+    } catch (error) {
+        console.error('[Memory Tool] Error retrieving memories:', error.message);
+        return [];
+    }
 }
 
 /**
@@ -96,10 +101,6 @@ async function runTask(prompt, inputData, callback, userId = 'default') {
             }
             summary.success = true;
             summary.message = `Successfully generated and stored ${summary.storedMemories} memories.`;
-
-            // Example retrieval (optional, can be triggered by a different prompt/action later)
-            // const relevantMemories = await retrieveMemories(userId, "some query based on prompt");
-            // summary.retrievedMemories = relevantMemories.length;
 
         } else if (Array.isArray(generatedMemories) && generatedMemories.length === 0) {
             summary.success = true;

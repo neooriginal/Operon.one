@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const ai = require('../AI/ai');
 const contextManager = require('../../utils/context');
+const { fileFunctions } = require('../../database');
 
 // Map to store files created inside containers reported by other tools (bash/python)
 const containerFilesTracked = new Map(); // userId -> Set<containerPath>
@@ -32,15 +33,18 @@ async function getContainer(userId = 'default', retries = 3) {
 
 // NEW Function to Track Container Files reported by other tools
 async function trackContainerFile(userId, containerPath) {
-    if (!userId || !containerPath) return; // Basic validation
-
-    if (!containerFilesTracked.has(userId)) {
-        containerFilesTracked.set(userId, new Set());
+    if (!userId || !containerPath) {
+        console.error('Invalid userId or containerPath for tracking');
+        return false;
     }
-    const userSet = containerFilesTracked.get(userId);
-    if (!userSet.has(containerPath)) { // Avoid duplicates
-         userSet.add(containerPath);
-         console.log(`[FileSystem] Tracked externally created container file for ${userId}: ${containerPath}`);
+
+    try {
+        // Store in database
+        await fileFunctions.trackContainerFile(userId, containerPath);
+        return true;
+    } catch (error) {
+        console.error('Error tracking container file:', error.message);
+        return false;
     }
 }
 
@@ -507,20 +511,50 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     }
 }
 
+/**
+ * Track a written file for a specific user.
+ * This function adds the file to the tracking list for the user.
+ */
+async function trackFile(userId, filePath) {
+    if (!userId || !filePath) {
+        console.error('Invalid userId or filePath for tracking');
+        return false;
+    }
+
+    try {
+        // Store in database instead of in-memory
+        await fileFunctions.trackHostFile(userId, filePath);
+        return true;
+    } catch (error) {
+        console.error('Error tracking file:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Get all written files for a specific user.
+ * Returns an object with hostFiles and containerFiles arrays.
+ */
 async function getWrittenFiles(userId = 'default') {
-    // 1. Get host files (written directly *by this tool* within the container)
-    const toolState = contextManager.getToolState('fileSystem', userId);
-    const hostFiles = Array.from(toolState?.writtenFiles || []); // Use existing tracking
-
-    // 2. Get container files (reported by bash/python)
-    const containerFilesSet = containerFilesTracked.get(userId) || new Set();
-    const containerFiles = Array.from(containerFilesSet);
-
-    // 3. Return the combined structure
-    return {
-        hostFiles: hostFiles, // Renaming for clarity, these are container paths written by fileSystem tool
-        containerFiles: containerFiles // These are container paths reported by other tools
-    };
+    try {
+        // Get tracked files from database
+        const trackedFiles = await fileFunctions.getTrackedFiles(userId);
+        
+        // Format the data for compatibility with existing code
+        return {
+            hostFiles: trackedFiles.hostFiles.map(file => ({
+                fileName: file.originalName || path.basename(file.filePath),
+                path: file.filePath
+            })),
+            containerFiles: trackedFiles.containerFiles.map(file => ({
+                fileName: file.originalName || path.basename(file.containerPath),
+                path: file.containerPath
+            }))
+        };
+    } catch (error) {
+        console.error('Error getting tracked files:', error.message);
+        return { hostFiles: [], containerFiles: [] };
+    }
 }
 
 module.exports = {
@@ -536,6 +570,7 @@ module.exports = {
     writeFileDirectly, // Keep this exported function
     runTask,
     getWrittenFiles, // Export the new function
+    trackFile,
     trackContainerFile // Ensure this is exported
 };
 

@@ -4,6 +4,8 @@
  * Built for multi-user support
  */
 
+const { chatFunctions } = require('../database');
+
 class Context {
   constructor(userId = 'default') {
     this.contexts = new Map();
@@ -26,6 +28,11 @@ class Context {
         toolStates: new Map(),
         variables: new Map(),
         startTime: Date.now()
+      });
+      
+      // Load chat history from database (asynchronously)
+      this.loadHistoryFromDb(userId).catch(err => {
+        console.error('Error loading history from database:', err.message);
       });
     }
     return this.getContext(userId);
@@ -60,10 +67,48 @@ class Context {
     return this.initializeContext(userId);
   }
 
+  /**
+   * Load chat history from database
+   * @param {string} userId - User identifier
+   */
+  async loadHistoryFromDb(userId = 'default') {
+    try {
+      if (!userId || userId === 'default') return; // Skip for anonymous/default users
+      
+      const messages = await chatFunctions.getChatHistory(userId);
+      const context = this.getContext(userId);
+      
+      // Transform DB format to context format
+      context.history = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      return context.history;
+    } catch (error) {
+      console.error('Error loading history from database:', error.message);
+      return [];
+    }
+  }
+
   // History management
-  addToHistory(message, userId = 'default') {
+  async addToHistory(message, userId = 'default') {
     const context = this.getContext(userId);
     context.history.push(message);
+    
+    // Persist to database if it's a valid user
+    if (userId && userId !== 'default') {
+      try {
+        await chatFunctions.addChatMessage(
+          userId,
+          message.role,
+          message.content
+        );
+      } catch (error) {
+        console.error('Error saving message to database:', error.message);
+      }
+    }
+    
     return context.history;
   }
 
@@ -71,8 +116,17 @@ class Context {
     return this.getContext(userId).history;
   }
 
-  clearHistory(userId = 'default') {
+  async clearHistory(userId = 'default') {
     this.getContext(userId).history = [];
+    
+    // Clear history in database if it's a valid user
+    if (userId && userId !== 'default') {
+      try {
+        await chatFunctions.clearChatHistory(userId);
+      } catch (error) {
+        console.error('Error clearing history in database:', error.message);
+      }
+    }
   }
 
   // Step output management

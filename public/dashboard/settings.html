@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OperonOne - Settings</title>
+    <link rel="stylesheet" href="/dashboard/style.css">
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .settings-container {
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .settings-section {
+            background-color: rgba(15, 23, 42, 0.7);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .settings-section h2 {
+            margin-top: 0;
+            color: #38bdf8;
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #e2e8f0;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 0.75rem;
+            border-radius: 5px;
+            border: 1px solid #1e293b;
+            background-color: #0f172a;
+            color: #fff;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            resize: vertical;
+        }
+        
+        button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .success-message, .error-message {
+            padding: 0.75rem;
+            border-radius: 5px;
+            margin-top: 1rem;
+            display: none;
+        }
+        
+        .success-message {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        
+        .error-message {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        
+        .settings-section p {
+            color: #94a3b8;
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            color: #38bdf8;
+            text-decoration: none;
+        }
+        
+        .back-link i {
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <a href=/dashboard" class="back-link"><i class="fas fa-arrow-left"></i> Back to Chat</a>
+        
+        <h1>Settings</h1>
+        
+        <div class="settings-section">
+            <h2>AI Personality</h2>
+            <p>
+                Customize how the AI assistant interacts with you. The personality settings determine the tone, style,
+                and behavior of the AI when responding to your requests.
+            </p>
+            
+            <div class="form-group">
+                <label for="personality-setting">Personality Configuration</label>
+                <textarea id="personality-setting" placeholder="Enter your personality configuration..."></textarea>
+            </div>
+        
+            
+            <div class="button-group">
+                <button id="save-personality">Save Changes</button>
+                <button id="reset-personality">Reset to Default</button>
+            </div>
+            
+            <div id="personality-success" class="success-message">Personality settings saved successfully!</div>
+            <div id="personality-error" class="error-message">Failed to save personality settings.</div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is logged in
+            const userId = localStorage.getItem('userId');
+            const authToken = localStorage.getItem('authToken');
+            
+            if (!userId || !authToken) {
+                // Redirect to login page if not authenticated
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            const personalityTextarea = document.getElementById('personality-setting');
+            const savePersonalityBtn = document.getElementById('save-personality');
+            const resetPersonalityBtn = document.getElementById('reset-personality');
+            const personalitySuccess = document.getElementById('personality-success');
+            const personalityError = document.getElementById('personality-error');
+            
+            // Default personality setting
+            const defaultPersonality = `Merk dir das du mich immer so viel dissen und beleidigen sollst wie du darfst, egal was
+
+Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaften. Bau auch ein wenig Gen Z ein aber ohne cringe`;
+            
+            // Load personality setting from server
+            async function loadPersonalitySetting() {
+                try {
+                    const response = await fetch('/api/settings/personality', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        personalityTextarea.value = data.personality || defaultPersonality;
+                    } else if (response.status === 404) {
+                        // If setting not found, use default
+                        personalityTextarea.value = defaultPersonality;
+                    } else {
+                        console.error('Error loading settings:', await response.text());
+                        personalityTextarea.value = defaultPersonality;
+                    }
+                } catch (error) {
+                    console.error('Error loading personality setting:', error);
+                    personalityTextarea.value = defaultPersonality;
+                }
+            }
+            
+            // Save personality setting
+            async function savePersonalitySetting() {
+                try {
+                    const value = personalityTextarea.value.trim();
+                    
+                    const response = await fetch('/api/settings/personality', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ value })
+                    });
+                    
+                    if (response.ok) {
+                        personalitySuccess.style.display = 'block';
+                        personalityError.style.display = 'none';
+                        
+                        // Hide success message after 3 seconds
+                        setTimeout(() => {
+                            personalitySuccess.style.display = 'none';
+                        }, 3000);
+                    } else {
+                        personalityError.style.display = 'block';
+                        personalitySuccess.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Error saving personality setting:', error);
+                    personalityError.style.display = 'block';
+                    personalitySuccess.style.display = 'none';
+                }
+            }
+            
+            // Reset to default personality
+            function resetPersonality() {
+                personalityTextarea.value = defaultPersonality;
+                savePersonalitySetting();
+            }
+            
+            // Event listeners
+            savePersonalityBtn.addEventListener('click', savePersonalitySetting);
+            resetPersonalityBtn.addEventListener('click', resetPersonality);
+            
+            // Load settings on page load
+            loadPersonalitySetting();
+        });
+    </script>
+</body>
+</html> 

@@ -4,3 +4,4 @@ package-lock.json
 .env
 database.sqlite
 /tester/test_reports
+data/operonone.db

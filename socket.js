@@ -3,10 +3,20 @@ const server = require("http").createServer();
 const express = require("express");
 const path = require("path");
 const fs = require('fs');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const { router: authRoutes, authenticateToken } = require('./authRoutes');
 
 // Serve static files from the public directory
 const app = express();
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// API routes
+app.use('/api', authRoutes);
 
 // Create HTTP server with Express app
 const httpServer = require("http").createServer(app);
@@ -19,16 +29,49 @@ const io = socket(httpServer, {
     }
 });
 
-io.on("connection", (socket) => {
-    console.log("a user connected");
+// Socket middleware to authenticate user based on token
+io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    const userId = socket.handshake.auth.userId;
+    
+    if (!token || !userId) {
+        // Allow anonymous connections for landing page, etc.
+        // But set a flag for restricted operations
+        socket.authenticated = false;
+        return next();
+    }
+    
+    try {
+        // You would verify the token here
+        // For now, just trust the token and userId
+        socket.userId = userId;
+        socket.authenticated = true;
+        return next();
+    } catch (error) {
+        console.error('Socket authentication error:', error.message);
+        return next(new Error('Authentication error'));
+    }
 });
 
+// Serve public routes
 app.get("/dashboard", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
 });
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "landingpage", "index.html"));
+});
+
+app.get("/login", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "login.html"));
+});
+
+app.get("/register", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "register.html"));
+});
+
+app.get("/settings", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "settings.html"));
 });
 
 app.get("/legal/terms", (req, res) => {
@@ -43,9 +86,15 @@ app.get("/legal/cookies", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "legal", "cookie-policy.html"));
 });
 
+// Restricted API routes (require authentication)
+app.get('/api/user/profile', authenticateToken, (req, res) => {
+    // Access user info from the token (added by authenticateToken middleware)
+    res.json({ user: req.user });
+});
+
 // Download-Route
-app.get('/download', (req, res) => {
-    const userId = req.query.userId;
+app.get('/download', authenticateToken, (req, res) => {
+    const userId = req.user.id;
     const filePathQuery = req.query.filePath;
 
     if (!userId || !filePathQuery) {
@@ -53,7 +102,7 @@ app.get('/download', (req, res) => {
     }
 
     // Sicherheitsmaßnahme: Bereinige UserID und Dateipfad
-    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeUserId = userId.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
     // Normalisiere Pfad und stelle sicher, dass er innerhalb des erwarteten Output-Verzeichnisses liegt
     const requestedPath = path.normalize(filePathQuery);
     const baseOutputDir = path.join(__dirname, 'output');
@@ -91,19 +140,21 @@ app.get('/download', (req, res) => {
     });
 });
 
-// Socket.IO Logik (wie in deiner socket.js Datei, hier nur der Listener)
+// Socket.IO Logik
 io.on('connection', (socketClient) => {
-     console.log(`User connected: ${socketClient.id}`);
+     console.log(`User connected: ${socketClient.id}, authenticated: ${socketClient.authenticated}`);
 
-     // Hier kommen die Listener für 'submit_task' etc. hin,
-     // die dann centralOrchestrator aufrufen und Events zurücksenden.
-     // Beispiel:
+     // Use actual userId from authentication if available, otherwise use socket ID
+     const userId = socketClient.authenticated ? socketClient.userId : socketClient.id;
+     
      socketClient.on('submit_task', async (data) => {
          const { task } = data;
-         const userId = socketClient.id; // Verwende Socket-ID als User-ID
-         console.log(`Task received from ${userId}: ${task}`);
+         // Use the userId from the message if authenticated, otherwise use socket ID
+         const taskUserId = socketClient.authenticated ? (data.userId || userId) : socketClient.id;
+         
+         console.log(`Task received from ${taskUserId}: ${task}`);
          // Rufe den Orchestrator auf (angenommen, er ist hier verfügbar)
-         // await centralOrchestrator(task, userId);
+         // await centralOrchestrator(task, taskUserId);
          // Stelle sicher, dass centralOrchestrator ioServer verwendet, um Events zu senden
      });
 

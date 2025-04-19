@@ -26,11 +26,12 @@
                 <li><a href="#"><i class="fas fa-history"></i> History</a></li>
                 <li><a href="#"><i class="fas fa-robot"></i> Agents</a></li>
                 <li><a href="#"><i class="fas fa-folder"></i> Projects</a></li>
-                <li><a href="#"><i class="fas fa-cog"></i> Settings</a></li>
+                <li><a href="/settings"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
             <div class="sidebar-footer">
-                <!-- Optional: User Info or other links -->
-                <span>User: John Doe</span>
+                <!-- User Info updated with real data -->
+                <span id="user-info">User: Loading...</span>
+                <button id="logout-button" class="logout-button"><i class="fas fa-sign-out-alt"></i> Logout</button>
                 <div class="social-links">
                     <a href="https://x.com/neo_original_x"><i class="fab fa-x"></i></a>
                     <a href="https://github.com/neooriginal"><i class="fab fa-github"></i></a>
@@ -66,5 +67,47 @@
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
     <!-- Marked.js for Markdown Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <script>
+        // Authentication check
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is logged in
+            const userId = localStorage.getItem('userId');
+            const userEmail = localStorage.getItem('userEmail');
+            const authToken = localStorage.getItem('authToken');
+            
+            if (!userId || !authToken) {
+                // Redirect to login page if not authenticated
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            // Update user info in the sidebar
+            document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
+            
+            // Set up logout button
+            document.getElementById('logout-button').addEventListener('click', function() {
+                // Clear authentication data
+                localStorage.removeItem('userId');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('authToken');
+                
+                // Redirect to login page
+                window.location.href = 'login.html';
+            });
+            
+            // Validate token with server (optional additional security)
+            fetch('/api/validate-token', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            }).catch(error => {
+                console.error('Token validation error:', error);
+                // If we can't reach the server, still allow the user to continue
+                // You might want to change this behavior depending on your security requirements
+            });
+        });
+    </script>
 </body>
 </html> 

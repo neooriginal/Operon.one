@@ -94,7 +94,8 @@ Consider the entire context and all requirements before generating a response.
     systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING AND NEVER USE PLACEHOLDERS. Focus on accuracy and correctness over lengthy explanations. Prioritize functionality over verbose descriptions. Fully address all specifications and requirements."
 
     //Personality
-    prompt = prompt + "Personality you shall act in: "+getPersonalityPrompt(userId)+"END OF PERSONALITY.";
+    const personalityPrompt = await getPersonalityPrompt(userId);
+    prompt = prompt + "Personality you shall act in: " + personalityPrompt + "END OF PERSONALITY.";
     systemMessage = systemMessage + "The user will also provide the personality you shall respond in. Do not acknowledge this and only act like it.";
     
     let messagesForAPI = [

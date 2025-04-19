@@ -4,10 +4,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendButton = document.getElementById('send-button');
     const statusDisplay = document.getElementById('status-display'); // Referenz zum Statusbereich
 
+    // Get user authentication information
+    const userId = localStorage.getItem('userId');
+    const userEmail = localStorage.getItem('userEmail');
+    const authToken = localStorage.getItem('authToken');
+
+    // Redirect to login if not authenticated
+    if (!userId || !authToken) {
+        window.location.href = 'login.html';
+        return;
+    }
+
     // --- Socket.IO Verbindung herstellen ---
     // Stelle sicher, dass die URL zu deinem Server passt (wo socket.js läuft)
     const socket = io('http://localhost:3000', {
-         transports: ['websocket'] // Bevorzuge WebSocket für bessere Performance
+         transports: ['websocket'], // Bevorzuge WebSocket für bessere Performance
+         auth: {
+             token: authToken,
+             userId: userId
+         }
      });
 
     socket.on('connect', () => {
@@ -243,13 +258,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Nachrichten senden --- 
     function handleSendMessage() {
-        const messageText = messageInput.value.trim();
-        if (messageText !== '') {
-            addMessage(messageText, 'user');
-            messageInput.value = '';
-            socket.emit('submit_task', { task: messageText, userId: socket.id });
-            updateStatusDisplay('Waiting for response...', 'loading'); // Update status after sending
-        }
+        const message = messageInput.value.trim();
+        if (!message) return;
+
+        // Add the user's message to the chat
+        addMessage(message, 'user');
+        messageInput.value = '';
+
+        // Show loading indicator
+        updateStatusDisplay('Processing your request...', 'loading');
+
+        // Submit to server with user ID
+        socket.emit('submit_task', { 
+            task: message, 
+            userId: userId 
+        });
+
+        // Disable input while processing
+        messageInput.disabled = true;
+        sendButton.disabled = true;
     }
 
     sendButton.addEventListener('click', handleSendMessage);
@@ -269,7 +296,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listener für Status-Updates
     socket.on('status_update', (data) => {
-        updateStatusDisplay(data.status || 'Processing...', 'status_update');
+        // Only process events for the current user
+        if (data.userId === userId) {
+            console.log('Status update:', data);
+            updateStatusDisplay(data.status || 'Processing...', 'status_update');
+        }
     });
 
     // Listener für detaillierte Schritt-Informationen (Plan)
@@ -297,20 +328,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listener für abgeschlossene Schritte (zum Aktualisieren des Status)
     socket.on('step_completed', (data) => {
-        updateStatusDisplay(`Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}`, 'status_update');
-        const stepId = `step-${data.metrics.stepIndex}`;
-        const stepElement = chatMessages.querySelector(`.action-element[data-step-id="${stepId}"]`);
-        if (stepElement) {
-            // Icon auf 'erledigt' ändern
-            const iconContainer = stepElement.querySelector('.action-icon');
-            if (iconContainer) {
-                iconContainer.innerHTML = getIconForType('step_completed');
-                 iconContainer.style.color = '#28a745'; // Grün für Erfolg
+        // Only process events for the current user
+        if (data.userId === userId) {
+            console.log('Step completed:', data);
+            updateStatusDisplay(`Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}`, 'status_update');
+            const stepId = `step-${data.metrics.stepIndex}`;
+            const stepElement = chatMessages.querySelector(`.action-element[data-step-id="${stepId}"]`);
+            if (stepElement) {
+                // Icon auf 'erledigt' ändern
+                const iconContainer = stepElement.querySelector('.action-icon');
+                if (iconContainer) {
+                    iconContainer.innerHTML = getIconForType('step_completed');
+                     iconContainer.style.color = '#28a745'; // Grün für Erfolg
+                }
+                // Optional: Weitere Details hinzufügen oder Stil ändern
+                stepElement.style.opacity = '0.7'; // Leicht ausblenden
             }
-            // Optional: Weitere Details hinzufügen oder Stil ändern
-            stepElement.style.opacity = '0.7'; // Leicht ausblenden
+            // Kein separates addActionElement mehr hier
         }
-        // Kein separates addActionElement mehr hier
     });
 
      // Listener for file events - UPDATED with type check
@@ -349,40 +384,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listener for task completion - UPDATED with type check
     socket.on('task_completed', (data) => {
-        updateStatusDisplay('Task Completed', 'completed');
-        let resultText = 'Task finished.';
-         if (typeof data.result === 'string') {
-             resultText = data.result;
-         } else if (typeof data.result === 'object') {
-             // Avoid overly long JSON strings in the chat message itself
-             resultText = 'Task completed. Check output files or final status element for details.'; // Or provide a short summary
-             console.log("Task Result Object:", data.result); // Log the full object
-         }
-        addMessage(resultText, 'ai');
-
-        // Display output files if provided directly in this event
-        if (data.outputFiles && Array.isArray(data.outputFiles) && data.outputFiles.length > 0) {
-             const filesGroupContent = addStepGroup(`Result Files (${data.outputFiles.length})`, false);
-             data.outputFiles.forEach(fileInfo => {
-                 if (fileInfo && typeof fileInfo.fileName === 'string' && typeof fileInfo.path === 'string') {
-                    addFileDisplayElement(fileInfo.fileName, fileInfo.path, filesGroupContent);
-                 } else {
-                     console.warn("Received invalid file info in task_completed outputFiles:", fileInfo);
-                 }
-             });
-         }
-         // Add a final summary action element (optional)
-         const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
-         const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
-         addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
-
+        // Only process events for the current user
+        if (data.userId === userId) {
+            console.log('Task completed:', data);
+            const result = data.result || 'Task completed successfully';
+            
+            addMessage(result, 'ai');
+            updateStatusDisplay('Task completed', 'completed');
+            
+            // Re-enable input
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            
+            // Display output files if provided directly in this event
+            if (data.outputFiles && Array.isArray(data.outputFiles) && data.outputFiles.length > 0) {
+                 const filesGroupContent = addStepGroup(`Result Files (${data.outputFiles.length})`, false);
+                 data.outputFiles.forEach(fileInfo => {
+                     if (fileInfo && typeof fileInfo.fileName === 'string' && typeof fileInfo.path === 'string') {
+                        addFileDisplayElement(fileInfo.fileName, fileInfo.path, filesGroupContent);
+                     } else {
+                         console.warn("Received invalid file info in task_completed outputFiles:", fileInfo);
+                     }
+                 });
+             }
+             // Add a final summary action element (optional)
+             const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
+             const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
+             addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
+        }
     });
 
     // Listener für Fehler
     socket.on('task_error', (data) => {
-        updateStatusDisplay(`Error: ${data.error || 'Unknown error'}`, 'error');
-        addMessage(`Error: ${data.error || 'Unknown error'}`, 'system');
-        // addActionElement('Fehler aufgetreten', data.error || 'Details nicht verfügbar', 'task_error'); // Kann weg, da im Status angezeigt
+        // Only process events for the current user
+        if (data.userId === userId) {
+            console.error('Task error:', data);
+            addActionElement('Error', data.error, 'error');
+            updateStatusDisplay('Task failed', 'error');
+            
+            // Re-enable input
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+        }
+    });
+
+    // --- Event listening for socket.io events ---
+    socket.on('task_received', (data) => {
+        // Only process events for the current user
+        if (data.userId === userId) {
+            console.log('Task received:', data);
+            updateStatusDisplay('Task received', 'status_update');
+        }
     });
 
     // --- Initiales Setup oder Beispiel entfernen ---

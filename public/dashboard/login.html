@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OperonOne - Login</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #070b14;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .login-container {
+            background-color: rgba(15, 23, 42, 0.7);
+            padding: 2rem;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+        
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 5px;
+            border: 1px solid #1e293b;
+            background-color: #0f172a;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            border-color: #38bdf8;
+        }
+        
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 5px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .register-link {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+        
+        .register-link a {
+            color: #38bdf8;
+            text-decoration: none;
+        }
+        
+        .error-message {
+            color: #ef4444;
+            margin-top: 1rem;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>OperonOne</h1>
+        
+        <form id="login-form">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <button type="submit">Log In</button>
+            
+            <div id="error-message" class="error-message"></div>
+        </form>
+        
+        <div class="register-link">
+            Don't have an account? <a href="register.html">Register</a>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('error-message');
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Save user data to localStorage
+                    localStorage.setItem('userId', data.id);
+                    localStorage.setItem('userEmail', data.email);
+                    localStorage.setItem('authToken', data.token);
+                    
+                    // Redirect to chat page
+                    window.location.href = 'chat.html';
+                } else {
+                    errorMessage.style.display = 'block';
+                    errorMessage.textContent = data.error || 'Login failed';
+                }
+            } catch (error) {
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = 'An error occurred during login';
+                console.error('Login error:', error);
+            }
+        });
+    </script>
+</body>
+</html> 
