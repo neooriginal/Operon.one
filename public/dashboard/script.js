@@ -578,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return contentElement; // Content-Container zurückgeben
     }
 
-    function addFileDisplayElement(fileName, filePath, parentElement = chatMessages) {
+    function addFileDisplayElement(fileName, filePath, parentElement = chatMessages, fileId = null, fileType = 'container') {
         // Ensure fileName is a string before proceeding
         const displayFileName = (typeof fileName === 'string') ? fileName : 'Unnamed File';
         const safeFilePath = (typeof filePath === 'string') ? filePath : ''; // Use empty string if path is invalid
@@ -593,30 +593,128 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>${displayFileName}</span>
         `;
 
-        const downloadButton = document.createElement('a');
-        downloadButton.classList.add('download-button');
-        // Only add href if filePath is valid
-        if (safeFilePath) {
-            downloadButton.href = `/download?userId=${socket.id}&filePath=${encodeURIComponent(safeFilePath)}`;
-        } else {
-            downloadButton.style.pointerEvents = 'none'; // Disable click if path is invalid
-            downloadButton.style.opacity = '0.5';
-        }
-        downloadButton.target = '_blank';
-        downloadButton.innerHTML = `
-            <i class="fas fa-download"></i> Download
+        // Create view content button instead of download button
+        const viewButton = document.createElement('button');
+        viewButton.classList.add('view-button');
+        viewButton.innerHTML = `
+            <i class="fas fa-eye"></i> View
         `;
-        // Use the original (potentially non-string) filename for the download attribute if needed, 
-        // but it's safer to use the processed displayFileName
-        downloadButton.setAttribute('download', displayFileName);
+        
+        // Only enable if we have a fileId or a valid path
+        if (!fileId && !safeFilePath) {
+            viewButton.style.pointerEvents = 'none'; // Disable click if no valid identifier
+            viewButton.style.opacity = '0.5';
+        }
+        
+        // Add click event to fetch and display content from DB
+        viewButton.addEventListener('click', async () => {
+            try {
+                // If we have a fileId, use it directly
+                if (fileId) {
+                    const response = await fetch(`/api/getFileContent/${fileType}/${fileId}`);
+                    if (!response.ok) {
+                        throw new Error(`Error fetching file content: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    displayFileContent(data.fileName, data.content, data.fileExtension);
+                } 
+                // Otherwise try to find the file ID based on the path
+                else if (safeFilePath) {
+                    // First find the file by path
+                    const findResponse = await fetch(`/api/findFile?path=${encodeURIComponent(safeFilePath)}&type=${fileType}`);
+                    
+                    if (!findResponse.ok) {
+                        throw new Error('File not found in database');
+                    }
+                    
+                    // Get the file ID and other details
+                    const fileData = await findResponse.json();
+                    
+                    // Now get the content using the ID
+                    const contentResponse = await fetch(`/api/getFileContent/${fileType}/${fileData.id}`);
+                    if (!contentResponse.ok) {
+                        throw new Error(`Error fetching file content: ${contentResponse.statusText}`);
+                    }
+                    
+                    const contentData = await contentResponse.json();
+                    displayFileContent(contentData.fileName, contentData.content, contentData.fileExtension);
+                }
+            } catch (error) {
+                console.error('Error viewing file:', error);
+                alert('Error viewing file content: ' + error.message);
+            }
+        });
 
         fileElement.appendChild(fileInfo);
-        fileElement.appendChild(downloadButton);
+        fileElement.appendChild(viewButton);
 
         parentElement.appendChild(fileElement);
         scrollToBottomIfNeeded(parentElement);
 
         return fileElement;
+    }
+    
+    // New function to display file content in a modal or expandable element
+    function displayFileContent(fileName, content, fileExtension) {
+        // Create modal container
+        const modal = document.createElement('div');
+        modal.classList.add('file-content-modal');
+        
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.classList.add('file-content-modal-content');
+        
+        // Add file header
+        const fileHeader = document.createElement('div');
+        fileHeader.classList.add('file-content-header');
+        fileHeader.innerHTML = `
+            <h3>${fileName}</h3>
+            <button class="close-button">&times;</button>
+        `;
+        
+        // Add file content with syntax highlighting if possible
+        const contentElement = document.createElement('pre');
+        contentElement.classList.add('file-content');
+        
+        // Apply syntax highlighting if extension is supported
+        if (fileExtension && ['js', 'py', 'java', 'html', 'css', 'json', 'xml', 'c', 'cpp', 'cs'].includes(fileExtension.toLowerCase())) {
+            contentElement.innerHTML = `<code class="language-${fileExtension}">${escapeHtml(content)}</code>`;
+            
+            // If using a highlighting library like highlight.js, initialize it here
+            // For example: hljs.highlightElement(contentElement.querySelector('code'));
+        } else {
+            contentElement.textContent = content;
+        }
+        
+        // Add close functionality
+        modalContent.appendChild(fileHeader);
+        modalContent.appendChild(contentElement);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        // Add close button event
+        const closeButton = fileHeader.querySelector('.close-button');
+        closeButton.addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+        
+        // Also close when clicking outside the modal content
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+    }
+    
+    // Helper function to escape HTML content for safe display
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     function getIconForType(type) {
@@ -987,20 +1085,51 @@ document.addEventListener('DOMContentLoaded', () => {
             sendButton.disabled = false;
             
             // Display output files if provided directly in this event
-            if (data.outputFiles && Array.isArray(data.outputFiles) && data.outputFiles.length > 0) {
-                 const filesGroupContent = addStepGroup(`Result Files (${data.outputFiles.length})`, false);
-                 data.outputFiles.forEach(fileInfo => {
-                     if (fileInfo && typeof fileInfo.fileName === 'string' && typeof fileInfo.path === 'string') {
-                        addFileDisplayElement(fileInfo.fileName, fileInfo.path, filesGroupContent);
-                     } else {
-                         console.warn("Received invalid file info in task_completed outputFiles:", fileInfo);
-                     }
-                 });
-             }
-             // Add a final summary action element (optional)
-             const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
-             const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
-             addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
+            if (data.outputFiles) {
+                // Handle the new format: { host: [...], container: [...] }
+                const hostFiles = data.outputFiles.host || [];
+                const containerFiles = data.outputFiles.container || [];
+                const totalFiles = hostFiles.length + containerFiles.length;
+                
+                if (totalFiles > 0) {
+                    const filesGroupContent = addStepGroup(`Result Files (${totalFiles})`, false);
+                    
+                    // Add container files with type
+                    containerFiles.forEach(fileInfo => {
+                        if (fileInfo && typeof fileInfo.fileName === 'string') {
+                            addFileDisplayElement(
+                                fileInfo.fileName, 
+                                fileInfo.path, 
+                                filesGroupContent,
+                                fileInfo.id,
+                                'container'
+                            );
+                        } else {
+                            console.warn("Received invalid container file info:", fileInfo);
+                        }
+                    });
+                    
+                    // Add host files with type
+                    hostFiles.forEach(fileInfo => {
+                        if (fileInfo && typeof fileInfo.fileName === 'string') {
+                            addFileDisplayElement(
+                                fileInfo.fileName, 
+                                fileInfo.path, 
+                                filesGroupContent,
+                                fileInfo.id,
+                                'host'
+                            );
+                        } else {
+                            console.warn("Received invalid host file info:", fileInfo);
+                        }
+                    });
+                }
+            }
+            
+            // Add a final summary action element (optional)
+            const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
+            const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
+            addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
         }
     });
 

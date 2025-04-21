@@ -1,3 +1,4 @@
+const docker = require('../docker');
 const fs = require('fs');
 const path = require('path');
 const ai = require('../AI/ai');
@@ -5,16 +6,32 @@ const contextManager = require('../../utils/context');
 const { fileFunctions } = require('../../database');
 
 // Map to store files created inside containers reported by other tools (bash/python)
-// Not needed with database storage
-// const containerFilesTracked = new Map(); // userId -> Set<containerPath>
+const containerFilesTracked = new Map(); // userId -> Set<containerPath>
 
 // Container management with better error handling
-async function getUserId(containerName) {
-    // Parse userId from containerName or return 'default'
-    return containerName.includes('-') ? containerName.split('-')[2] : 'default';
+async function getContainer(userId = 'default', retries = 3) {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const containerName = await docker.createContainer(userId);
+            return containerName;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Failed to get container (attempt ${attempt}/${retries}): ${error.message}`);
+            
+            // Wait before retrying (exponential backoff)
+            if (attempt < retries) {
+                const delay = Math.min(100 * Math.pow(2, attempt), 2000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    
+    throw new Error(`Failed to get container after ${retries} attempts: ${lastError?.message || 'Unknown error'}`);
 }
 
-// NEW Function to Track Container Files reported by other tools
+// NEW Function to Track Container Files with content
 async function trackContainerFile(userId, containerPath, chatId = 1) {
     if (!userId || !containerPath) {
         console.error('Invalid userId or containerPath for tracking');
@@ -22,9 +39,36 @@ async function trackContainerFile(userId, containerPath, chatId = 1) {
     }
 
     try {
-        // Store in database
-        await fileFunctions.trackContainerFile(userId, containerPath, null, null, chatId);
-        return true;
+        // Get a container instance to read the file (since the original might be deleted)
+        const tempContainer = await getContainer(userId);
+        
+        try {
+            // Read the file content from container
+            const fileContent = await docker.readFile(tempContainer, containerPath);
+            
+            // Get file extension
+            const fileExtension = path.extname(containerPath).replace('.', '');
+            
+            // Extract filename from path
+            const fileName = path.basename(containerPath);
+            
+            // Store in database with content and extension
+            await fileFunctions.trackContainerFile(userId, containerPath, fileName, null, chatId, fileContent, fileExtension);
+            
+            return true;
+        } catch (readError) {
+            console.error(`Error reading container file for tracking: ${readError.message}`);
+            // Still track the file even if content can't be read
+            await fileFunctions.trackContainerFile(userId, containerPath, null, null, chatId);
+            return false;
+        } finally {
+            // Clean up the temporary container
+            try {
+                await docker.removeContainer(tempContainer);
+            } catch (cleanupError) {
+                console.error(`Error cleaning up temporary container: ${cleanupError.message}`);
+            }
+        }
     } catch (error) {
         console.error('Error tracking container file:', error.message);
         return false;
@@ -43,31 +87,8 @@ async function saveToFile(containerName, content, userPath, filename) {
         throw new Error(`File path must be absolute within the container: ${filePath}`);
     }
     
-    try {
-        // Get userId from containerName (assuming containerName format includes userId)
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // Extract file extension
-        const extension = path.extname(normalizedFilename).replace('.', '');
-        
-        // Save file to database instead of Docker container
-        const result = await fileFunctions.saveContainerFileWithContent(
-            userId, 
-            filePath, 
-            content, 
-            normalizedFilename, 
-            extension, 
-            null, 
-            chatId
-        );
-        
-        console.log(`File saved to database: ${filePath}`);
-        return filePath; // Return the absolute path used
-    } catch (error) {
-        console.error(`Error saving file to database: ${error.message}`);
-        throw error;
-    }
+    await docker.writeFile(containerName, filePath, content);
+    return filePath; // Return the absolute path used
 }
 
 async function readFile(containerName, userPath, filename) {
@@ -81,30 +102,7 @@ async function readFile(containerName, userPath, filename) {
         throw new Error(`File path must be absolute within the container: ${filePath}`);
     }
     
-    try {
-        // Get userId from containerName (assuming containerName format includes userId)
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // Find the container file record first
-        const files = await fileFunctions.getTrackedFiles(userId, chatId);
-        const containerFile = files.containerFiles.find(file => file.containerPath === filePath);
-        
-        if (!containerFile) {
-            throw new Error(`File not found in database: ${filePath}`);
-        }
-        
-        // Get the file content from database
-        const fileContent = await fileFunctions.getFileContent(userId, containerFile.id, 'container', chatId);
-        if (!fileContent) {
-            throw new Error(`File content not found in database: ${filePath}`);
-        }
-        
-        return fileContent.content;
-    } catch (error) {
-        console.error(`Error reading file from database: ${error.message}`);
-        throw error;
-    }
+    return await docker.readFile(containerName, filePath);
 }
 
 async function createDirectory(containerName, userPath) {
@@ -116,18 +114,8 @@ async function createDirectory(containerName, userPath) {
         throw new Error(`Directory path must be absolute within the container: ${normalizedPath}`);
     }
     
-    try {
-        // Get userId from containerName (assuming containerName format includes userId)
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // Create directory in database
-        await fileFunctions.createDirectory(userId, normalizedPath, chatId);
-        return true;
-    } catch (error) {
-        console.error(`Error creating directory in database: ${error.message}`);
-        throw error;
-    }
+    await docker.executeCommand(containerName, `mkdir -p ${normalizedPath}`);
+    return true;
 }
 
 async function deleteFile(containerName, userPath, filename) {
@@ -141,27 +129,8 @@ async function deleteFile(containerName, userPath, filename) {
         throw new Error(`File path must be absolute within the container: ${filePath}`);
     }
     
-    try {
-        // Get userId from containerName
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // Find the file in database
-        const files = await fileFunctions.getTrackedFiles(userId, chatId);
-        const fileToDelete = files.containerFiles.find(file => file.containerPath === filePath);
-        
-        if (!fileToDelete) {
-            // If file not found, consider it already deleted
-            return true;
-        }
-        
-        // Delete the file and its content
-        await fileFunctions.deleteTrackedFiles(userId, [fileToDelete.id], 'container');
-        return true;
-    } catch (error) {
-        console.error(`Error deleting file from database: ${error.message}`);
-        throw error;
-    }
+    await docker.executeCommand(containerName, `rm -f ${filePath}`);
+    return true;
 }
 
 async function deleteDirectory(containerName, userPath) {
@@ -173,18 +142,8 @@ async function deleteDirectory(containerName, userPath) {
         throw new Error(`Directory path must be absolute within the container: ${normalizedPath}`);
     }
     
-    try {
-        // Get userId from containerName
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // Delete directory from database
-        await fileFunctions.deleteDirectory(userId, normalizedPath, chatId);
-        return true;
-    } catch (error) {
-        console.error(`Error deleting directory from database: ${error.message}`);
-        throw error;
-    }
+    await docker.executeCommand(containerName, `rm -rf ${normalizedPath}`);
+    return true;
 }
 
 async function listFiles(containerName, userPath) {
@@ -196,18 +155,9 @@ async function listFiles(containerName, userPath) {
         throw new Error(`Directory path must be absolute within the container: ${normalizedPath}`);
     }
     
-    try {
-        // Get userId from containerName
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // List files from database
-        const files = await fileFunctions.listFilesInDirectory(userId, normalizedPath, chatId);
-        return files;
-    } catch (error) {
-        console.error(`Error listing files from database: ${error.message}`);
-        throw error;
-    }
+    // Use find with -maxdepth 1 to list only files in the target directory
+    const { stdout } = await docker.executeCommand(containerName, `find ${normalizedPath} -maxdepth 1 -type f -printf "%f\\n"`);
+    return stdout.split('\\n').filter(Boolean);
 }
 
 async function listDirectories(containerName, userPath) {
@@ -219,18 +169,10 @@ async function listDirectories(containerName, userPath) {
         throw new Error(`Directory path must be absolute within the container: ${normalizedPath}`);
     }
     
-    try {
-        // Get userId from containerName
-        const userId = containerName.includes('-') ? containerName.split('-')[2] : 'default';
-        const chatId = 1; // Default chatId
-        
-        // List directories from database
-        const directories = await fileFunctions.listDirectoriesInDirectory(userId, normalizedPath, chatId);
-        return directories;
-    } catch (error) {
-        console.error(`Error listing directories from database: ${error.message}`);
-        throw error;
-    }
+    // Use find with -maxdepth 1 to list only directories in the target directory
+    // Exclude the directory itself ('.')
+    const { stdout } = await docker.executeCommand(containerName, `find ${normalizedPath} -maxdepth 1 -type d -not -path "${normalizedPath}" -printf "%f\\n"`);
+    return stdout.split('\\n').filter(Boolean);
 }
 
 // Modified runStep to accept containerName, remove path validation, and track written files
@@ -334,9 +276,12 @@ async function runStep(containerName, task, otherAIData, userId = 'default', cha
             });
             toolState.writtenFiles.push(absoluteFilePath); // Add to written files list
             
-            // Track container file in database
+            // Extract file extension
+            const fileExtension = path.extname(result.filename).replace('.', '');
+            
+            // Track container file in database with content
             try {
-                await fileFunctions.trackContainerFile(userId, absoluteFilePath, null, null, chatId);
+                await fileFunctions.trackContainerFile(userId, absoluteFilePath, result.filename, null, chatId, result.content, fileExtension);
             } catch (trackingError) {
                 console.warn(`Failed to track container file ${absoluteFilePath}: ${trackingError.message}`);
             }
@@ -523,55 +468,59 @@ async function runStep(containerName, task, otherAIData, userId = 'default', cha
     }
 }
 
-// Modified writeFileDirectly to align with new saveToFile signature
+// Modified writeFileDirectly to store content directly in database
 async function writeFileDirectly(content, userPath, filename, userId = 'default', chatId = 1) {
+    let containerName = null;
     try {
-        // Normalize paths for consistent storage
-        const normalizedPath = userPath?.replace(/\\/g, '/') || '/app/output';
-        const normalizedFilename = filename?.replace(/\\/g, '/') || '';
-        const filePath = path.posix.join(normalizedPath, normalizedFilename);
-        
-        // Ensure path is absolute
-        if (!path.posix.isAbsolute(filePath)) {
-            throw new Error(`File path must be absolute: ${filePath}`);
-        }
-        
-        // Extract file extension
-        const extension = path.extname(normalizedFilename).replace('.', '');
-        
-        // Save directly to database
-        const result = await fileFunctions.saveContainerFileWithContent(
-            userId, 
-            filePath, 
-            content, 
-            normalizedFilename, 
-            extension, 
-            null, 
-            chatId
-        );
-        
-        // Update tool state
+        containerName = await getContainer(userId); // Get container for this specific operation
+        const absoluteFilePath = await saveToFile(containerName, content, userPath, filename);
+
+        // Update tool state if necessary
         const toolState = contextManager.getToolState('fileSystem', userId) || {
             history: [],
             operations: [],
             writtenFiles: []
         };
-        toolState.writtenFiles.push(filePath);
+        toolState.writtenFiles.push(absoluteFilePath);
         toolState.writtenFiles = [...new Set(toolState.writtenFiles || [])];
         contextManager.setToolState('fileSystem', toolState, userId);
         
-        return filePath;
-    } catch (error) {
-        console.error(`Error in writeFileDirectly: ${error.message}`);
-        throw error;
+        // Extract file extension
+        const fileExtension = path.extname(filename).replace('.', '');
+        
+        // Track file in database with content
+        try {
+            await fileFunctions.trackContainerFile(userId, absoluteFilePath, filename, null, chatId, content, fileExtension);
+        } catch (trackingError) {
+            console.warn(`Failed to track container file ${absoluteFilePath}: ${trackingError.message}`);
+        }
+
+        return absoluteFilePath; // Return path
+
+    } finally {
+        // Clean up the container used for this operation
+        if (containerName) {
+            try {
+                await docker.removeContainer(containerName);
+            } catch (cleanupError) {
+                console.error(`Error during container cleanup: ${cleanupError.message}`);
+            }
+        }
     }
 }
 
 // Modified runTask to manage container lifecycle and pass containerName to runStep
 async function runTask(task, otherAIData, callback, userId = 'default', chatId = 1) {
+    let containerName = null;
+    
     try {
-        // Create a pseudo container name for compatibility with existing code
-        const containerName = `pseudo-container-${Date.now()}-${userId}`;
+        // Start by checking Docker availability
+        if (!await docker.checkDockerAvailability()) {
+            throw new Error('Docker is not available or not running');
+        }
+        
+        // Get a container for the duration of this task
+        containerName = await getContainer(userId);
         
         // Pass the containerName to runStep
         const result = await runStep(containerName, task, otherAIData, userId, chatId);
@@ -594,6 +543,18 @@ async function runTask(task, otherAIData, callback, userId = 'default', chatId =
         }
         
         return errorResult;
+    } finally {
+        // Clean up the container used for this task ONLY if it was created
+        if (containerName) {
+            try {
+                 // We should remove the specific container used for the task
+                 await docker.removeContainer(containerName);
+                 // Let's keep the cleanupAllContainers call in index.js as a final safety net
+                 // await docker.cleanupAllContainers(); // Removed this redundant call
+            } catch (cleanupError) {
+                console.error(`Error during container cleanup: ${cleanupError.message}`);
+            }
+        }
     }
 }
 
@@ -644,20 +605,19 @@ async function getWrittenFiles(userId = 'default', chatId = 1) {
 }
 
 module.exports = {
-    // Remove Docker-specific functions
-    runStep,
-    writeFileDirectly,
+    // Keep direct helpers if they are needed elsewhere, but ensure they get containerName
+    // saveToFile, // These might become internal if only runStep uses them
+    // readFile,
+    // createDirectory,
+    // deleteFile,
+    // deleteDirectory,
+    // listFiles,
+    // listDirectories,
+    runStep, // Keep if needed externally, but runTask is the main entry point
+    writeFileDirectly, // Keep this exported function
     runTask,
-    getWrittenFiles,
+    getWrittenFiles, // Export the new function
     trackFile,
-    trackContainerFile,
-    // These functions now work with the database, not Docker
-    saveToFile,
-    readFile,
-    createDirectory,
-    deleteFile,
-    deleteDirectory,
-    listFiles,
-    listDirectories
+    trackContainerFile // Ensure this is exported
 };
 

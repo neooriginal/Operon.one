@@ -153,54 +153,6 @@ app.delete('/api/chats/:chatId', authenticateToken, async (req, res) => {
     }
 });
 
-// Download-Route
-app.get('/download', authenticateToken, (req, res) => {
-    const userId = req.user.id;
-    const filePathQuery = req.query.filePath;
-
-    if (!userId || !filePathQuery) {
-        return res.status(400).send('Missing userId or filePath query parameter.');
-    }
-
-    // Sicherheitsmaßnahme: Bereinige UserID und Dateipfad
-    const safeUserId = userId.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
-    // Normalisiere Pfad und stelle sicher, dass er innerhalb des erwarteten Output-Verzeichnisses liegt
-    const requestedPath = path.normalize(filePathQuery);
-    const baseOutputDir = path.join(__dirname, 'output');
-    const userOutputDir = path.join(baseOutputDir, safeUserId);
-    const absoluteRequestedPath = path.resolve(baseOutputDir, requestedPath); // Versuche, den Pfad relativ zum Output-Ordner aufzulösen
-
-    console.log(`Download request for user ${safeUserId}, path: ${requestedPath}`);
-    console.log(`Absolute path resolved to: ${absoluteRequestedPath}`);
-    console.log(`Expected user directory: ${userOutputDir}`);
-
-    // WICHTIG: Stelle sicher, dass der Pfad nicht außerhalb des User-Verzeichnisses liegt!
-    // Dies ist eine grundlegende Prüfung, je nach Struktur ggf. anpassen!
-    if (!absoluteRequestedPath.startsWith(userOutputDir) && !absoluteRequestedPath.startsWith(baseOutputDir)) { // Erlaube auch direkt im Output-Ordner (falls keine User-ID im Pfad)
-         console.warn('Path traversal attempt detected or file not in expected directory!');
-         return res.status(403).send('Access denied.');
-     }
-
-    // Prüfe, ob die Datei existiert
-    fs.access(absoluteRequestedPath, fs.constants.R_OK, (err) => {
-        if (err) {
-            console.error('File not found or not readable:', err);
-            return res.status(404).send('File not found or cannot be accessed.');
-        }
-
-        // Sende die Datei zum Download
-        res.download(absoluteRequestedPath, path.basename(absoluteRequestedPath), (downloadErr) => {
-            if (downloadErr) {
-                console.error('Error sending file:', downloadErr);
-                // Sende keinen weiteren Fehler, wenn Header bereits gesendet wurden
-                if (!res.headersSent) {
-                    res.status(500).send('Error downloading the file.');
-                }
-            }
-        });
-    });
-});
-
 // Socket.IO Logik
 io.on('connection', (socketClient) => {
      console.log(`User connected: ${socketClient.id}, authenticated: ${socketClient.authenticated}`);
