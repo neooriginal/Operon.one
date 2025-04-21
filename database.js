@@ -103,7 +103,9 @@ function initDatabase() {
     originalName TEXT,
     description TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (userId) REFERENCES users(id)
+    chatId INTEGER DEFAULT 1,
+    FOREIGN KEY (userId) REFERENCES users(id),
+    FOREIGN KEY (chatId) REFERENCES chats(id)
   )`, (err) => {
     if (err) {
       console.error('Error creating container_files table:', err.message);
@@ -120,12 +122,37 @@ function initDatabase() {
     originalName TEXT,
     description TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (userId) REFERENCES users(id)
+    chatId INTEGER DEFAULT 1,
+    FOREIGN KEY (userId) REFERENCES users(id),
+    FOREIGN KEY (chatId) REFERENCES chats(id)
   )`, (err) => {
     if (err) {
       console.error('Error creating host_files table:', err.message);
     } else {
       console.log('Host files table ready');
+    }
+  });
+  
+  // File contents table (for storing actual file contents)
+  db.run(`CREATE TABLE IF NOT EXISTS file_contents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT NOT NULL,
+    fileId INTEGER NOT NULL,
+    fileType TEXT NOT NULL, 
+    extension TEXT,
+    content TEXT NOT NULL,
+    fileSize INTEGER,
+    mimeType TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    chatId INTEGER DEFAULT 1,
+    FOREIGN KEY (userId) REFERENCES users(id),
+    FOREIGN KEY (chatId) REFERENCES chats(id)
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating file_contents table:', err.message);
+    } else {
+      console.log('File contents table ready');
     }
   });
   
@@ -528,11 +555,11 @@ const chatFunctions = {
 // File tracking functions
 const fileFunctions = {
   // Track a container file
-  trackContainerFile(userId, containerPath, originalName = null, description = null) {
+  trackContainerFile(userId, containerPath, originalName = null, description = null, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
-        'INSERT INTO container_files (userId, containerPath, originalName, description) VALUES (?, ?, ?, ?)',
-        [userId, containerPath, originalName, description],
+        'INSERT INTO container_files (userId, containerPath, originalName, description, chatId) VALUES (?, ?, ?, ?, ?)',
+        [userId, containerPath, originalName, description, chatId],
         function(err) {
           if (err) {
             reject(err);
@@ -545,11 +572,11 @@ const fileFunctions = {
   },
   
   // Track a host file
-  trackHostFile(userId, filePath, originalName = null, description = null) {
+  trackHostFile(userId, filePath, originalName = null, description = null, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
-        'INSERT INTO host_files (userId, filePath, originalName, description) VALUES (?, ?, ?, ?)',
-        [userId, filePath, originalName, description],
+        'INSERT INTO host_files (userId, filePath, originalName, description, chatId) VALUES (?, ?, ?, ?, ?)',
+        [userId, filePath, originalName, description, chatId],
         function(err) {
           if (err) {
             reject(err);
@@ -562,7 +589,7 @@ const fileFunctions = {
   },
   
   // Get tracked files for a user
-  getTrackedFiles(userId) {
+  getTrackedFiles(userId, chatId = 1) {
     return new Promise((resolve, reject) => {
       const result = {
         containerFiles: [],
@@ -571,8 +598,8 @@ const fileFunctions = {
       
       // Get container files
       db.all(
-        'SELECT * FROM container_files WHERE userId = ? ORDER BY createdAt DESC',
-        [userId],
+        'SELECT * FROM container_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
+        [userId, chatId],
         (err, containerFiles) => {
           if (err) {
             return reject(err);
@@ -582,8 +609,8 @@ const fileFunctions = {
           
           // Get host files
           db.all(
-            'SELECT * FROM host_files WHERE userId = ? ORDER BY createdAt DESC',
-            [userId],
+            'SELECT * FROM host_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
+            [userId, chatId],
             (err, hostFiles) => {
               if (err) {
                 return reject(err);
@@ -598,7 +625,257 @@ const fileFunctions = {
     });
   },
   
-  // Delete tracked files for a user
+  // Save file content to database
+  saveFileContent(userId, fileId, fileType, content, extension, mimeType = null, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      const fileSize = Buffer.byteLength(content, 'utf8');
+      
+      db.run(
+        `INSERT INTO file_contents 
+         (userId, fileId, fileType, extension, content, fileSize, mimeType, chatId) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, fileId, fileType, extension, content, fileSize, mimeType, chatId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ id: this.lastID, fileSize });
+          }
+        }
+      );
+    });
+  },
+  
+  // Get file content from database
+  getFileContent(userId, fileId, fileType, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM file_contents WHERE userId = ? AND fileId = ? AND fileType = ? AND chatId = ?',
+        [userId, fileId, fileType, chatId],
+        (err, fileContent) => {
+          if (err) {
+            reject(err);
+          } else if (!fileContent) {
+            reject(new Error('File content not found'));
+          } else {
+            resolve(fileContent);
+          }
+        }
+      );
+    });
+  },
+  
+  // Save container file and its content in one operation
+  saveContainerFileWithContent(userId, containerPath, content, originalName = null, extension = null, mimeType = null, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      // First insert the container file record
+      db.run(
+        'INSERT INTO container_files (userId, containerPath, originalName, chatId) VALUES (?, ?, ?, ?)',
+        [userId, containerPath, originalName || path.basename(containerPath), chatId],
+        function(err) {
+          if (err) {
+            return reject(err);
+          }
+          
+          const fileId = this.lastID;
+          
+          // Then save the file content
+          const fileSize = Buffer.byteLength(content, 'utf8');
+          extension = extension || path.extname(containerPath).replace('.', '');
+          
+          db.run(
+            `INSERT INTO file_contents 
+             (userId, fileId, fileType, extension, content, fileSize, mimeType, chatId) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [userId, fileId, 'container', extension, content, fileSize, mimeType, chatId],
+            function(err) {
+              if (err) {
+                reject(err);
+              } else {
+                resolve({ 
+                  fileId, 
+                  contentId: this.lastID, 
+                  containerPath,
+                  fileSize 
+                });
+              }
+            }
+          );
+        }
+      );
+    });
+  },
+  
+  // Get all container files with a specific path prefix (for simulating directories)
+  listContainerFilesByPathPrefix(userId, pathPrefix, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      // Ensure pathPrefix ends with a slash for proper matching
+      if (pathPrefix !== '/' && !pathPrefix.endsWith('/')) {
+        pathPrefix += '/';
+      }
+      
+      db.all(
+        'SELECT * FROM container_files WHERE userId = ? AND chatId = ? AND containerPath LIKE ?',
+        [userId, chatId, pathPrefix + '%'],
+        (err, files) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(files);
+          }
+        }
+      );
+    });
+  },
+  
+  // Simulate directory creation by tracking it in the database
+  createDirectory(userId, dirPath, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      // Store a special marker file to represent the directory
+      const markerFileName = '.directory';
+      const fullPath = dirPath.endsWith('/') ? dirPath + markerFileName : dirPath + '/' + markerFileName;
+      
+      db.run(
+        'INSERT INTO container_files (userId, containerPath, originalName, description, chatId) VALUES (?, ?, ?, ?, ?)',
+        [userId, fullPath, markerFileName, 'Directory marker', chatId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            // Create a special file content entry for this directory marker
+            db.run(
+              `INSERT INTO file_contents 
+               (userId, fileId, fileType, extension, content, fileSize, mimeType, chatId) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [userId, this.lastID, 'container', 'dir', 'directory', 9, 'text/plain', chatId],
+              function(err) {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve({ id: this.lastID, dirPath });
+                }
+              }
+            );
+          }
+        }
+      );
+    });
+  },
+  
+  // Simulate directory deletion by removing all files with a certain path prefix
+  deleteDirectory(userId, dirPath, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      // Ensure dirPath ends with a slash for proper matching
+      if (dirPath !== '/' && !dirPath.endsWith('/')) {
+        dirPath += '/';
+      }
+      
+      // First get all files with this path prefix
+      this.listContainerFilesByPathPrefix(userId, dirPath, chatId)
+        .then(files => {
+          // If no files, treat as success
+          if (!files || files.length === 0) {
+            return resolve({ deleted: 0 });
+          }
+          
+          // Get all fileIds to delete file contents
+          const fileIds = files.map(file => file.id);
+          
+          // Delete file contents first
+          db.run(
+            `DELETE FROM file_contents WHERE userId = ? AND fileType = 'container' AND fileId IN (${fileIds.map(() => '?').join(',')})`,
+            [userId, ...fileIds],
+            (err) => {
+              if (err) {
+                return reject(err);
+              }
+              
+              // Then delete the file records
+              db.run(
+                `DELETE FROM container_files WHERE userId = ? AND chatId = ? AND containerPath LIKE ?`,
+                [userId, chatId, dirPath + '%'],
+                function(err) {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve({ deleted: this.changes });
+                  }
+                }
+              );
+            }
+          );
+        })
+        .catch(err => reject(err));
+    });
+  },
+  
+  // List files in a directory by path prefix 
+  listFilesInDirectory(userId, dirPath, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      // Ensure dirPath ends with a slash for proper matching
+      if (dirPath !== '/' && !dirPath.endsWith('/')) {
+        dirPath += '/';
+      }
+      
+      // Get files with immediate path prefix but not deeper subdirectories
+      db.all(
+        `SELECT containerPath FROM container_files 
+         WHERE userId = ? AND chatId = ? AND containerPath LIKE ? 
+         AND containerPath NOT LIKE ?`,
+        [userId, chatId, dirPath + '%', dirPath + '%/%'],
+        (err, files) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Filter out directory markers and extract file names
+            const fileNames = files
+              .map(file => {
+                // Extract the filename from the path
+                const pathParts = file.containerPath.substring(dirPath.length).split('/');
+                return pathParts[0];
+              })
+              .filter(name => name !== '.directory');
+            
+            // Return unique filenames
+            resolve([...new Set(fileNames)]);
+          }
+        }
+      );
+    });
+  },
+  
+  // List directories in a directory by path prefix
+  listDirectoriesInDirectory(userId, dirPath, chatId = 1) {
+    return new Promise((resolve, reject) => {
+      // Ensure dirPath ends with a slash for proper matching
+      if (dirPath !== '/' && !dirPath.endsWith('/')) {
+        dirPath += '/';
+      }
+      
+      // Find all files with path of at least one level deeper
+      db.all(
+        `SELECT DISTINCT SUBSTR(containerPath, ?, INSTR(SUBSTR(containerPath, ?), '/')) as dirName
+         FROM container_files 
+         WHERE userId = ? AND chatId = ? AND containerPath LIKE ? AND containerPath LIKE ?`,
+        [dirPath.length, dirPath.length, userId, chatId, dirPath + '%', dirPath + '%/%'],
+        (err, directories) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Extract directory names
+            const dirNames = directories
+              .map(dir => dir.dirName.replace('/', ''))
+              .filter(Boolean); // Remove empty strings
+            
+            // Return unique directory names
+            resolve([...new Set(dirNames)]);
+          }
+        }
+      );
+    });
+  },
+
+  // Delete tracked files and their content
   deleteTrackedFiles(userId, fileIds, fileType = 'all') {
     return new Promise((resolve, reject) => {
       let deletedCount = 0;
