@@ -153,6 +153,117 @@ app.delete('/api/chats/:chatId', authenticateToken, async (req, res) => {
     }
 });
 
+// New API endpoint to get file content directly from the database
+app.get('/api/getFileContent/:type/:fileId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const fileId = req.params.fileId;
+    const fileType = req.params.type; // 'container' or 'host'
+    
+    if (!fileId) {
+      return res.status(400).json({ error: 'File ID is required' });
+    }
+    
+    if (fileType !== 'container' && fileType !== 'host') {
+      return res.status(400).json({ error: 'Invalid file type. Must be "container" or "host"' });
+    }
+    
+    // Query the appropriate table based on fileType
+    const tableName = fileType === 'container' ? 'container_files' : 'host_files';
+    const pathField = fileType === 'container' ? 'containerPath' : 'filePath';
+    
+    // Get file content from database
+    const db = require('./database').db;
+    const result = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT fileContent, ${pathField} as filePath, originalName, fileExtension FROM ${tableName} WHERE id = ? AND userId = ?`,
+        [fileId, userId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row);
+          }
+        }
+      );
+    });
+    
+    if (!result) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // If no content is stored in the database
+    if (!result.fileContent) {
+      return res.status(404).json({ error: 'File content not available' });
+    }
+    
+    // Return file content and metadata
+    res.json({
+      filePath: result.filePath,
+      fileName: result.originalName || path.basename(result.filePath),
+      fileExtension: result.fileExtension,
+      content: result.fileContent
+    });
+    
+  } catch (error) {
+    console.error('Error getting file content:', error);
+    res.status(500).json({ error: 'Failed to get file content' });
+  }
+});
+
+// New API endpoint to find file by path
+app.get('/api/findFile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const filePath = req.query.path;
+    const fileType = req.query.type || 'container'; // 'container' or 'host'
+    
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    if (fileType !== 'container' && fileType !== 'host') {
+      return res.status(400).json({ error: 'Invalid file type. Must be "container" or "host"' });
+    }
+    
+    // Query the appropriate table based on fileType
+    const tableName = fileType === 'container' ? 'container_files' : 'host_files';
+    const pathField = fileType === 'container' ? 'containerPath' : 'filePath';
+    
+    // Get file from database
+    const db = require('./database').db;
+    const result = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT id, ${pathField} as filePath, originalName, fileExtension FROM ${tableName} WHERE ${pathField} = ? AND userId = ?`,
+        [filePath, userId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row);
+          }
+        }
+      );
+    });
+    
+    if (!result) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Return file details
+    res.json({
+      id: result.id,
+      filePath: result.filePath,
+      fileName: result.originalName || path.basename(result.filePath),
+      fileExtension: result.fileExtension
+    });
+    
+  } catch (error) {
+    console.error('Error finding file:', error);
+    res.status(500).json({ error: 'Failed to find file' });
+  }
+});
+
 // Socket.IO Logik
 io.on('connection', (socketClient) => {
      console.log(`User connected: ${socketClient.id}, authenticated: ${socketClient.authenticated}`);

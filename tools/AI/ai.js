@@ -3,7 +3,7 @@ const dotenv = require('dotenv');
 const smartModelSelector = require('./smartModelSelector');
 const tokenCalculation = require('./tokenCalculation');
 const contextManager = require('../../utils/context');
-const { getPersonalityPrompt } = require('../personalityEngine/getPersonalityPrompt');
+const personalityEngine = require('../personalityEngine/personalityEngine');
 const io = require('../../socket');
 dotenv.config();
 
@@ -96,14 +96,12 @@ Consider the entire context and all requirements before generating a response.
 
     systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING AND NEVER USE PLACEHOLDERS. Focus on accuracy and correctness over lengthy explanations. Prioritize functionality over verbose descriptions. Fully address all specifications and requirements."
 
-    //Personality
-    const personalityPrompt = await getPersonalityPrompt(userId);
-    prompt = prompt + "Personality you shall act in: " + personalityPrompt + "END OF PERSONALITY.";
-    systemMessage = systemMessage + "The user will also provide the personality you shall respond in. Do not acknowledge this and only act like it.";
+    // Use the new personality engine to generate a dynamic system prompt
+    const dynamicSystemPrompt = await personalityEngine.generateDynamicSystemPrompt(userId, systemMessage, prompt);
     
     let messagesForAPI = [
         {role: "system", content: [
-            {type: "text", text: systemMessage}
+            {type: "text", text: dynamicSystemPrompt}
         ]},
     ];
     
@@ -201,78 +199,48 @@ Consider the entire context and all requirements before generating a response.
         
         // Save updated tool state
         contextManager.setToolState('ai', toolState, userId, chatId);
-
-        if(jsonResponse){
-            const result = parseJSON(responseContent);
-            
-            // Validate result has expected structure if we have validation info
-            if (toolState.lastRequest.expectedStructure) {
-                const validationResult = validateResponse(result, toolState.lastRequest.expectedStructure);
-                if (!validationResult.valid) {
-                    console.warn("Response validation failed:", validationResult.message);
-                    toolState.lastValidationError = validationResult;
-                    contextManager.setToolState('ai', toolState, userId, chatId);
-                }
-            }
-            
-            // Use proper JSON stringification for logging
-            console.log(JSON.stringify(result, null, 2));
-            
-            // If this is a direct response to a user question, emit an event for the frontend
-            if (io && systemMessage.includes("You are an AI agent") && jsonResponse) {
+        
+        // Analyze the interaction to evolve the personality (asynchronously, don't wait)
+        personalityEngine.analyzeUserInteraction(userId, prompt, responseContent)
+            .catch(err => console.error('Error analyzing interaction:', err));
+        
+        // Parse JSON response if needed
+        if (jsonResponse) {
+            try {
+                const jsonResult = parseJSON(responseContent);
+                return jsonResult;
+            } catch (jsonError) {
+                console.error('Error parsing JSON:', jsonError.message);
+                console.log('Raw response:', responseContent);
+                
+                // Attempt to fix common JSON issues
                 try {
-                    // Prepare the text for the UI
-                    let textForUI;
-                    if (jsonResponse) {
-                        if (typeof result === 'object' && result !== null) {
-                            // Check if the object has a direct text field
-                            if (result.text) {
-                                textForUI = result.text;
-                            } else if (result.answer) {
-                                textForUI = result.answer;
-                            } else if (result.result) {
-                                textForUI = result.result;
-                            } else if (result.message) {
-                                textForUI = result.message;
-                            } else if (result.response) {
-                                textForUI = result.response;
-                            } else if (result.content) {
-                                textForUI = result.content;
-                            } else {
-                                // Fallback to JSON string
-                                textForUI = JSON.stringify(result, null, 2);
-                            }
-                        } else {
-                            textForUI = result || responseContent;
-                        }
-                    } else {
-                        textForUI = responseContent;
-                    }
+                    const fixedJson = responseContent
+                        .replace(/\\n/g, '\\n')
+                        .replace(/\\'/g, "\\'")
+                        .replace(/\\"/g, '\\"')
+                        .replace(/\\&/g, '\\&')
+                        .replace(/\\r/g, '\\r')
+                        .replace(/\\t/g, '\\t')
+                        .replace(/\\b/g, '\\b')
+                        .replace(/\\f/g, '\\f');
                     
-                    // Make sure text is a string
-                    if (typeof textForUI !== 'string') {
-                        textForUI = String(textForUI);
-                    }
+                    return parseJSON(fixedJson);
+                } catch (fixError) {
+                    console.error('Failed to fix JSON:', fixError.message);
                     
-                    // Send the response to the client
-                    io.emit('ai_message', { 
-                        userId, 
-                        chatId,
-                        text: textForUI
-                    });
-                } catch (error) {
-                    console.error("Error sending AI message via Socket.IO:", error);
+                    // Fallback to returning the raw string
+                    return {
+                        content: responseContent,
+                        error: true,
+                        message: "Failed to parse JSON response",
+                        fallback: true
+                    };
                 }
             }
-            
-            // Store response in tool state
-            toolState.lastResponse = result;
-            contextManager.setToolState('ai', toolState, userId, chatId);
-            
-            return result;
-        } else {
-            return responseContent;
         }
+        
+        return responseContent;
     } catch (error) {
         console.error(`AI call error: ${error.message}`);
         

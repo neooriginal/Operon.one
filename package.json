@@ -20,6 +20,7 @@
     "express": "^5.1.0",
     "figlet": "^1.8.0",
     "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.6.9",
     "openai": "^4.90.0",
     "puppeteer": "^24.4.0",
     "rimraf": "^5.0.5",
