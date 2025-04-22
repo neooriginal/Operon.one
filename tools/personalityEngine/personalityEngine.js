@@ -12,15 +12,16 @@ const { settingsFunctions, userFunctions, db } = require('../../database');
 const contextManager = require('../../utils/context');
 const OpenAI = require('openai');
 const dotenv = require('dotenv');
+dotenv.config();
 const path = require('path');
 const fs = require('fs');
 const fetch = require('node-fetch');
-dotenv.config();
+const crypto = require('crypto');
 
 // Initialize OpenAI for embedding generation
 const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1"
+    apiKey: process.env.OPENAI_KEY,
+
 });
 
 // Qdrant configuration
@@ -162,7 +163,7 @@ async function initQdrant() {
 async function generateEmbedding(text) {
     try {
         const response = await openai.embeddings.create({
-            model: "text-embedding-ada-002",
+            model: "text-embedding-3-small",
             input: text
         });
         return response.data[0].embedding;
@@ -178,8 +179,8 @@ async function storePersonalityInsight(userId, insight, confidence = 0.5, perman
         // Generate embedding for the insight
         const embedding = await generateEmbedding(insight);
         
-        // Generate a unique ID for the vector
-        const vectorId = `${userId}_${Date.now()}`;
+        // Generate a UUID for the vector ID (Qdrant requires UUID or unsigned integer)
+        const vectorId = crypto.randomUUID();
         
         // Store in Qdrant
         await qdrantRequest(`/collections/${PERSONALITY_COLLECTION}/points`, 'PUT', {
