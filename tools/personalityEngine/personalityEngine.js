@@ -17,11 +17,11 @@ const path = require('path');
 const fs = require('fs');
 const fetch = require('node-fetch');
 const crypto = require('crypto');
+const getPersonalityPrompt = require("./getPersonalityPrompt")
 
 // Initialize OpenAI for embedding generation
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_KEY,
-
 });
 
 // Qdrant configuration
@@ -522,10 +522,12 @@ async function performMetaAnalysis(userId) {
 async function generateDynamicSystemPrompt(userId, basePrompt = '', userMessage = '') {
     try {
         // Get default personality from settings
-        const defaultPersonality = await settingsFunctions.getSetting(userId, 'personality').catch(err => {
+        let defaultPersonality = await settingsFunctions.getSetting(userId, 'personality').catch(err => {
             console.error('Error getting personality setting:', err.message);
             return `You are a helpful AI assistant. Be conversational and friendly.`;
         });
+
+        defaultPersonality = defaultPersonality+"; Manual user wish: "+getPersonalityPrompt.getPersonalityPrompt(userId);
         
         // Get user information
         const userInfo = await getUserInfo(userId).catch(err => {
