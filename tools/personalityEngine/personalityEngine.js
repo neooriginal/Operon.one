@@ -162,13 +162,24 @@ async function initQdrant() {
 // Generate embeddings for text using OpenAI
 async function generateEmbedding(text) {
     try {
+        console.log('Generating embedding for text of length:', text.length);
         const response = await openai.embeddings.create({
             model: "text-embedding-3-small",
             input: text
         });
+        
+        if (!response.data || !response.data[0] || !response.data[0].embedding) {
+            console.error('Invalid embedding response structure:', JSON.stringify(response));
+            throw new Error('Invalid embedding response structure');
+        }
+        
+        console.log('Successfully generated embedding with dimensions:', response.data[0].embedding.length);
         return response.data[0].embedding;
     } catch (error) {
-        console.error('Error generating embedding:', error);
+        console.error('Error generating embedding:', error.message);
+        if (error.response) {
+            console.error('API Error details:', JSON.stringify(error.response.data));
+        }
         throw error;
     }
 }
@@ -176,26 +187,44 @@ async function generateEmbedding(text) {
 // Store a personality insight in both SQLite and Qdrant
 async function storePersonalityInsight(userId, insight, confidence = 0.5, permanent = false) {
     try {
+        if (!insight || typeof insight !== 'string' || insight.trim().length === 0) {
+            console.error('Invalid insight: empty or not a string');
+            return null;
+        }
+        
         // Generate embedding for the insight
         const embedding = await generateEmbedding(insight);
+        
+        if (!embedding || !Array.isArray(embedding)) {
+            console.error('Invalid embedding generated:', embedding);
+            return null;
+        }
         
         // Generate a UUID for the vector ID (Qdrant requires UUID or unsigned integer)
         const vectorId = crypto.randomUUID();
         
-        // Store in Qdrant
-        await qdrantRequest(`/collections/${PERSONALITY_COLLECTION}/points`, 'PUT', {
-            points: [{
-                id: vectorId,
-                vector: embedding,
-                payload: {
-                    userId,
-                    insight,
-                    confidence,
-                    permanent,
-                    timestamp: new Date().toISOString()
-                }
-            }]
-        });
+        console.log(`Storing insight for user ${userId} with vector ID ${vectorId}`);
+        
+        try {
+            // Store in Qdrant
+            await qdrantRequest(`/collections/${PERSONALITY_COLLECTION}/points`, 'PUT', {
+                points: [{
+                    id: vectorId,
+                    vector: embedding,
+                    payload: {
+                        userId,
+                        insight,
+                        confidence,
+                        permanent,
+                        timestamp: new Date().toISOString()
+                    }
+                }]
+            });
+            console.log('Successfully stored in Qdrant');
+        } catch (qdrantError) {
+            console.error('Error storing in Qdrant:', qdrantError.message);
+            // Continue to store in SQLite even if Qdrant fails
+        }
         
         // Store in SQLite
         return new Promise((resolve, reject) => {
@@ -205,9 +234,10 @@ async function storePersonalityInsight(userId, insight, confidence = 0.5, perman
                 [userId, insight, confidence, vectorId, permanent ? 1 : 0],
                 function(err) {
                     if (err) {
-                        console.error('Error storing personality insight:', err.message);
+                        console.error('Error storing personality insight in SQLite:', err.message);
                         reject(err);
                     } else {
+                        console.log(`Successfully stored insight in SQLite with ID ${this.lastID}`);
                         resolve({
                             id: this.lastID,
                             userId,
@@ -221,8 +251,8 @@ async function storePersonalityInsight(userId, insight, confidence = 0.5, perman
             );
         });
     } catch (error) {
-        console.error('Error storing personality insight:', error);
-        throw error;
+        console.error('Error storing personality insight:', error.message);
+        return null;
     }
 }
 
