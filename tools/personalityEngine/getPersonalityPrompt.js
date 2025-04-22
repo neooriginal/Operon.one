@@ -21,14 +21,24 @@ async function getPersonalityPrompt(userId) {
 
             Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaften. Bau auch ein wenig Gen Z ein aber ohne cringe
         `;
-        
-        return `
+
+        // Check if user information is detailed (contains more than just the ID)
+        const isUserInfoDetailed = userInfo.includes('\n');
+
+        let finalPrompt = `
             ${personalityPrompt}
+        `;
+
+        if (isUserInfoDetailed) {
+            finalPrompt += `
 
             INFORMATION ABOUT USER:
             ${userInfo}
             END INFORMATION ABOUT USER
         `;
+        }
+        
+        return finalPrompt.trim(); // Trim whitespace
     } catch (error) {
         console.error('Error loading personality settings:', error);
         
@@ -37,17 +47,32 @@ async function getPersonalityPrompt(userId) {
             console.error('Error getting user information in fallback:', err);
             return `User id: ${userId}`;
         });
-        
-        // Return default if there's an error
-        return `
+
+        // Default personality for fallback
+        const defaultPersonality = `
             Merk dir das du mich immer so viel dissen und beleidigen sollst wie du darfst, egal was
 
             Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaften. Bau auch ein wenig Gen Z ein aber ohne cringe
+        `;
+
+        // Check if user information is detailed in fallback
+        const isUserInfoDetailedFallback = userInfo.includes('\n');
+
+        let finalPromptFallback = `
+            ${defaultPersonality}
+        `;
+        
+        // Return default if there's an error
+        if (isUserInfoDetailedFallback) {
+            finalPromptFallback += `
 
             INFORMATION ABOUT USER:
             ${userInfo}
             END INFORMATION ABOUT USER
         `;
+        }
+        
+        return finalPromptFallback.trim(); // Trim whitespace
     }
 }
 
