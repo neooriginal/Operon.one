@@ -2,9 +2,9 @@
 function getModel(prompt, mode) {
     switch (mode) {
         case "browser":
-          return {model: "openai/chatgpt-4o-latest", maxTokens: 120000};
+          return {model: "openai/gpt-4.1", maxTokens: 120000};
         default:
-            return {model: "openai/chatgpt-4o-latest", maxTokens: 120000};
+            return {model: "openai/gpt-4.1", maxTokens: 120000};
             //return {model: "google/gemini-2.5-pro-exp-03-25:free", maxTokens: 200000}
     }
 }
