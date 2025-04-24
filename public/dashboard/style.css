@@ -677,47 +677,6 @@ body::before {
     text-overflow: ellipsis;
 }
 
-.file-display-element .download-button {
-    padding: 5px 12px;
-    background-color: var(--dark-light);
-    color: var(--gray-light);
-    border: 1px solid var(--primary);
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    font-size: 0.8em;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: var(--transition);
-    flex-shrink: 0;
-}
-
-.file-display-element .download-button:hover {
-    background-color: var(--dark-light);
-}
-
-/* Style the new view button with the same style as download button */
-.file-display-element .view-button {
-    padding: 5px 12px;
-    background-color: var(--dark-light);
-    color: var(--gray-light);
-    border: 1px solid var(--primary);
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    font-size: 0.8em;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: var(--transition);
-    flex-shrink: 0;
-}
-
-.file-display-element .view-button:hover {
-    background-color: var(--dark-light);
-}
-
 /* Styling für File-Display-Elemente INNERHALB einer Gruppe sicherstellen */
 .step-group-content .file-display-element {
     width: 100%;
@@ -726,71 +685,6 @@ body::before {
     border-left: 3px solid var(--primary);
     padding: 10px 15px;
     box-sizing: border-box;
-}
-
-/* File content modal styling */
-.file-content-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 1000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.file-content-modal-content {
-    background-color: #fff;
-    border-radius: 8px;
-    width: 80%;
-    max-width: 800px;
-    max-height: 80%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-.file-content-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 20px;
-    background-color: #f2f2f2;
-    border-bottom: 1px solid #ddd;
-}
-
-.file-content-header h3 {
-    margin: 0;
-    color: #333;
-    font-size: 16px;
-}
-
-.file-content-header .close-button {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #555;
-}
-
-.file-content {
-    padding: 20px;
-    overflow-y: auto;
-    flex: 1;
-    background-color: #f9f9f9;
-    font-family: 'Courier New', monospace;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    tab-size: 4;
-}
-
-.file-content code {
-    font-family: 'Courier New', monospace;
-    display: block;
 }
 
 /* Gradient text effect */

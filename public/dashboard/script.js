@@ -593,130 +593,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>${displayFileName}</span>
         `;
 
-        // Create view content button instead of download button
-        const viewButton = document.createElement('button');
-        viewButton.classList.add('view-button');
-        viewButton.innerHTML = `
-            <i class="fas fa-eye"></i> View
-        `;
-        
-        // Only enable if we have a fileId or a valid path
-        if (!fileId && !safeFilePath) {
-            viewButton.style.pointerEvents = 'none'; // Disable click if no valid identifier
-            viewButton.style.opacity = '0.5';
-        }
-        
-        // Add click event to fetch and display content from DB
-        viewButton.addEventListener('click', async () => {
-            try {
-                // If we have a fileId, use it directly
-                if (fileId) {
-                    const response = await fetch(`/api/getFileContent/${fileType}/${fileId}`);
-                    if (!response.ok) {
-                        throw new Error(`Error fetching file content: ${response.statusText}`);
-                    }
-                    
-                    const data = await response.json();
-                    displayFileContent(data.fileName, data.content, data.fileExtension);
-                } 
-                // Otherwise try to find the file ID based on the path
-                else if (safeFilePath) {
-                    // First find the file by path
-                    const findResponse = await fetch(`/api/findFile?path=${encodeURIComponent(safeFilePath)}&type=${fileType}`);
-                    
-                    if (!findResponse.ok) {
-                        throw new Error('File not found in database');
-                    }
-                    
-                    // Get the file ID and other details
-                    const fileData = await findResponse.json();
-                    
-                    // Now get the content using the ID
-                    const contentResponse = await fetch(`/api/getFileContent/${fileType}/${fileData.id}`);
-                    if (!contentResponse.ok) {
-                        throw new Error(`Error fetching file content: ${contentResponse.statusText}`);
-                    }
-                    
-                    const contentData = await contentResponse.json();
-                    displayFileContent(contentData.fileName, contentData.content, contentData.fileExtension);
-                }
-            } catch (error) {
-                console.error('Error viewing file:', error);
-                alert('Error viewing file content: ' + error.message);
-            }
-        });
-
         fileElement.appendChild(fileInfo);
-        fileElement.appendChild(viewButton);
-
         parentElement.appendChild(fileElement);
         scrollToBottomIfNeeded(parentElement);
 
         return fileElement;
     }
     
-    // New function to display file content in a modal or expandable element
-    function displayFileContent(fileName, content, fileExtension) {
-        // Create modal container
-        const modal = document.createElement('div');
-        modal.classList.add('file-content-modal');
-        
-        // Create modal content
-        const modalContent = document.createElement('div');
-        modalContent.classList.add('file-content-modal-content');
-        
-        // Add file header
-        const fileHeader = document.createElement('div');
-        fileHeader.classList.add('file-content-header');
-        fileHeader.innerHTML = `
-            <h3>${fileName}</h3>
-            <button class="close-button">&times;</button>
-        `;
-        
-        // Add file content with syntax highlighting if possible
-        const contentElement = document.createElement('pre');
-        contentElement.classList.add('file-content');
-        
-        // Apply syntax highlighting if extension is supported
-        if (fileExtension && ['js', 'py', 'java', 'html', 'css', 'json', 'xml', 'c', 'cpp', 'cs'].includes(fileExtension.toLowerCase())) {
-            contentElement.innerHTML = `<code class="language-${fileExtension}">${escapeHtml(content)}</code>`;
-            
-            // If using a highlighting library like highlight.js, initialize it here
-            // For example: hljs.highlightElement(contentElement.querySelector('code'));
-        } else {
-            contentElement.textContent = content;
-        }
-        
-        // Add close functionality
-        modalContent.appendChild(fileHeader);
-        modalContent.appendChild(contentElement);
-        modal.appendChild(modalContent);
-        document.body.appendChild(modal);
-        
-        // Add close button event
-        const closeButton = fileHeader.querySelector('.close-button');
-        closeButton.addEventListener('click', () => {
-            document.body.removeChild(modal);
-        });
-        
-        // Also close when clicking outside the modal content
-        modal.addEventListener('click', (event) => {
-            if (event.target === modal) {
-                document.body.removeChild(modal);
-            }
-        });
-    }
-    
-    // Helper function to escape HTML content for safe display
-    function escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
     function getIconForType(type) {
         // Icon-Logik (ausgelagert für Wiederverwendbarkeit)
         let iconHtml = '<i class="fas fa-question-circle"></i>';
