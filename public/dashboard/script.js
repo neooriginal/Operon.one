@@ -258,32 +258,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Display messages
             data.messages.forEach(msg => {
-                let messageContent = msg.content;
+                // Extract message content using our utility function
+                const messageContent = extractTextFromObject(msg.content);
                 console.log('Processing message:', msg);
-                
-                // Handle object content
-                if (typeof messageContent === 'object' && messageContent !== null) {
-                    // If it has a text property, use that
-                    if (messageContent.text) {
-                        messageContent = messageContent.text;
-                    } else if (Array.isArray(messageContent) && messageContent.length > 0) {
-                        // If it's an array of content objects (like OpenAI format)
-                        const textContent = messageContent
-                            .filter(item => item.type === 'text')
-                            .map(item => item.text)
-                            .join("\n");
-                        
-                        if (textContent) {
-                            messageContent = textContent;
-                        } else {
-                            // Fallback: stringify the object
-                            messageContent = JSON.stringify(messageContent);
-                        }
-                    } else {
-                        // Fallback: stringify the object
-                        messageContent = JSON.stringify(messageContent);
-                    }
-                }
                 
                 // Map role to expected format - ensure 'assistant' maps to 'ai' and 'user' stays as 'user'
                 let role = msg.role;
@@ -386,7 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Hilfsfunktion zum Aktualisieren des Statusbereichs ---
+    // Update the status display with text and appropriate icon based on status type
     function updateStatusDisplay(text, statusType = 'info') {
         if (!statusDisplay) return;
 
@@ -396,20 +373,20 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (statusType) {
             case 'loading':
             case 'status_update':
-                iconHtml = getIconForType('status_update'); // Spinner
+                iconHtml = getIconForType('status_update'); // Spinner icon
                 statusDisplay.classList.add('active'); // Highlight background when active
                 break;
             case 'idle':
-                iconHtml = '<i class="fas fa-check"></i>'; // Einfaches Häkchen für Bereit
+                iconHtml = '<i class="fas fa-check"></i>'; // Simple checkmark for ready state
                 break;
-             case 'completed':
-                 iconHtml = getIconForType('task_completed');
-                 break;
+            case 'completed':
+                iconHtml = getIconForType('task_completed');
+                break;
             case 'error':
                 iconHtml = getIconForType('task_error');
                 break;
             default:
-                 iconHtml = ''; // Kein Icon für einfache Info
+                iconHtml = ''; // No icon for simple info
         }
 
         statusDisplay.innerHTML = `${iconHtml} <span>${text || '-'}</span>`;
@@ -445,39 +422,54 @@ document.addEventListener('DOMContentLoaded', () => {
         return messageElement;
     }
 
+    // Helper function to extract text content from different message object formats
+    function extractTextFromObject(messageObj) {
+        if (typeof messageObj === 'string') {
+            return messageObj;
+        }
+        
+        if (typeof messageObj !== 'object' || messageObj === null) {
+            return String(messageObj);
+        }
+        
+        // If it has a text property, use that
+        if (messageObj.text) {
+            return messageObj.text;
+        }
+        
+        // If it has a result property (AI tool response format)
+        if (messageObj.result) {
+            return messageObj.result;
+        }
+        
+        // If it's an array of content objects (like OpenAI format)
+        if (Array.isArray(messageObj) && messageObj.length > 0) {
+            const textContent = messageObj
+                .filter(item => item.type === 'text')
+                .map(item => item.text)
+                .join("\n");
+            
+            if (textContent) {
+                return textContent;
+            }
+        }
+        
+        // Fallback: stringify the object
+        return JSON.stringify(messageObj, null, 2);
+    }
+
     function addMessage(text, sender, type = 'text') {
         // If chat messages container doesn't exist, exit early
         if (!chatMessages) return;
         
-        // Handle object text
-        if (typeof text === 'object' && text !== null) {
-            // If it has a text property, use that
-            if (text.text) {
-                text = text.text;
-            } else if (Array.isArray(text) && text.length > 0) {
-                // If it's an array of content objects (like OpenAI format)
-                const textContent = text
-                    .filter(item => item.type === 'text')
-                    .map(item => item.text)
-                    .join("\n");
-                
-                if (textContent) {
-                    text = textContent;
-                } else {
-                    // Fallback: stringify the object
-                    text = JSON.stringify(text);
-                }
-            } else {
-                // Fallback: stringify the object
-                text = JSON.stringify(text, null, 2);
-            }
-        }
+        // Process text to ensure it's a string
+        const messageText = extractTextFromObject(text);
         
         const messageElement = document.createElement('div');
         
         if (type === 'system') {
             messageElement.classList.add('message', 'system');
-            messageElement.textContent = text;
+            messageElement.textContent = messageText;
         } else {
             // Important: Use the correct classes for styling
             // 'message' for the container, then 'user' or 'ai' for the role
@@ -495,13 +487,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         gfm: true,
                         breaks: true // Konvertiert Zeilenumbrüche in <br>
                     });
-                    contentElement.innerHTML = marked.parse(text);
+                    contentElement.innerHTML = marked.parse(messageText);
                 } catch (e) {
                     console.error("Fehler beim Parsen von Markdown:", e);
-                    contentElement.textContent = text; // Fallback auf reinen Text
+                    contentElement.textContent = messageText; // Fallback auf reinen Text
                 }
             } else {
-                contentElement.textContent = text; // Benutzernachrichten bleiben Text
+                contentElement.textContent = messageText; // Benutzernachrichten bleiben Text
             }
             
             messageElement.appendChild(contentElement);
@@ -655,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Nachrichten senden --- 
+    // Handle sending a message from the input field
     function handleSendMessage() {
         // Check if required elements exist
         if (!messageInput || !chatMessages) return;
@@ -663,34 +655,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = messageInput.value.trim();
         if (!message) return;
 
-        // If this is a new chat without an ID, create it first
-        if (!currentChatId || currentChatId === 'new') {
-            createNewChat().then(() => {
-                // After chat creation, add the message and send it
-                addMessage(message, 'user');
-                messageInput.value = '';
-                
-                // Show loading indicator
-                updateStatusDisplay('Processing your request...', 'loading');
-                
-                // Submit to server with user ID and chat ID
-                socket.emit('submit_task', { 
-                    task: message,
-                    userId: userId,
-                    chatId: currentChatId
-                });
-                
-                // Try to update the chat title based on this first message
-                updateChatTitleFromContent(currentChatId, message);
-                
-                // Disable input while processing
-                if (messageInput && sendButton) {
-                    messageInput.disabled = true;
-                    sendButton.disabled = true;
-                }
-            });
-        } else {
-            // For existing chats, just add the message and send it
+        // Process functions common to both new and existing chats
+        const processSendMessage = (chatId) => {
+            // Add message to UI
             addMessage(message, 'user');
             messageInput.value = '';
             
@@ -701,77 +668,86 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('submit_task', { 
                 task: message,
                 userId: userId,
-                chatId: currentChatId
+                chatId: chatId
             });
-            
-            // If this is the first message in a chat, update the title
-            if (document.querySelectorAll('.message.user-message').length === 1) {
-                updateChatTitleFromContent(currentChatId, message);
-            }
             
             // Disable input while processing
             if (messageInput && sendButton) {
                 messageInput.disabled = true;
                 sendButton.disabled = true;
             }
+        };
+
+        // If this is a new chat without an ID, create it first
+        if (!currentChatId || currentChatId === 'new') {
+            createNewChat().then(() => {
+                processSendMessage(currentChatId);
+                // Try to update the chat title based on this first message
+                updateChatTitleFromContent(currentChatId, message);
+            });
+        } else {
+            // For existing chats, just process the message
+            processSendMessage(currentChatId);
+            
+            // If this is the first message in a chat, update the title
+            if (document.querySelectorAll('.message.user-message').length === 1) {
+                updateChatTitleFromContent(currentChatId, message);
+            }
         }
+    }
+
+    // Helper function to check if a message already exists in the chat
+    function isDuplicateMessage(messageText, maxMessagesToCheck = 3) {
+        if (!chatMessages) return false;
+        
+        const messages = chatMessages.querySelectorAll('.message.ai');
+        if (messages.length === 0) return false;
+        
+        // Check the last few AI messages to avoid duplicates
+        const messagesToCheck = Math.min(messages.length, maxMessagesToCheck);
+        for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
+            const msgContent = messages[i].querySelector('.message-content');
+            if (msgContent && msgContent.textContent.trim() === messageText.trim()) {
+                console.log('Preventing duplicate message');
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     // Update the socket.on('ai_message') handler to fix duplicate messages and improve chat titles
     socket.on('ai_message', (data) => {
-        // Only update UI if this message is for the current chat
-        if (data.chatId && data.chatId !== currentChatId) return;
-        
-        // Handle if text is an object
-        let messageText = data.text;
-        if (typeof messageText === 'object' && messageText !== null) {
-            // Check if it has a result property (AI tool response format)
-            if (messageText.result) {
-                messageText = messageText.result;
-            } else if (messageText.text) {
-                messageText = messageText.text;
-            } else {
-                // Last resort: stringify the object
-                messageText = JSON.stringify(messageText, null, 2);
+        try {
+            // Only update UI if this message is for the current chat
+            if (data.chatId && data.chatId !== currentChatId) return;
+            
+            // Handle if text is an object
+            const messageText = extractTextFromObject(data.text);
+            
+            // Don't add message if it's empty
+            if (!messageText || messageText.trim() === '') {
+                console.log('Ignoring empty message');
+                return;
             }
-        }
-        
-        // Don't add message if it's empty
-        if (!messageText || messageText.trim() === '') {
-            console.log('Ignoring empty message');
-            return;
-        }
-        
-        // Don't add message if it's already displayed (check the last message)
-        const messages = chatMessages.querySelectorAll('.message.ai');
-        let isDuplicate = false;
-        
-        // Check the last few AI messages to avoid duplicates
-        if (messages.length > 0) {
-            // Start from the most recent and check the last 3 messages at most
-            const messagesToCheck = Math.min(messages.length, 3);
-            for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
-                const msgContent = messages[i].querySelector('.message-content');
-                if (msgContent && msgContent.textContent.trim() === messageText.trim()) {
-                    console.log('Preventing duplicate message');
-                    isDuplicate = true;
-                    break;
-                }
+            
+            // Check for duplicate messages
+            if (isDuplicateMessage(messageText)) return;
+            
+            // For new chats: Only add the AI message if it's not the welcome message 
+            // that we've already added in createNewChat()
+            const welcomeText = "Hello! I'm your Operon.one assistant. How can I help you today?";
+            if (messageText.includes(welcomeText) && document.querySelector('.message.ai .message-content')?.textContent.includes(welcomeText)) {
+                console.log('Skipping welcome message in new chat');
+                return;
             }
+            
+            // Add the message to the UI
+            addMessage(messageText, 'ai');
+        } catch (error) {
+            console.error('Error processing AI message:', error);
+            updateStatusDisplay('Error processing message', 'error');
         }
-        
-        if (isDuplicate) return;
-        
-        // For new chats: Only add the AI message if it's not the welcome message 
-        // that we've already added in createNewChat()
-        const welcomeText = "Hello! I'm your Operon.one assistant. How can I help you today?";
-        if (messageText.includes(welcomeText) && document.querySelector('.message.ai .message-content')?.textContent.includes(welcomeText)) {
-            console.log('Skipping welcome message in new chat');
-            return;
-        }
-        
-        // Add the message to the UI
-        addMessage(messageText, 'ai');
     });
 
     // Function to update chat title based on content
@@ -918,101 +894,77 @@ document.addEventListener('DOMContentLoaded', () => {
          }
      });
 
-    // Add a variable to track the last AI message to prevent duplicates
-    let lastAiMessageId = null;
-
-    // Listener for task completion - UPDATED with type check
+    // Listener for task completion - UPDATED with type check and using isDuplicateMessage
     socket.on('task_completed', (data) => {
-        // Only process events for the current user
-        if (data.userId === userId) {
-            console.log('Task completed:', data);
-            
-            // Handle if result is an object
-            let result = data.result || 'Task completed successfully';
-            if (typeof result === 'object' && result !== null) {
-                // If it has a result property (common format from AI tools)
-                if (result.result) {
-                    result = result.result;
-                } else {
-                    // Stringify the object with proper formatting
-                    result = JSON.stringify(result, null, 2);
+        try {
+            // Only process events for the current user
+            if (data.userId === userId) {
+                console.log('Task completed:', data);
+                
+                // Handle if result is an object
+                const result = extractTextFromObject(data.result) || 'Task completed successfully';
+                
+                // Check if this result was already added by the ai_message event
+                if (!isDuplicateMessage(result)) {
+                    addMessage(result, 'ai');
                 }
-            }
-            
-            // Check if this result was already added by the ai_message event
-            // Only add the message if it's not a duplicate
-            const messages = chatMessages.querySelectorAll('.message.ai');
-            let isDuplicate = false;
-            
-            if (messages.length > 0) {
-                // Check the last few messages for duplicates
-                const messagesToCheck = Math.min(messages.length, 3);
-                for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
-                    const msgContent = messages[i].querySelector('.message-content');
-                    if (msgContent && msgContent.textContent.trim() === result.trim()) {
-                        console.log('Skipping duplicate message in task_completed');
-                        isDuplicate = true;
-                        break;
+                
+                updateStatusDisplay('Task completed', 'completed');
+                
+                // Re-enable input
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                
+                // Display output files if provided directly in this event
+                if (data.outputFiles) {
+                    // Handle the new format: { host: [...], container: [...] }
+                    const hostFiles = data.outputFiles.host || [];
+                    const containerFiles = data.outputFiles.container || [];
+                    const totalFiles = hostFiles.length + containerFiles.length;
+                    
+                    if (totalFiles > 0) {
+                        const filesGroupContent = addStepGroup(`Result Files (${totalFiles})`, false);
+                        
+                        // Add container files with type
+                        containerFiles.forEach(fileInfo => {
+                            if (fileInfo && typeof fileInfo.fileName === 'string') {
+                                addFileDisplayElement(
+                                    fileInfo.fileName, 
+                                    fileInfo.path, 
+                                    filesGroupContent,
+                                    fileInfo.id,
+                                    'container'
+                                );
+                            } else {
+                                console.warn("Received invalid container file info:", fileInfo);
+                            }
+                        });
+                        
+                        // Add host files with type
+                        hostFiles.forEach(fileInfo => {
+                            if (fileInfo && typeof fileInfo.fileName === 'string') {
+                                addFileDisplayElement(
+                                    fileInfo.fileName, 
+                                    fileInfo.path, 
+                                    filesGroupContent,
+                                    fileInfo.id,
+                                    'host'
+                                );
+                            } else {
+                                console.warn("Received invalid host file info:", fileInfo);
+                            }
+                        });
                     }
                 }
-            }
-            
-            if (!isDuplicate) {
-                addMessage(result, 'ai');
-            }
-            
-            updateStatusDisplay('Task completed', 'completed');
-            
-            // Re-enable input
-            messageInput.disabled = false;
-            sendButton.disabled = false;
-            
-            // Display output files if provided directly in this event
-            if (data.outputFiles) {
-                // Handle the new format: { host: [...], container: [...] }
-                const hostFiles = data.outputFiles.host || [];
-                const containerFiles = data.outputFiles.container || [];
-                const totalFiles = hostFiles.length + containerFiles.length;
                 
-                if (totalFiles > 0) {
-                    const filesGroupContent = addStepGroup(`Result Files (${totalFiles})`, false);
-                    
-                    // Add container files with type
-                    containerFiles.forEach(fileInfo => {
-                        if (fileInfo && typeof fileInfo.fileName === 'string') {
-                            addFileDisplayElement(
-                                fileInfo.fileName, 
-                                fileInfo.path, 
-                                filesGroupContent,
-                                fileInfo.id,
-                                'container'
-                            );
-                        } else {
-                            console.warn("Received invalid container file info:", fileInfo);
-                        }
-                    });
-                    
-                    // Add host files with type
-                    hostFiles.forEach(fileInfo => {
-                        if (fileInfo && typeof fileInfo.fileName === 'string') {
-                            addFileDisplayElement(
-                                fileInfo.fileName, 
-                                fileInfo.path, 
-                                filesGroupContent,
-                                fileInfo.id,
-                                'host'
-                            );
-                        } else {
-                            console.warn("Received invalid host file info:", fileInfo);
-                        }
-                    });
-                }
+                // Add a final summary action element (optional)
+                const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
+                const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
+                addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
             }
-            
-            // Add a final summary action element (optional)
-            const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
-            const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
-            addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
+        } catch (error) {
+            console.error('Error processing task completion:', error);
+            updateStatusDisplay('Error completing task', 'error');
         }
     });
 
