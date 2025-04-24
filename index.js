@@ -663,6 +663,21 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       
       console.log(`[ ] Host files tracked: ${hostFiles.length}, Container files tracked: ${containerFiles.length}`);
       
+      // Log detailed information about tracked files
+      if (hostFiles.length > 0) {
+        console.log("Host files:");
+        hostFiles.forEach(file => {
+          console.log(`  - ${file.fileName} (${file.path}) [ID: ${file.id}]`);
+        });
+      }
+      
+      if (containerFiles.length > 0) {
+        console.log("Container files:");
+        containerFiles.forEach(file => {
+          console.log(`  - ${file.fileName} (${file.path}) [ID: ${file.id}]`);
+        });
+      }
+      
       // Emit task completion event with enhanced data
       io.emit('task_completed', { 
         userId, 
