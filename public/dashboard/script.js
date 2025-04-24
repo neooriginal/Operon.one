@@ -541,57 +541,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addStepGroup(title, initiallyCollapsed = false, parentElement = chatMessages) {
-        const groupElement = document.createElement('div');
-        groupElement.classList.add('step-group');
-        if (initiallyCollapsed) {
-            groupElement.classList.add('collapsed');
-        }
-
-        const headerElement = document.createElement('div');
-        headerElement.classList.add('step-group-header');
-        headerElement.innerHTML = `
+        const stepGroup = document.createElement('div');
+        stepGroup.classList.add('step-group');
+        
+        const titleElement = document.createElement('div');
+        titleElement.classList.add('step-group-title');
+        titleElement.innerHTML = `
             <span>${title}</span>
-            <i class="fas fa-chevron-down"></i>
+            <i class="fas ${initiallyCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}"></i>
         `;
-
+        
         const contentElement = document.createElement('div');
         contentElement.classList.add('step-group-content');
-
-        headerElement.addEventListener('click', () => {
-            groupElement.classList.toggle('collapsed');
+        
+        if (initiallyCollapsed) {
+            contentElement.style.display = 'none';
+        }
+        
+        titleElement.addEventListener('click', () => {
+            const isCollapsed = contentElement.style.display === 'none';
+            contentElement.style.display = isCollapsed ? 'block' : 'none';
+            titleElement.querySelector('i').className = `fas ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
         });
-
-        groupElement.appendChild(headerElement);
-        groupElement.appendChild(contentElement);
-
-        parentElement.appendChild(groupElement);
+        
+        stepGroup.appendChild(titleElement);
+        stepGroup.appendChild(contentElement);
+        parentElement.appendChild(stepGroup);
         scrollToBottomIfNeeded(parentElement);
-
+        
         return contentElement; // Content-Container zurückgeben
     }
 
-    function addFileDisplayElement(fileName, filePath, parentElement = chatMessages, fileId = null, fileType = 'container') {
-        // Ensure fileName is a string before proceeding
-        const displayFileName = (typeof fileName === 'string') ? fileName : 'Unnamed File';
-        const safeFilePath = (typeof filePath === 'string') ? filePath : ''; // Use empty string if path is invalid
-
-        const fileElement = document.createElement('div');
-        fileElement.classList.add('file-display-element');
-
-        const fileInfo = document.createElement('div');
-        fileInfo.classList.add('file-info');
-        fileInfo.innerHTML = `
-            <i class="fas fa-file"></i>
-            <span>${displayFileName}</span>
-        `;
-
-        fileElement.appendChild(fileInfo);
-        parentElement.appendChild(fileElement);
-        scrollToBottomIfNeeded(parentElement);
-
-        return fileElement;
-    }
-    
     function getIconForType(type) {
         // Icon-Logik (ausgelagert für Wiederverwendbarkeit)
         let iconHtml = '<i class="fas fa-question-circle"></i>';
@@ -860,40 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-     // Listener for file events - UPDATED with type check
-     socket.on('file_updated', (data) => {
-         if (data.filePath && typeof data.filePath === 'string') {
-             const fileName = data.filePath.split(/[\\/]/).pop() || data.filePath; // Extract filename or use full path
-             addFileDisplayElement(fileName, data.filePath);
-         } else {
-            console.warn("Received file_updated event with invalid filePath:", data);
-         }
-         if (data.content) {
-             console.log("File content (from update):");
-         }
-     });
-
-     // Listener for User Files - UPDATED with type checks
-     socket.on('user_files', (data) => {
-         if (data.files && Array.isArray(data.files) && data.files.length > 0) {
-             // Use a more descriptive title based on context if needed
-             const filesGroupContent = addStepGroup(`Available Files (${data.files.length})`, false);
-             data.files.forEach(fileInfo => {
-                if (fileInfo && typeof fileInfo.fileName === 'string' && typeof fileInfo.path === 'string') {
-                     addFileDisplayElement(fileInfo.fileName, fileInfo.path, filesGroupContent);
-                 } else if (typeof fileInfo === 'string') {
-                     // Fallback for string paths
-                     const fileName = fileInfo.split(/[\\/]/).pop() || fileInfo;
-                     const safeUserId = (typeof data.userId === 'string') ? data.userId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'unknown_user';
-                     const filePath = `output/${safeUserId}/${fileInfo}`;
-                     addFileDisplayElement(fileName, filePath, filesGroupContent);
-                 } else {
-                     console.warn("Received invalid file info in user_files:", fileInfo);
-                 }
-             });
-         }
-     });
-
     // Listener for task completion - UPDATED with type check and using isDuplicateMessage
     socket.on('task_completed', (data) => {
         try {
@@ -914,48 +860,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Re-enable input
                 messageInput.disabled = false;
                 sendButton.disabled = false;
-                
-                // Display output files if provided directly in this event
-                if (data.outputFiles) {
-                    // Handle the new format: { host: [...], container: [...] }
-                    const hostFiles = data.outputFiles.host || [];
-                    const containerFiles = data.outputFiles.container || [];
-                    const totalFiles = hostFiles.length + containerFiles.length;
-                    
-                    if (totalFiles > 0) {
-                        const filesGroupContent = addStepGroup(`Result Files (${totalFiles})`, false);
-                        
-                        // Add container files with type
-                        containerFiles.forEach(fileInfo => {
-                            if (fileInfo && typeof fileInfo.fileName === 'string') {
-                                addFileDisplayElement(
-                                    fileInfo.fileName, 
-                                    fileInfo.path, 
-                                    filesGroupContent,
-                                    fileInfo.id,
-                                    'container'
-                                );
-                            } else {
-                                console.warn("Received invalid container file info:", fileInfo);
-                            }
-                        });
-                        
-                        // Add host files with type
-                        hostFiles.forEach(fileInfo => {
-                            if (fileInfo && typeof fileInfo.fileName === 'string') {
-                                addFileDisplayElement(
-                                    fileInfo.fileName, 
-                                    fileInfo.path, 
-                                    filesGroupContent,
-                                    fileInfo.id,
-                                    'host'
-                                );
-                            } else {
-                                console.warn("Received invalid host file info:", fileInfo);
-                            }
-                        });
-                    }
-                }
                 
                 // Add a final summary action element (optional)
                 const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
