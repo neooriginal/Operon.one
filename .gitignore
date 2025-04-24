@@ -5,3 +5,4 @@ package-lock.json
 database.sqlite
 /tester/test_reports
 data/operonone.db
+.DS_Store
