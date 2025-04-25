@@ -470,14 +470,17 @@ const chatFunctions = {
 const fileFunctions = {
   // Track a container file
   trackContainerFile(userId, containerPath, originalName = null, description = null, chatId = 1, fileContent = null, fileExtension = null) {
+    // console.log('Tracking container file with data:', { userId, containerPath, originalName, description, chatId, fileContentLength: fileContent ? fileContent.length : 0, fileExtension });
     return new Promise((resolve, reject) => {
       db.run(
         'INSERT INTO container_files (userId, containerPath, originalName, description, chatId, fileContent, fileExtension) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [userId, containerPath, originalName, description, chatId, fileContent, fileExtension],
         function(err) {
           if (err) {
+            // console.error('Error tracking container file:', err);
             reject(err);
           } else {
+            // console.log(`Successfully tracked container file with ID: ${this.lastID}`);
             resolve({ id: this.lastID });
           }
         }
@@ -487,14 +490,17 @@ const fileFunctions = {
   
   // Track a host file
   trackHostFile(userId, filePath, originalName = null, description = null, chatId = 1, fileContent = null, fileExtension = null) {
+    // console.log('Tracking host file with data:', { userId, filePath, originalName, description, chatId, fileContentLength: fileContent ? fileContent.length : 0, fileExtension });
     return new Promise((resolve, reject) => {
       db.run(
         'INSERT INTO host_files (userId, filePath, originalName, description, chatId, fileContent, fileExtension) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [userId, filePath, originalName, description, chatId, fileContent, fileExtension],
         function(err) {
           if (err) {
+            // console.error('Error tracking host file:', err);
             reject(err);
           } else {
+            // console.log(`Successfully tracked host file with ID: ${this.lastID}`);
             resolve({ id: this.lastID });
           }
         }
@@ -504,32 +510,37 @@ const fileFunctions = {
   
   // Get tracked files for a user
   getTrackedFiles(userId, chatId = 1) {
+    // console.log(`Getting tracked files for user: ${userId}, chat: ${chatId}`);
     return new Promise((resolve, reject) => {
       const result = {
         containerFiles: [],
         hostFiles: []
       };
       
-      // Get container files
+      // Get container files - add fileContent to the SELECT
       db.all(
-        'SELECT id, userId, containerPath, originalName, description, fileExtension, createdAt, chatId FROM container_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
+        'SELECT id, userId, containerPath, originalName, description, fileExtension, createdAt, chatId, fileContent FROM container_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
         [userId, chatId],
         (err, containerFiles) => {
           if (err) {
+            // console.error('Error retrieving container files:', err);
             return reject(err);
           }
           
+          // console.log('Retrieved container files:', JSON.stringify(containerFiles, null, 2));
           result.containerFiles = containerFiles;
           
-          // Get host files
+          // Get host files - add fileContent to the SELECT
           db.all(
-            'SELECT id, userId, filePath, originalName, description, fileExtension, createdAt, chatId FROM host_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
+            'SELECT id, userId, filePath, originalName, description, fileExtension, createdAt, chatId, fileContent FROM host_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
             [userId, chatId],
             (err, hostFiles) => {
               if (err) {
+                // console.error('Error retrieving host files:', err);
                 return reject(err);
               }
               
+              // console.log('Retrieved host files:', JSON.stringify(hostFiles, null, 2));
               result.hostFiles = hostFiles;
               resolve(result);
             }
@@ -585,6 +596,37 @@ const fileFunctions = {
           resolve({ deleted: deletedCount });
         })
         .catch(err => reject(err));
+    });
+  },
+
+  // Get a specific tracked file by ID for a user
+  getTrackedFileById(userId, fileId) {
+    return new Promise((resolve, reject) => {
+      // Try finding in container_files first
+      db.get(
+        'SELECT id, userId, containerPath AS path, originalName AS fileName, description, fileExtension, createdAt, fileContent, \'container\' AS type FROM container_files WHERE userId = ? AND id = ?',
+        [userId, fileId],
+        (err, containerFile) => {
+          if (err) {
+            return reject(err);
+          }
+          if (containerFile) {
+            return resolve(containerFile);
+          }
+
+          // If not found, try finding in host_files
+          db.get(
+            'SELECT id, userId, filePath AS path, originalName AS fileName, description, fileExtension, createdAt, fileContent, \'host\' AS type FROM host_files WHERE userId = ? AND id = ?',
+            [userId, fileId],
+            (err, hostFile) => {
+              if (err) {
+                return reject(err);
+              }
+              resolve(hostFile); // Resolve with hostFile (or null if not found)
+            }
+          );
+        }
+      );
     });
   }
 };

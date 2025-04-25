@@ -590,12 +590,18 @@ async function getWrittenFiles(userId = 'default', chatId = 1) {
         // Format the data for compatibility with existing code
         return {
             hostFiles: trackedFiles.hostFiles.map(file => ({
+                id: file.id,
                 fileName: file.originalName || path.basename(file.filePath),
-                path: file.filePath
+                path: file.filePath,
+                content: file.fileContent,
+                extension: file.fileExtension
             })),
             containerFiles: trackedFiles.containerFiles.map(file => ({
+                id: file.id,
                 fileName: file.originalName || path.basename(file.containerPath),
-                path: file.containerPath
+                path: file.containerPath,
+                content: file.fileContent,
+                extension: file.fileExtension
             }))
         };
     } catch (error) {

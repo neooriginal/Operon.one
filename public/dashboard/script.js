@@ -1,3 +1,20 @@
+// Global functions for file handling (making them accessible to onclick handlers)
+window.downloadFile = function(fileId, fileName) {
+    // We'll trigger a custom event that the internal function will listen for
+    const event = new CustomEvent('downloadFileRequest', {
+        detail: { fileId, fileName }
+    });
+    document.dispatchEvent(event);
+};
+
+window.viewFileContent = function(fileId, fileName) {
+    // We'll trigger a custom event that the internal function will listen for
+    const event = new CustomEvent('viewFileRequest', {
+        detail: { fileId, fileName }
+    });
+    document.dispatchEvent(event);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     // Get DOM elements with null checks
     const chatMessages = document.getElementById('chat-messages');
@@ -467,9 +484,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const messageElement = document.createElement('div');
         
-        if (type === 'system') {
+        if (sender === 'system') {
             messageElement.classList.add('message', 'system');
-            messageElement.textContent = messageText;
+            if (type === 'html') {
+                // Render as HTML when type is explicitly 'html'
+                messageElement.innerHTML = messageText;
+            } else {
+                // Default to treating as plain text
+                messageElement.textContent = messageText;
+            }
         } else {
             // Important: Use the correct classes for styling
             // 'message' for the container, then 'user' or 'ai' for the role
@@ -855,6 +878,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     addMessage(result, 'ai');
                 }
                 
+                // Display output files if any
+                if (data.outputFiles && 
+                   ((data.outputFiles.host && data.outputFiles.host.length > 0) || 
+                   (data.outputFiles.container && data.outputFiles.container.length > 0))) {
+                    const filesHtml = generateFilesHtml(data.outputFiles);
+                    addMessage(`<div class="file-output">
+                        <div class="file-header">
+                            <i class="fas fa-file-alt"></i> Task Output Files
+                        </div>
+                        <div class="file-list">
+                            ${filesHtml}
+                        </div>
+                    </div>`, 'system', 'html');
+                }
+                
                 updateStatusDisplay('Task completed', 'completed');
                 
                 // Re-enable input
@@ -871,6 +909,55 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatusDisplay('Error completing task', 'error');
         }
     });
+
+    // Function to generate HTML for file list
+    function generateFilesHtml(files) {
+        if (!files || (!files.host || files.host.length === 0) && (!files.container || files.container.length === 0)) {
+            return '<p>No files generated.</p>';
+        }
+
+        let html = '<div class="file-output-container">';
+
+        const generateList = (title, fileList) => {
+            if (!fileList || fileList.length === 0) return '';
+            
+            let listHtml = `<h3>${title}</h3><ul>`;
+            fileList.forEach(file => {
+                const fileExtension = file.extension || file.fileName?.split('.').pop() || '';
+                const isTextBased = ['txt', 'log', 'csv', 'json', 'xml', 'html', 'css', 'js', 'py', 'java', 'c', 'cpp', 'md'].includes(fileExtension.toLowerCase());
+                
+                listHtml += `
+                    <li>
+                        <span class="file-name">${file.fileName || 'Unnamed File'}</span>
+                        <span class="file-path">(${file.path || 'N/A'})</span>
+                        <div class="file-actions">
+                            <button class="file-action-btn download-btn" onclick="downloadFile('${file.id}', '${file.fileName || `download_${file.id}`}')">Download</button>
+                            ${isTextBased ? `<button class="file-action-btn view-btn" onclick="viewFileContent('${file.id}', '${file.fileName || 'File Preview'}')">View</button>` : ''}
+                        </div>
+                    </li>
+                `;
+            });
+            listHtml += '</ul>';
+            return listHtml;
+        };
+
+        html += generateList('Host Files', files.host);
+        html += generateList('Container Files', files.container);
+        html += '</div>';
+
+        return html;
+    }
+
+    // Helper function to escape HTML (basic version)
+    function escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return '';
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
 
     // Listener für Fehler
     socket.on('task_error', (data) => {
@@ -960,5 +1047,123 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateStatusDisplay('Failed to delete chat: ' + error.message, 'error');
             }
         }
+    }
+
+    // Add event listeners for file handling events
+    document.addEventListener('downloadFileRequest', (e) => {
+        const { fileId, fileName } = e.detail;
+        const token = localStorage.getItem('token') || authToken;
+        handleFileDownload(fileId, fileName, token);
+    });
+    
+    document.addEventListener('viewFileRequest', (e) => {
+        const { fileId, fileName } = e.detail;
+        const token = localStorage.getItem('token') || authToken;
+        handleFileView(fileId, fileName, token);
+    });
+    
+    // Internal function handling file download
+    async function handleFileDownload(fileId, fileName, token) {
+        try {
+            const response = await fetch(`/api/files/${fileId}/download`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                // Try to get error message from response body
+                let errorMsg = `HTTP error! status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData.error || errorMsg;
+                } catch (e) {
+                    // Ignore if response body isn't JSON
+                }
+                throw new Error(errorMsg);
+            }
+
+            // Get the file content as a Blob
+            const blob = await response.blob();
+
+            // Create a temporary URL for the Blob
+            const url = window.URL.createObjectURL(blob);
+
+            // Create an invisible anchor element
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            // Use the provided fileName for the download attribute
+            a.download = fileName;
+
+            // Append the anchor to the body, click it, and remove it
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            // Inform the user about the error (e.g., using the modal or another notification)
+            showModal(`<p class="error-message">Error downloading file: ${error.message}</p>`, 'Download Error');
+        }
+    }
+    
+    // Internal function handling file view
+    async function handleFileView(fileId, fileName, token) {
+        // Show loading state in modal
+        showModal('Loading file content...', `Loading: ${fileName}`);
+
+        try {
+            const response = await fetch(`/api/files/${fileId}/download`, { // Use download endpoint to get content
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to load file content' }));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const fileContent = await response.text(); // Assume text for viewing
+            
+            // Display content in modal with pre-wrap
+            const contentHtml = `<pre style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(fileContent)}</pre>`;
+            showModal(contentHtml, `Preview: ${fileName}`);
+
+        } catch (error) {         
+            console.error('Error viewing file content:', error);
+            showModal(`<p class="error-message">Error loading file: ${error.message}</p>`, 'Error');
+        }
+    }
+
+    // Function to show modal
+    function showModal(content, title = 'Information') {
+        const modal = document.getElementById('file-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+        const modalClose = document.querySelector('.modal-close');
+
+        if (!modal || !modalTitle || !modalBody || !modalClose) {
+            console.error('Modal elements not found!');
+            return;
+        }
+
+        modalTitle.textContent = title;
+        modalBody.innerHTML = content; // Allows HTML content
+        modal.style.display = 'flex'; // Show modal
+
+        // Close modal functionality
+        modalClose.onclick = () => {
+            modal.style.display = 'none';
+        };
+        // Optional: Close modal when clicking outside the content
+        modal.onclick = (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
     }
 }); 

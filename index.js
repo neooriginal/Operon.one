@@ -646,20 +646,25 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       const duration = contextManager.getTaskDuration(userId, chatId);
       
       // Get output files from the file system tool's tracked list
-      const trackedFiles = await fileSystem.getWrittenFiles(userId, chatId);
+      const fileData = await fileSystem.getWrittenFiles(userId, chatId);
       
-      // Assuming getWrittenFiles now returns { hostFiles: [...], containerFiles: [...] }
-      const hostFiles = trackedFiles.hostFiles.map(file => ({
-        id: file.id, // Include file ID
-        fileName: file.originalName || path.basename(file.filePath),
-        path: file.filePath
+      // Map host files correctly using properties from getWrittenFiles
+      const hostFiles = fileData.hostFiles.map(file => ({
+        id: file.id,
+        fileName: file.fileName, // Use the fileName property from getWrittenFiles
+        path: file.path,        // Use the path property from getWrittenFiles
+        content: file.content   // Include the content
       })) || [];
       
-      const containerFiles = trackedFiles.containerFiles.map(file => ({
-        id: file.id, // Include file ID
-        fileName: file.originalName || path.basename(file.containerPath),
-        path: file.containerPath
-      })) || [];
+      // Map container files correctly using properties from getWrittenFiles
+      const containerFiles = fileData.containerFiles.map(file => {
+        return {
+          id: file.id,
+          fileName: file.fileName, // Use the fileName property from getWrittenFiles
+          path: file.path,        // Use the path property from getWrittenFiles
+          content: file.content   // Include the content
+        };
+      }) || [];
       
       console.log(`[ ] Host files tracked: ${hostFiles.length}, Container files tracked: ${containerFiles.length}`);
       
@@ -667,14 +672,16 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       if (hostFiles.length > 0) {
         console.log("Host files:");
         hostFiles.forEach(file => {
-          console.log(`  - ${file.fileName} (${file.path}) [ID: ${file.id}]`);
+          console.log(`  - ${file.fileName || 'unnamed-file'} (${file.path || 'unknown-path'}) [ID: ${file.id || 'unknown'}]`);
+          console.log(`    Content: ${file.content ? file.content.substring(0, 100) + (file.content.length > 100 ? '...' : '') : '(no content available)'}`);
         });
       }
       
       if (containerFiles.length > 0) {
         console.log("Container files:");
         containerFiles.forEach(file => {
-          console.log(`  - ${file.fileName} (${file.path}) [ID: ${file.id}]`);
+          console.log(`  - ${file.fileName || 'unnamed-file'} (${file.path || 'unknown-path'}) [ID: ${file.id || 'unknown'}]`);
+          console.log(`    Content: ${file.content ? file.content.substring(0, 100) + (file.content.length > 100 ? '...' : '') : '(no content available)'}`);
         });
       }
       
