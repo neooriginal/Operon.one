@@ -6,7 +6,8 @@ const fs = require('fs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { router: authRoutes, authenticateToken } = require('./authRoutes');
-const { chatFunctions } = require('./database');
+const { chatFunctions, fileFunctions } = require('./database');
+const mime = require('mime-types');
 
 // Serve static files from the public directory
 const app = express();
@@ -15,6 +16,25 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// Authentication middleware for file endpoints
+const isAuthenticated = (req, res, next) => {
+  // Use the existing authenticateToken middleware for consistency
+  authenticateToken(req, res, (err) => {
+    if (err) {
+        // If authenticateToken sends a response (like 401/403), it won't call next(err)
+        // If it calls next with an error, handle it here
+        return res.status(401).send({ error: 'Authentication failed' });
+    }
+    // If authentication is successful, req.user should be populated
+    if (req.user && req.user.id) {
+        req.userId = req.user.id; // Attach userId for consistency with previous placeholder
+        return next();
+    } 
+    // Fallback if req.user is not populated correctly
+    res.status(401).send({ error: 'Unauthorized - User data missing after authentication' });
+  });
+};
 
 // API routes
 app.use('/api', authRoutes);
@@ -153,114 +173,55 @@ app.delete('/api/chats/:chatId', authenticateToken, async (req, res) => {
     }
 });
 
-// New API endpoint to get file content directly from the database
-app.get('/api/getFileContent/:type/:fileId', authenticateToken, async (req, res) => {
+// Endpoint to get file details (authenticated)
+app.get('/api/files/:fileId', isAuthenticated, async (req, res) => {
+  const { fileId } = req.params;
+  const userId = req.userId; // Get userId from auth middleware
+
   try {
-    const userId = req.user.id;
-    const fileId = req.params.fileId;
-    const fileType = req.params.type; // 'container' or 'host'
-    
-    if (!fileId) {
-      return res.status(400).json({ error: 'File ID is required' });
+    const file = await fileFunctions.getTrackedFileById(userId, fileId);
+    if (!file) {
+      return res.status(404).send({ error: 'File not found or access denied' });
     }
-    
-    if (fileType !== 'container' && fileType !== 'host') {
-      return res.status(400).json({ error: 'Invalid file type. Must be "container" or "host"' });
-    }
-    
-    // Query the appropriate table based on fileType
-    const tableName = fileType === 'container' ? 'container_files' : 'host_files';
-    const pathField = fileType === 'container' ? 'containerPath' : 'filePath';
-    
-    // Get file content from database
-    const db = require('./database').db;
-    const result = await new Promise((resolve, reject) => {
-      db.get(
-        `SELECT fileContent, ${pathField} as filePath, originalName, fileExtension FROM ${tableName} WHERE id = ? AND userId = ?`,
-        [fileId, userId],
-        (err, row) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(row);
-          }
-        }
-      );
-    });
-    
-    if (!result) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    
-    // If no content is stored in the database
-    if (!result.fileContent) {
-      return res.status(404).json({ error: 'File content not available' });
-    }
-    
-    // Return file content and metadata
-    res.json({
-      filePath: result.filePath,
-      fileName: result.originalName || path.basename(result.filePath),
-      fileExtension: result.fileExtension,
-      content: result.fileContent
-    });
-    
+    // Send back file details (excluding content for this endpoint)
+    const { fileContent, ...fileDetails } = file;
+    res.json(fileDetails);
   } catch (error) {
-    console.error('Error getting file content:', error);
-    res.status(500).json({ error: 'Failed to get file content' });
+    console.error(`Error fetching file details for ID ${fileId}:`, error);
+    res.status(500).send({ error: 'Internal Server Error' });
   }
 });
 
-// New API endpoint to find file by path
-app.get('/api/findFile', authenticateToken, async (req, res) => {
+// Endpoint to download file content (authenticated)
+app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
+  const { fileId } = req.params;
+  const userId = req.userId; // Get userId from auth middleware
+
   try {
-    const userId = req.user.id;
-    const filePath = req.query.path;
-    const fileType = req.query.type || 'container'; // 'container' or 'host'
-    
-    if (!filePath) {
-      return res.status(400).json({ error: 'File path is required' });
+    const file = await fileFunctions.getTrackedFileById(userId, fileId);
+    if (!file || file.fileContent === null || file.fileContent === undefined) {
+      return res.status(404).send({ error: 'File not found, content unavailable, or access denied' });
     }
+
+    const fileName = file.fileName || `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`;
+    const contentType = mime.lookup(fileName) || 'application/octet-stream';
+
+    // Convert the stored text content back to a Buffer
+    // Assuming the content might be base64 encoded if binary, or just plain text
+    // A simple Buffer.from might work for text, but we need a robust way
+    // Let's assume for now it's stored as plain text/utf8 - needs review if binary is stored differently
+    const fileBuffer = Buffer.from(file.fileContent, 'utf8'); // Or 'binary' or 'base64' depending on storage
+
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', fileBuffer.length); // Set content length for browsers
     
-    if (fileType !== 'container' && fileType !== 'host') {
-      return res.status(400).json({ error: 'Invalid file type. Must be "container" or "host"' });
-    }
-    
-    // Query the appropriate table based on fileType
-    const tableName = fileType === 'container' ? 'container_files' : 'host_files';
-    const pathField = fileType === 'container' ? 'containerPath' : 'filePath';
-    
-    // Get file from database
-    const db = require('./database').db;
-    const result = await new Promise((resolve, reject) => {
-      db.get(
-        `SELECT id, ${pathField} as filePath, originalName, fileExtension FROM ${tableName} WHERE ${pathField} = ? AND userId = ?`,
-        [filePath, userId],
-        (err, row) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(row);
-          }
-        }
-      );
-    });
-    
-    if (!result) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    
-    // Return file details
-    res.json({
-      id: result.id,
-      filePath: result.filePath,
-      fileName: result.originalName || path.basename(result.filePath),
-      fileExtension: result.fileExtension
-    });
-    
+    // Send the buffer directly using res.end()
+    res.end(fileBuffer);
+
   } catch (error) {
-    console.error('Error finding file:', error);
-    res.status(500).json({ error: 'Failed to find file' });
+    console.error(`Error downloading file for ID ${fileId}:`, error);
+    res.status(500).send({ error: 'Internal Server Error' });
   }
 });
 

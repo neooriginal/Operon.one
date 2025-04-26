@@ -1,3 +1,20 @@
+// Global functions for file handling (making them accessible to onclick handlers)
+window.downloadFile = function(fileId, fileName) {
+    // We'll trigger a custom event that the internal function will listen for
+    const event = new CustomEvent('downloadFileRequest', {
+        detail: { fileId, fileName }
+    });
+    document.dispatchEvent(event);
+};
+
+window.viewFileContent = function(fileId, fileName) {
+    // We'll trigger a custom event that the internal function will listen for
+    const event = new CustomEvent('viewFileRequest', {
+        detail: { fileId, fileName }
+    });
+    document.dispatchEvent(event);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     // Get DOM elements with null checks
     const chatMessages = document.getElementById('chat-messages');
@@ -258,32 +275,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Display messages
             data.messages.forEach(msg => {
-                let messageContent = msg.content;
+                // Extract message content using our utility function
+                const messageContent = extractTextFromObject(msg.content);
                 console.log('Processing message:', msg);
-                
-                // Handle object content
-                if (typeof messageContent === 'object' && messageContent !== null) {
-                    // If it has a text property, use that
-                    if (messageContent.text) {
-                        messageContent = messageContent.text;
-                    } else if (Array.isArray(messageContent) && messageContent.length > 0) {
-                        // If it's an array of content objects (like OpenAI format)
-                        const textContent = messageContent
-                            .filter(item => item.type === 'text')
-                            .map(item => item.text)
-                            .join("\n");
-                        
-                        if (textContent) {
-                            messageContent = textContent;
-                        } else {
-                            // Fallback: stringify the object
-                            messageContent = JSON.stringify(messageContent);
-                        }
-                    } else {
-                        // Fallback: stringify the object
-                        messageContent = JSON.stringify(messageContent);
-                    }
-                }
                 
                 // Map role to expected format - ensure 'assistant' maps to 'ai' and 'user' stays as 'user'
                 let role = msg.role;
@@ -386,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Hilfsfunktion zum Aktualisieren des Statusbereichs ---
+    // Update the status display with text and appropriate icon based on status type
     function updateStatusDisplay(text, statusType = 'info') {
         if (!statusDisplay) return;
 
@@ -396,20 +390,20 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (statusType) {
             case 'loading':
             case 'status_update':
-                iconHtml = getIconForType('status_update'); // Spinner
+                iconHtml = getIconForType('status_update'); // Spinner icon
                 statusDisplay.classList.add('active'); // Highlight background when active
                 break;
             case 'idle':
-                iconHtml = '<i class="fas fa-check"></i>'; // Einfaches Häkchen für Bereit
+                iconHtml = '<i class="fas fa-check"></i>'; // Simple checkmark for ready state
                 break;
-             case 'completed':
-                 iconHtml = getIconForType('task_completed');
-                 break;
+            case 'completed':
+                iconHtml = getIconForType('task_completed');
+                break;
             case 'error':
                 iconHtml = getIconForType('task_error');
                 break;
             default:
-                 iconHtml = ''; // Kein Icon für einfache Info
+                iconHtml = ''; // No icon for simple info
         }
 
         statusDisplay.innerHTML = `${iconHtml} <span>${text || '-'}</span>`;
@@ -445,39 +439,60 @@ document.addEventListener('DOMContentLoaded', () => {
         return messageElement;
     }
 
+    // Helper function to extract text content from different message object formats
+    function extractTextFromObject(messageObj) {
+        if (typeof messageObj === 'string') {
+            return messageObj;
+        }
+        
+        if (typeof messageObj !== 'object' || messageObj === null) {
+            return String(messageObj);
+        }
+        
+        // If it has a text property, use that
+        if (messageObj.text) {
+            return messageObj.text;
+        }
+        
+        // If it has a result property (AI tool response format)
+        if (messageObj.result) {
+            return messageObj.result;
+        }
+        
+        // If it's an array of content objects (like OpenAI format)
+        if (Array.isArray(messageObj) && messageObj.length > 0) {
+            const textContent = messageObj
+                .filter(item => item.type === 'text')
+                .map(item => item.text)
+                .join("\n");
+            
+            if (textContent) {
+                return textContent;
+            }
+        }
+        
+        // Fallback: stringify the object
+        return JSON.stringify(messageObj, null, 2);
+    }
+
     function addMessage(text, sender, type = 'text') {
         // If chat messages container doesn't exist, exit early
         if (!chatMessages) return;
         
-        // Handle object text
-        if (typeof text === 'object' && text !== null) {
-            // If it has a text property, use that
-            if (text.text) {
-                text = text.text;
-            } else if (Array.isArray(text) && text.length > 0) {
-                // If it's an array of content objects (like OpenAI format)
-                const textContent = text
-                    .filter(item => item.type === 'text')
-                    .map(item => item.text)
-                    .join("\n");
-                
-                if (textContent) {
-                    text = textContent;
-                } else {
-                    // Fallback: stringify the object
-                    text = JSON.stringify(text);
-                }
-            } else {
-                // Fallback: stringify the object
-                text = JSON.stringify(text, null, 2);
-            }
-        }
+        // Process text to ensure it's a string
+        const messageText = extractTextFromObject(text);
         
         const messageElement = document.createElement('div');
         
-        if (type === 'system') {
+        if (sender === 'system') {
             messageElement.classList.add('message', 'system');
-            messageElement.textContent = text;
+            if (type === 'html') {
+                // Render as HTML when type is explicitly 'html'
+                messageElement.innerHTML = messageText;
+            } else {
+                // Default to treating as plain text
+                messageElement.textContent = messageText;
+            }
         } else {
             // Important: Use the correct classes for styling
             // 'message' for the container, then 'user' or 'ai' for the role
@@ -495,13 +510,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         gfm: true,
                         breaks: true // Konvertiert Zeilenumbrüche in <br>
                     });
-                    contentElement.innerHTML = marked.parse(text);
+                    contentElement.innerHTML = marked.parse(messageText);
                 } catch (e) {
                     console.error("Fehler beim Parsen von Markdown:", e);
-                    contentElement.textContent = text; // Fallback auf reinen Text
+                    contentElement.textContent = messageText; // Fallback auf reinen Text
                 }
             } else {
-                contentElement.textContent = text; // Benutzernachrichten bleiben Text
+                contentElement.textContent = messageText; // Benutzernachrichten bleiben Text
             }
             
             messageElement.appendChild(contentElement);
@@ -549,172 +564,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addStepGroup(title, initiallyCollapsed = false, parentElement = chatMessages) {
-        const groupElement = document.createElement('div');
-        groupElement.classList.add('step-group');
-        if (initiallyCollapsed) {
-            groupElement.classList.add('collapsed');
-        }
-
-        const headerElement = document.createElement('div');
-        headerElement.classList.add('step-group-header');
-        headerElement.innerHTML = `
+        const stepGroup = document.createElement('div');
+        stepGroup.classList.add('step-group');
+        
+        const titleElement = document.createElement('div');
+        titleElement.classList.add('step-group-title');
+        titleElement.innerHTML = `
             <span>${title}</span>
-            <i class="fas fa-chevron-down"></i>
+            <i class="fas ${initiallyCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}"></i>
         `;
-
+        
         const contentElement = document.createElement('div');
         contentElement.classList.add('step-group-content');
-
-        headerElement.addEventListener('click', () => {
-            groupElement.classList.toggle('collapsed');
+        
+        if (initiallyCollapsed) {
+            contentElement.style.display = 'none';
+        }
+        
+        titleElement.addEventListener('click', () => {
+            const isCollapsed = contentElement.style.display === 'none';
+            contentElement.style.display = isCollapsed ? 'block' : 'none';
+            titleElement.querySelector('i').className = `fas ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
         });
-
-        groupElement.appendChild(headerElement);
-        groupElement.appendChild(contentElement);
-
-        parentElement.appendChild(groupElement);
+        
+        stepGroup.appendChild(titleElement);
+        stepGroup.appendChild(contentElement);
+        parentElement.appendChild(stepGroup);
         scrollToBottomIfNeeded(parentElement);
-
+        
         return contentElement; // Content-Container zurückgeben
-    }
-
-    function addFileDisplayElement(fileName, filePath, parentElement = chatMessages, fileId = null, fileType = 'container') {
-        // Ensure fileName is a string before proceeding
-        const displayFileName = (typeof fileName === 'string') ? fileName : 'Unnamed File';
-        const safeFilePath = (typeof filePath === 'string') ? filePath : ''; // Use empty string if path is invalid
-
-        const fileElement = document.createElement('div');
-        fileElement.classList.add('file-display-element');
-
-        const fileInfo = document.createElement('div');
-        fileInfo.classList.add('file-info');
-        fileInfo.innerHTML = `
-            <i class="fas fa-file"></i>
-            <span>${displayFileName}</span>
-        `;
-
-        // Create view content button instead of download button
-        const viewButton = document.createElement('button');
-        viewButton.classList.add('view-button');
-        viewButton.innerHTML = `
-            <i class="fas fa-eye"></i> View
-        `;
-        
-        // Only enable if we have a fileId or a valid path
-        if (!fileId && !safeFilePath) {
-            viewButton.style.pointerEvents = 'none'; // Disable click if no valid identifier
-            viewButton.style.opacity = '0.5';
-        }
-        
-        // Add click event to fetch and display content from DB
-        viewButton.addEventListener('click', async () => {
-            try {
-                // If we have a fileId, use it directly
-                if (fileId) {
-                    const response = await fetch(`/api/getFileContent/${fileType}/${fileId}`);
-                    if (!response.ok) {
-                        throw new Error(`Error fetching file content: ${response.statusText}`);
-                    }
-                    
-                    const data = await response.json();
-                    displayFileContent(data.fileName, data.content, data.fileExtension);
-                } 
-                // Otherwise try to find the file ID based on the path
-                else if (safeFilePath) {
-                    // First find the file by path
-                    const findResponse = await fetch(`/api/findFile?path=${encodeURIComponent(safeFilePath)}&type=${fileType}`);
-                    
-                    if (!findResponse.ok) {
-                        throw new Error('File not found in database');
-                    }
-                    
-                    // Get the file ID and other details
-                    const fileData = await findResponse.json();
-                    
-                    // Now get the content using the ID
-                    const contentResponse = await fetch(`/api/getFileContent/${fileType}/${fileData.id}`);
-                    if (!contentResponse.ok) {
-                        throw new Error(`Error fetching file content: ${contentResponse.statusText}`);
-                    }
-                    
-                    const contentData = await contentResponse.json();
-                    displayFileContent(contentData.fileName, contentData.content, contentData.fileExtension);
-                }
-            } catch (error) {
-                console.error('Error viewing file:', error);
-                alert('Error viewing file content: ' + error.message);
-            }
-        });
-
-        fileElement.appendChild(fileInfo);
-        fileElement.appendChild(viewButton);
-
-        parentElement.appendChild(fileElement);
-        scrollToBottomIfNeeded(parentElement);
-
-        return fileElement;
-    }
-    
-    // New function to display file content in a modal or expandable element
-    function displayFileContent(fileName, content, fileExtension) {
-        // Create modal container
-        const modal = document.createElement('div');
-        modal.classList.add('file-content-modal');
-        
-        // Create modal content
-        const modalContent = document.createElement('div');
-        modalContent.classList.add('file-content-modal-content');
-        
-        // Add file header
-        const fileHeader = document.createElement('div');
-        fileHeader.classList.add('file-content-header');
-        fileHeader.innerHTML = `
-            <h3>${fileName}</h3>
-            <button class="close-button">&times;</button>
-        `;
-        
-        // Add file content with syntax highlighting if possible
-        const contentElement = document.createElement('pre');
-        contentElement.classList.add('file-content');
-        
-        // Apply syntax highlighting if extension is supported
-        if (fileExtension && ['js', 'py', 'java', 'html', 'css', 'json', 'xml', 'c', 'cpp', 'cs'].includes(fileExtension.toLowerCase())) {
-            contentElement.innerHTML = `<code class="language-${fileExtension}">${escapeHtml(content)}</code>`;
-            
-            // If using a highlighting library like highlight.js, initialize it here
-            // For example: hljs.highlightElement(contentElement.querySelector('code'));
-        } else {
-            contentElement.textContent = content;
-        }
-        
-        // Add close functionality
-        modalContent.appendChild(fileHeader);
-        modalContent.appendChild(contentElement);
-        modal.appendChild(modalContent);
-        document.body.appendChild(modal);
-        
-        // Add close button event
-        const closeButton = fileHeader.querySelector('.close-button');
-        closeButton.addEventListener('click', () => {
-            document.body.removeChild(modal);
-        });
-        
-        // Also close when clicking outside the modal content
-        modal.addEventListener('click', (event) => {
-            if (event.target === modal) {
-                document.body.removeChild(modal);
-            }
-        });
-    }
-    
-    // Helper function to escape HTML content for safe display
-    function escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
     }
 
     function getIconForType(type) {
@@ -772,7 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Nachrichten senden --- 
+    // Handle sending a message from the input field
     function handleSendMessage() {
         // Check if required elements exist
         if (!messageInput || !chatMessages) return;
@@ -780,34 +658,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = messageInput.value.trim();
         if (!message) return;
 
-        // If this is a new chat without an ID, create it first
-        if (!currentChatId || currentChatId === 'new') {
-            createNewChat().then(() => {
-                // After chat creation, add the message and send it
-                addMessage(message, 'user');
-                messageInput.value = '';
-                
-                // Show loading indicator
-                updateStatusDisplay('Processing your request...', 'loading');
-                
-                // Submit to server with user ID and chat ID
-                socket.emit('submit_task', { 
-                    task: message,
-                    userId: userId,
-                    chatId: currentChatId
-                });
-                
-                // Try to update the chat title based on this first message
-                updateChatTitleFromContent(currentChatId, message);
-                
-                // Disable input while processing
-                if (messageInput && sendButton) {
-                    messageInput.disabled = true;
-                    sendButton.disabled = true;
-                }
-            });
-        } else {
-            // For existing chats, just add the message and send it
+        // Process functions common to both new and existing chats
+        const processSendMessage = (chatId) => {
+            // Add message to UI
             addMessage(message, 'user');
             messageInput.value = '';
             
@@ -818,77 +671,86 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('submit_task', { 
                 task: message,
                 userId: userId,
-                chatId: currentChatId
+                chatId: chatId
             });
-            
-            // If this is the first message in a chat, update the title
-            if (document.querySelectorAll('.message.user-message').length === 1) {
-                updateChatTitleFromContent(currentChatId, message);
-            }
             
             // Disable input while processing
             if (messageInput && sendButton) {
                 messageInput.disabled = true;
                 sendButton.disabled = true;
             }
+        };
+
+        // If this is a new chat without an ID, create it first
+        if (!currentChatId || currentChatId === 'new') {
+            createNewChat().then(() => {
+                processSendMessage(currentChatId);
+                // Try to update the chat title based on this first message
+                updateChatTitleFromContent(currentChatId, message);
+            });
+        } else {
+            // For existing chats, just process the message
+            processSendMessage(currentChatId);
+            
+            // If this is the first message in a chat, update the title
+            if (document.querySelectorAll('.message.user-message').length === 1) {
+                updateChatTitleFromContent(currentChatId, message);
+            }
         }
+    }
+
+    // Helper function to check if a message already exists in the chat
+    function isDuplicateMessage(messageText, maxMessagesToCheck = 3) {
+        if (!chatMessages) return false;
+        
+        const messages = chatMessages.querySelectorAll('.message.ai');
+        if (messages.length === 0) return false;
+        
+        // Check the last few AI messages to avoid duplicates
+        const messagesToCheck = Math.min(messages.length, maxMessagesToCheck);
+        for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
+            const msgContent = messages[i].querySelector('.message-content');
+            if (msgContent && msgContent.textContent.trim() === messageText.trim()) {
+                console.log('Preventing duplicate message');
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     // Update the socket.on('ai_message') handler to fix duplicate messages and improve chat titles
     socket.on('ai_message', (data) => {
-        // Only update UI if this message is for the current chat
-        if (data.chatId && data.chatId !== currentChatId) return;
-        
-        // Handle if text is an object
-        let messageText = data.text;
-        if (typeof messageText === 'object' && messageText !== null) {
-            // Check if it has a result property (AI tool response format)
-            if (messageText.result) {
-                messageText = messageText.result;
-            } else if (messageText.text) {
-                messageText = messageText.text;
-            } else {
-                // Last resort: stringify the object
-                messageText = JSON.stringify(messageText, null, 2);
+        try {
+            // Only update UI if this message is for the current chat
+            if (data.chatId && data.chatId !== currentChatId) return;
+            
+            // Handle if text is an object
+            const messageText = extractTextFromObject(data.text);
+            
+            // Don't add message if it's empty
+            if (!messageText || messageText.trim() === '') {
+                console.log('Ignoring empty message');
+                return;
             }
-        }
-        
-        // Don't add message if it's empty
-        if (!messageText || messageText.trim() === '') {
-            console.log('Ignoring empty message');
-            return;
-        }
-        
-        // Don't add message if it's already displayed (check the last message)
-        const messages = chatMessages.querySelectorAll('.message.ai');
-        let isDuplicate = false;
-        
-        // Check the last few AI messages to avoid duplicates
-        if (messages.length > 0) {
-            // Start from the most recent and check the last 3 messages at most
-            const messagesToCheck = Math.min(messages.length, 3);
-            for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
-                const msgContent = messages[i].querySelector('.message-content');
-                if (msgContent && msgContent.textContent.trim() === messageText.trim()) {
-                    console.log('Preventing duplicate message');
-                    isDuplicate = true;
-                    break;
-                }
+            
+            // Check for duplicate messages
+            if (isDuplicateMessage(messageText)) return;
+            
+            // For new chats: Only add the AI message if it's not the welcome message 
+            // that we've already added in createNewChat()
+            const welcomeText = "Hello! I'm your Operon.one assistant. How can I help you today?";
+            if (messageText.includes(welcomeText) && document.querySelector('.message.ai .message-content')?.textContent.includes(welcomeText)) {
+                console.log('Skipping welcome message in new chat');
+                return;
             }
+            
+            // Add the message to the UI
+            addMessage(messageText, 'ai');
+        } catch (error) {
+            console.error('Error processing AI message:', error);
+            updateStatusDisplay('Error processing message', 'error');
         }
-        
-        if (isDuplicate) return;
-        
-        // For new chats: Only add the AI message if it's not the welcome message 
-        // that we've already added in createNewChat()
-        const welcomeText = "Hello! I'm your Operon.one assistant. How can I help you today?";
-        if (messageText.includes(welcomeText) && document.querySelector('.message.ai .message-content')?.textContent.includes(welcomeText)) {
-            console.log('Skipping welcome message in new chat');
-            return;
-        }
-        
-        // Add the message to the UI
-        addMessage(messageText, 'ai');
     });
 
     // Function to update chat title based on content
@@ -1001,137 +863,101 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-     // Listener for file events - UPDATED with type check
-     socket.on('file_updated', (data) => {
-         if (data.filePath && typeof data.filePath === 'string') {
-             const fileName = data.filePath.split(/[\\/]/).pop() || data.filePath; // Extract filename or use full path
-             addFileDisplayElement(fileName, data.filePath);
-         } else {
-            console.warn("Received file_updated event with invalid filePath:", data);
-         }
-         if (data.content) {
-             console.log("File content (from update):");
-         }
-     });
-
-     // Listener for User Files - UPDATED with type checks
-     socket.on('user_files', (data) => {
-         if (data.files && Array.isArray(data.files) && data.files.length > 0) {
-             // Use a more descriptive title based on context if needed
-             const filesGroupContent = addStepGroup(`Available Files (${data.files.length})`, false);
-             data.files.forEach(fileInfo => {
-                if (fileInfo && typeof fileInfo.fileName === 'string' && typeof fileInfo.path === 'string') {
-                     addFileDisplayElement(fileInfo.fileName, fileInfo.path, filesGroupContent);
-                 } else if (typeof fileInfo === 'string') {
-                     // Fallback for string paths
-                     const fileName = fileInfo.split(/[\\/]/).pop() || fileInfo;
-                     const safeUserId = (typeof data.userId === 'string') ? data.userId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'unknown_user';
-                     const filePath = `output/${safeUserId}/${fileInfo}`;
-                     addFileDisplayElement(fileName, filePath, filesGroupContent);
-                 } else {
-                     console.warn("Received invalid file info in user_files:", fileInfo);
-                 }
-             });
-         }
-     });
-
-    // Add a variable to track the last AI message to prevent duplicates
-    let lastAiMessageId = null;
-
-    // Listener for task completion - UPDATED with type check
+    // Listener for task completion - UPDATED with type check and using isDuplicateMessage
     socket.on('task_completed', (data) => {
-        // Only process events for the current user
-        if (data.userId === userId) {
-            console.log('Task completed:', data);
-            
-            // Handle if result is an object
-            let result = data.result || 'Task completed successfully';
-            if (typeof result === 'object' && result !== null) {
-                // If it has a result property (common format from AI tools)
-                if (result.result) {
-                    result = result.result;
-                } else {
-                    // Stringify the object with proper formatting
-                    result = JSON.stringify(result, null, 2);
-                }
-            }
-            
-            // Check if this result was already added by the ai_message event
-            // Only add the message if it's not a duplicate
-            const messages = chatMessages.querySelectorAll('.message.ai');
-            let isDuplicate = false;
-            
-            if (messages.length > 0) {
-                // Check the last few messages for duplicates
-                const messagesToCheck = Math.min(messages.length, 3);
-                for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
-                    const msgContent = messages[i].querySelector('.message-content');
-                    if (msgContent && msgContent.textContent.trim() === result.trim()) {
-                        console.log('Skipping duplicate message in task_completed');
-                        isDuplicate = true;
-                        break;
-                    }
-                }
-            }
-            
-            if (!isDuplicate) {
-                addMessage(result, 'ai');
-            }
-            
-            updateStatusDisplay('Task completed', 'completed');
-            
-            // Re-enable input
-            messageInput.disabled = false;
-            sendButton.disabled = false;
-            
-            // Display output files if provided directly in this event
-            if (data.outputFiles) {
-                // Handle the new format: { host: [...], container: [...] }
-                const hostFiles = data.outputFiles.host || [];
-                const containerFiles = data.outputFiles.container || [];
-                const totalFiles = hostFiles.length + containerFiles.length;
+        try {
+            // Only process events for the current user
+            if (data.userId === userId) {
+                console.log('Task completed:', data);
                 
-                if (totalFiles > 0) {
-                    const filesGroupContent = addStepGroup(`Result Files (${totalFiles})`, false);
-                    
-                    // Add container files with type
-                    containerFiles.forEach(fileInfo => {
-                        if (fileInfo && typeof fileInfo.fileName === 'string') {
-                            addFileDisplayElement(
-                                fileInfo.fileName, 
-                                fileInfo.path, 
-                                filesGroupContent,
-                                fileInfo.id,
-                                'container'
-                            );
-                        } else {
-                            console.warn("Received invalid container file info:", fileInfo);
-                        }
-                    });
-                    
-                    // Add host files with type
-                    hostFiles.forEach(fileInfo => {
-                        if (fileInfo && typeof fileInfo.fileName === 'string') {
-                            addFileDisplayElement(
-                                fileInfo.fileName, 
-                                fileInfo.path, 
-                                filesGroupContent,
-                                fileInfo.id,
-                                'host'
-                            );
-                        } else {
-                            console.warn("Received invalid host file info:", fileInfo);
-                        }
-                    });
+                // Handle if result is an object
+                const result = extractTextFromObject(data.result) || 'Task completed successfully';
+                
+                // Check if this result was already added by the ai_message event
+                if (!isDuplicateMessage(result)) {
+                    addMessage(result, 'ai');
                 }
+                
+                // Display output files if any
+                if (data.outputFiles && 
+                   ((data.outputFiles.host && data.outputFiles.host.length > 0) || 
+                   (data.outputFiles.container && data.outputFiles.container.length > 0))) {
+                    const filesHtml = generateFilesHtml(data.outputFiles);
+                    addMessage(`<div class="file-output">
+                        <div class="file-header">
+                            <i class="fas fa-file-alt"></i> Task Output Files
+                        </div>
+                        <div class="file-list">
+                            ${filesHtml}
+                        </div>
+                    </div>`, 'system', 'html');
+                }
+                
+                updateStatusDisplay('Task completed', 'completed');
+                
+                // Re-enable input
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                
+                // Add a final summary action element (optional)
+                const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
+                const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
+                addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
             }
-            
-            // Add a final summary action element (optional)
-            const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
-            const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
-            addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
+        } catch (error) {
+            console.error('Error processing task completion:', error);
+            updateStatusDisplay('Error completing task', 'error');
         }
     });
+
+    // Function to generate HTML for file list
+    function generateFilesHtml(files) {
+        if (!files || (!files.host || files.host.length === 0) && (!files.container || files.container.length === 0)) {
+            return '<p>No files generated.</p>';
+        }
+
+        let html = '<div class="file-output-container">';
+
+        const generateList = (title, fileList) => {
+            if (!fileList || fileList.length === 0) return '';
+            
+            let listHtml = `<h3>${title}</h3><ul>`;
+            fileList.forEach(file => {
+                const fileExtension = file.extension || file.fileName?.split('.').pop() || '';
+                const isTextBased = ['txt', 'log', 'csv', 'json', 'xml', 'html', 'css', 'js', 'py', 'java', 'c', 'cpp', 'md'].includes(fileExtension.toLowerCase());
+                
+                listHtml += `
+                    <li>
+                        <span class="file-name">${file.fileName || 'Unnamed File'}</span>
+                        <span class="file-path">(${file.path || 'N/A'})</span>
+                        <div class="file-actions">
+                            <button class="file-action-btn download-btn" onclick="downloadFile('${file.id}', '${file.fileName || `download_${file.id}`}')">Download</button>
+                            ${isTextBased ? `<button class="file-action-btn view-btn" onclick="viewFileContent('${file.id}', '${file.fileName || 'File Preview'}')">View</button>` : ''}
+                        </div>
+                    </li>
+                `;
+            });
+            listHtml += '</ul>';
+            return listHtml;
+        };
+
+        html += generateList('Host Files', files.host);
+        html += generateList('Container Files', files.container);
+        html += '</div>';
+
+        return html;
+    }
+
+    // Helper function to escape HTML (basic version)
+    function escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return '';
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
 
     // Listener für Fehler
     socket.on('task_error', (data) => {
@@ -1221,5 +1047,123 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateStatusDisplay('Failed to delete chat: ' + error.message, 'error');
             }
         }
+    }
+
+    // Add event listeners for file handling events
+    document.addEventListener('downloadFileRequest', (e) => {
+        const { fileId, fileName } = e.detail;
+        const token = localStorage.getItem('token') || authToken;
+        handleFileDownload(fileId, fileName, token);
+    });
+    
+    document.addEventListener('viewFileRequest', (e) => {
+        const { fileId, fileName } = e.detail;
+        const token = localStorage.getItem('token') || authToken;
+        handleFileView(fileId, fileName, token);
+    });
+    
+    // Internal function handling file download
+    async function handleFileDownload(fileId, fileName, token) {
+        try {
+            const response = await fetch(`/api/files/${fileId}/download`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                // Try to get error message from response body
+                let errorMsg = `HTTP error! status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData.error || errorMsg;
+                } catch (e) {
+                    // Ignore if response body isn't JSON
+                }
+                throw new Error(errorMsg);
+            }
+
+            // Get the file content as a Blob
+            const blob = await response.blob();
+
+            // Create a temporary URL for the Blob
+            const url = window.URL.createObjectURL(blob);
+
+            // Create an invisible anchor element
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            // Use the provided fileName for the download attribute
+            a.download = fileName;
+
+            // Append the anchor to the body, click it, and remove it
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            // Inform the user about the error (e.g., using the modal or another notification)
+            showModal(`<p class="error-message">Error downloading file: ${error.message}</p>`, 'Download Error');
+        }
+    }
+    
+    // Internal function handling file view
+    async function handleFileView(fileId, fileName, token) {
+        // Show loading state in modal
+        showModal('Loading file content...', `Loading: ${fileName}`);
+
+        try {
+            const response = await fetch(`/api/files/${fileId}/download`, { // Use download endpoint to get content
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to load file content' }));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const fileContent = await response.text(); // Assume text for viewing
+            
+            // Display content in modal with pre-wrap
+            const contentHtml = `<pre style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(fileContent)}</pre>`;
+            showModal(contentHtml, `Preview: ${fileName}`);
+
+        } catch (error) {         
+            console.error('Error viewing file content:', error);
+            showModal(`<p class="error-message">Error loading file: ${error.message}</p>`, 'Error');
+        }
+    }
+
+    // Function to show modal
+    function showModal(content, title = 'Information') {
+        const modal = document.getElementById('file-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+        const modalClose = document.querySelector('.modal-close');
+
+        if (!modal || !modalTitle || !modalBody || !modalClose) {
+            console.error('Modal elements not found!');
+            return;
+        }
+
+        modalTitle.textContent = title;
+        modalBody.innerHTML = content; // Allows HTML content
+        modal.style.display = 'flex'; // Show modal
+
+        // Close modal functionality
+        modalClose.onclick = () => {
+            modal.style.display = 'none';
+        };
+        // Optional: Close modal when clicking outside the content
+        modal.onclick = (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
     }
 }); 

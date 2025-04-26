@@ -3,7 +3,7 @@ const dotenv = require('dotenv');
 const smartModelSelector = require('./smartModelSelector');
 const tokenCalculation = require('./tokenCalculation');
 const contextManager = require('../../utils/context');
-const personalityEngine = require('../personalityEngine/personalityEngine');
+const { getPersonalityPrompt } = require('../personalityEngine/getPersonalityPrompt');
 const io = require('../../socket');
 dotenv.config();
 
@@ -96,12 +96,13 @@ Consider the entire context and all requirements before generating a response.
 
     systemMessage = systemMessage+". NEVER EVER RESPOND WITH AN EMPTY STRING AND NEVER USE PLACEHOLDERS. Focus on accuracy and correctness over lengthy explanations. Prioritize functionality over verbose descriptions. Fully address all specifications and requirements."
 
-    // Use the new personality engine to generate a dynamic system prompt
-    const dynamicSystemPrompt = await personalityEngine.generateDynamicSystemPrompt(userId, systemMessage, prompt);
+    // Get personality prompt
+    const personalityPrompt = await getPersonalityPrompt(userId);
+    const combinedSystemPrompt = `${systemMessage}\n\n${personalityPrompt}`;
     
     let messagesForAPI = [
         {role: "system", content: [
-            {type: "text", text: dynamicSystemPrompt}
+            {type: "text", text: combinedSystemPrompt}
         ]},
     ];
     
@@ -199,10 +200,6 @@ Consider the entire context and all requirements before generating a response.
         
         // Save updated tool state
         contextManager.setToolState('ai', toolState, userId, chatId);
-        
-        // Analyze the interaction to evolve the personality (asynchronously, don't wait)
-        personalityEngine.analyzeUserInteraction(userId, prompt, responseContent)
-            .catch(err => console.error('Error analyzing interaction:', err));
         
         // Parse JSON response if needed
         if (jsonResponse) {

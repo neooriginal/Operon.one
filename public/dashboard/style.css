@@ -639,6 +639,167 @@ body::before {
 
 /* --- Ende Markdown Styling --- */
 
+/* --- File Output Styling --- */
+.file-output {
+    background-color: var(--dark-light);
+    border-radius: var(--border-radius);
+    margin: 10px 0;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.file-header {
+    background-color: rgba(0,0,0,0.2);
+    padding: 12px 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.file-header i {
+    margin-right: 8px;
+    color: var(--primary);
+}
+
+.file-list {
+    padding: 10px 0;
+}
+
+.file-category {
+    margin-bottom: 15px;
+}
+
+.file-category strong {
+    display: block;
+    padding: 5px 15px;
+    font-size: 0.9em;
+    color: var(--primary);
+}
+
+.file-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.file-item {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.file-name {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.file-path {
+    font-size: 0.85em;
+    color: var(--gray);
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.file-actions {
+    display: flex;
+    gap: 15px;
+}
+
+.file-download, .file-view {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.9em;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: rgba(99, 102, 241, 0.1);
+    transition: background-color 0.2s;
+}
+
+.file-download:hover, .file-view:hover {
+    background-color: rgba(99, 102, 241, 0.2);
+}
+
+.file-download i, .file-view i {
+    margin-right: 5px;
+}
+
+/* File content modal */
+.file-content-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0,0,0,0.8);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--dark);
+    width: 80%;
+    max-width: 800px;
+    max-height: 90vh;
+    border-radius: var(--border-radius);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+    color: var(--primary);
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: var(--gray);
+    font-size: 1.5em;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.close-button:hover {
+    color: var(--light);
+}
+
+.modal-body {
+    padding: 15px;
+    overflow: auto;
+    flex-grow: 1;
+}
+
+.modal-body pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: var(--light);
+}
+
 /* --- Styling für Dateianzeige-Elemente --- */
 .file-display-element {
     background-color: var(--dark-light);
@@ -677,47 +838,6 @@ body::before {
     text-overflow: ellipsis;
 }
 
-.file-display-element .download-button {
-    padding: 5px 12px;
-    background-color: var(--dark-light);
-    color: var(--gray-light);
-    border: 1px solid var(--primary);
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    font-size: 0.8em;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: var(--transition);
-    flex-shrink: 0;
-}
-
-.file-display-element .download-button:hover {
-    background-color: var(--dark-light);
-}
-
-/* Style the new view button with the same style as download button */
-.file-display-element .view-button {
-    padding: 5px 12px;
-    background-color: var(--dark-light);
-    color: var(--gray-light);
-    border: 1px solid var(--primary);
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    font-size: 0.8em;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: var(--transition);
-    flex-shrink: 0;
-}
-
-.file-display-element .view-button:hover {
-    background-color: var(--dark-light);
-}
-
 /* Styling für File-Display-Elemente INNERHALB einer Gruppe sicherstellen */
 .step-group-content .file-display-element {
     width: 100%;
@@ -726,71 +846,6 @@ body::before {
     border-left: 3px solid var(--primary);
     padding: 10px 15px;
     box-sizing: border-box;
-}
-
-/* File content modal styling */
-.file-content-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 1000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.file-content-modal-content {
-    background-color: #fff;
-    border-radius: 8px;
-    width: 80%;
-    max-width: 800px;
-    max-height: 80%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-.file-content-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 20px;
-    background-color: #f2f2f2;
-    border-bottom: 1px solid #ddd;
-}
-
-.file-content-header h3 {
-    margin: 0;
-    color: #333;
-    font-size: 16px;
-}
-
-.file-content-header .close-button {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #555;
-}
-
-.file-content {
-    padding: 20px;
-    overflow-y: auto;
-    flex: 1;
-    background-color: #f9f9f9;
-    font-family: 'Courier New', monospace;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    tab-size: 4;
-}
-
-.file-content code {
-    font-family: 'Courier New', monospace;
-    display: block;
 }
 
 /* Gradient text effect */
