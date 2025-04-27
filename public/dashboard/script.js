@@ -1091,7 +1091,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Get the file content as a Blob
             const blob = await response.blob();
-
+            
             // Create a temporary URL for the Blob
             const url = window.URL.createObjectURL(blob);
 
@@ -1105,8 +1105,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Append the anchor to the body, click it, and remove it
             document.body.appendChild(a);
             a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            
+            // Small delay before cleaning up to ensure the download starts
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }, 100);
 
         } catch (error) {
             console.error('Error downloading file:', error);
@@ -1132,11 +1136,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
 
-            const fileContent = await response.text(); // Assume text for viewing
+            // Check if the file is binary based on the content type or extension
+            const contentType = response.headers.get('Content-Type');
+            const isBinary = contentType && (
+                contentType.indexOf('text/') !== 0 && 
+                contentType !== 'application/json' && 
+                contentType !== 'application/javascript'
+            );
             
-            // Display content in modal with pre-wrap
-            const contentHtml = `<pre style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(fileContent)}</pre>`;
-            showModal(contentHtml, `Preview: ${fileName}`);
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            const binaryExtensions = ['pdf', 'docx', 'xlsx', 'pptx', 'zip', 'exe', 'jpg', 'jpeg', 'png', 'gif'];
+            
+            if (isBinary || binaryExtensions.includes(fileExtension)) {
+                // For binary files, show download prompt
+                showModal(`<p>Binary file detected. This file type cannot be previewed in the browser.</p>
+                          <button class="btn" onclick="window.downloadFile('${fileId}', '${fileName}')">Download instead</button>`, 
+                          `Cannot Preview: ${fileName}`);
+            } else {
+                // For text files
+                const fileContent = await response.text();
+                
+                // Display content in modal with pre-wrap
+                const contentHtml = `<pre style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(fileContent)}</pre>`;
+                showModal(contentHtml, `Preview: ${fileName}`);
+            }
 
         } catch (error) {         
             console.error('Error viewing file content:', error);

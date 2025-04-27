@@ -206,17 +206,31 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
     const fileName = file.fileName || `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`;
     const contentType = mime.lookup(fileName) || 'application/octet-stream';
 
-    // Convert the stored text content back to a Buffer
-    // Assuming the content might be base64 encoded if binary, or just plain text
-    // A simple Buffer.from might work for text, but we need a robust way
-    // Let's assume for now it's stored as plain text/utf8 - needs review if binary is stored differently
-    const fileBuffer = Buffer.from(file.fileContent, 'utf8'); // Or 'binary' or 'base64' depending on storage
+    // Determine if the file should be treated as binary based on mime type or extension
+    const isBinary = contentType.indexOf('text/') !== 0 && 
+                     contentType !== 'application/json' && 
+                     contentType !== 'application/javascript';
+
+    // Properly handle both binary and text files
+    let fileBuffer;
+    if (isBinary) {
+      // For binary files, assume base64 encoding
+      try {
+        fileBuffer = Buffer.from(file.fileContent, 'base64');
+      } catch (e) {
+        // Fallback to utf8 if base64 decoding fails
+        fileBuffer = Buffer.from(file.fileContent, 'utf8');
+      }
+    } else {
+      // For text files
+      fileBuffer = Buffer.from(file.fileContent, 'utf8');
+    }
 
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', fileBuffer.length); // Set content length for browsers
+    res.setHeader('Content-Length', fileBuffer.length);
     
-    // Send the buffer directly using res.end()
+    // Send the buffer directly
     res.end(fileBuffer);
 
   } catch (error) {
