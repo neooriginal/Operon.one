@@ -1052,13 +1052,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add event listeners for file handling events
     document.addEventListener('downloadFileRequest', (e) => {
         const { fileId, fileName } = e.detail;
-        const token = localStorage.getItem('token') || authToken;
+        const token = authToken; // Use authToken directly from parent scope
         handleFileDownload(fileId, fileName, token);
     });
     
     document.addEventListener('viewFileRequest', (e) => {
         const { fileId, fileName } = e.detail;
-        const token = localStorage.getItem('token') || authToken;
+        const token = authToken; // Use authToken directly from parent scope
         handleFileView(fileId, fileName, token);
     });
     

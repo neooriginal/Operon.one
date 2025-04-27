@@ -714,11 +714,57 @@ const settingsFunctions = {
 function tryParseJSON(str, defaultValue) {
   if (!str) return defaultValue;
   
-  try {
-    return JSON.parse(str);
-  } catch (e) {
-    return str;
+  // If it's already an object, just return it
+  if (typeof str === 'object') return str;
+  
+  // Handle string JSON
+  if (typeof str === 'string') {
+    try {
+      // First attempt - standard JSON parse
+      return JSON.parse(str);
+    } catch (e) {
+      // Second attempt - try to fix common JSON issues
+      try {
+        // Clean up trailing commas that cause parse errors
+        const cleaned = str.replace(/,\s*([\]}])/g, '$1');
+        return JSON.parse(cleaned);
+      } catch (e2) {
+        // Third attempt - if it's a partial/truncated JSON, try to recover it
+        try {
+          // Add missing closing brackets/braces if needed
+          let fixedStr = str;
+          const openBraces = (fixedStr.match(/\{/g) || []).length;
+          const closeBraces = (fixedStr.match(/\}/g) || []).length;
+          const openBrackets = (fixedStr.match(/\[/g) || []).length;
+          const closeBrackets = (fixedStr.match(/\]/g) || []).length;
+          
+          // Add missing closing braces
+          for (let i = 0; i < (openBraces - closeBraces); i++) {
+            fixedStr += '}';
+          }
+          
+          // Add missing closing brackets
+          for (let i = 0; i < (openBrackets - closeBrackets); i++) {
+            fixedStr += ']';
+          }
+          
+          return JSON.parse(fixedStr);
+        } catch (e3) {
+          console.error('Failed to parse JSON after multiple attempts', {
+            error: true,
+            message: 'Failed to parse JSON after multiple attempts',
+            original: str.substring(0, 100) + '...',
+            fallback: true
+          });
+          // Return the original string if defaultValue is not specified
+          return defaultValue !== undefined ? defaultValue : str;
+        }
+      }
+    }
   }
+  
+  // If all else fails, return the default value or the original string
+  return defaultValue !== undefined ? defaultValue : str;
 }
 
 // Close the database connection when the process exits
