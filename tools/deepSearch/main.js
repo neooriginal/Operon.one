@@ -109,6 +109,13 @@ async function searchWeb(task, userId = 'default', intensity){
         
         for(let query of queries){
             try {
+                // Get DuckDuckGo search results
+                let duckDuckGoResults = await getDuckDuckGoResults(query, intensity);
+                if (duckDuckGoResults && duckDuckGoResults.length > 0) {
+                    webData.push(`DuckDuckGo results for "${query}":\n${duckDuckGoResults}`);
+                }
+                
+                // Get Wikipedia article
                 let wikipediaArticle = await getWikipediaArticle(query);
                 if (wikipediaArticle) {
                     webData.push(`Wikipedia article on "${query}":\n${wikipediaArticle}`);
@@ -170,6 +177,54 @@ async function searchWeb(task, userId = 'default', intensity){
     } catch (error) {
         console.error("Error in searchWeb:", error.message);
         return "Unable to search web due to network issues. Please try again later.";
+    }
+}
+
+async function getDuckDuckGoResults(query, intensity = 5) {
+    try {
+        // Determine number of results to fetch based on intensity
+        const resultLimit = intensity ? Math.min(Math.max(3, intensity * 2), 15) : 10;
+        
+        // Use the DuckDuckGo HTML API
+        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const response = await axios.get(searchUrl, {
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        
+        // Extract search results from HTML
+        // This is a simple approach - in production, use a proper HTML parser
+        const html = response.data;
+        const results = [];
+        
+        // Extract results from the HTML response
+        // Simple regex pattern to extract snippets
+        const snippetRegex = /<a class="result__snippet"[^>]*>(.*?)<\/a>/g;
+        let match;
+        let count = 0;
+        
+        while ((match = snippetRegex.exec(html)) !== null && count < resultLimit) {
+            if (match[1]) {
+                // Clean up HTML entities and tags
+                const snippet = match[1].replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/<[^>]*>/g, '')
+                    .trim();
+                
+                if (snippet.length > 20) { // Only add substantial snippets
+                    results.push(snippet);
+                    count++;
+                }
+            }
+        }
+        
+        return results.join('\n\n');
+    } catch (error) {
+        console.error("Error fetching DuckDuckGo results:", error.message);
+        return null;
     }
 }
 

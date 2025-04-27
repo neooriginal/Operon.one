@@ -926,13 +926,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fileExtension = file.extension || file.fileName?.split('.').pop() || '';
                 const isTextBased = ['txt', 'log', 'csv', 'json', 'xml', 'html', 'css', 'js', 'py', 'java', 'c', 'cpp', 'md'].includes(fileExtension.toLowerCase());
                 
+                // Sanitize the fileName for use in HTML onclick attributes
+                const safeFileName = file.fileName ? 
+                    file.fileName.replace(/'/g, "\\'").replace(/"/g, "&quot;") : 
+                    `download_${file.id}`;
+                
                 listHtml += `
                     <li>
                         <span class="file-name">${file.fileName || 'Unnamed File'}</span>
                         <span class="file-path">(${file.path || 'N/A'})</span>
                         <div class="file-actions">
-                            <button class="file-action-btn download-btn" onclick="downloadFile('${file.id}', '${file.fileName || `download_${file.id}`}')">Download</button>
-                            ${isTextBased ? `<button class="file-action-btn view-btn" onclick="viewFileContent('${file.id}', '${file.fileName || 'File Preview'}')">View</button>` : ''}
+                            <button class="file-action-btn download-btn" onclick="window.downloadFile(${file.id}, '${safeFileName}')">Download</button>
+                            ${isTextBased ? `<button class="file-action-btn view-btn" onclick="window.viewFileContent(${file.id}, '${safeFileName}')">View</button>` : ''}
                         </div>
                     </li>
                 `;
