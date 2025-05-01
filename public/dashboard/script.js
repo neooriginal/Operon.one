@@ -45,9 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
         userInfoElement.textContent = `User: ${userEmail || userId}`;
     }
 
+    
+
     // --- Socket.IO Connection ---
-    // Make sure the URL matches your server (where socket.js runs)
-    const socket = io('http://localhost:3000', {
+    // Connect to the current origin instead of hardcoded localhost
+    const socket = io(window.location.origin, {
          transports: ['websocket'], // Prefer WebSocket for better performance
          auth: {
              token: authToken,
