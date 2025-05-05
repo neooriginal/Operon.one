@@ -40,10 +40,10 @@ npm start
 ### 🗺️ Roadmap
 
 - Enhanced dashboard
-- Intelligent workflow automation
 - Mobile application for on-the-go management
 - Extended plugin ecosystem
 - Cloud deployment options
+- General performance improvements and better handling
 
 ## 📜 License
 
