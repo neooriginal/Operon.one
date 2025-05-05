@@ -24,7 +24,7 @@ Operon.one is a powerful, next generation, generative action-ai to interact with
 
 ```bash
 # Clone the repository
-git clone https://github.com/neo_original/Operon.one.git
+git clone https://github.com/neooriginal/Operon.one.git
 
 # Install dependencies
 npm install
