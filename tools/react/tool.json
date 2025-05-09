@@ -1,0 +1,7 @@
+{
+  "title": "react",
+  "description": "For reasoning about and reflecting on task execution",
+  "example": "react: Analyze the steps taken so far",
+  "enabled": true,
+  "main": "main.js"
+} 

@@ -1,0 +1,7 @@
+{
+  "title": "imageGeneration",
+  "description": "For generating images based on textual descriptions",
+  "example": "imageGeneration: Create an image of a sunset over mountains",
+  "enabled": true,
+  "main": "main.js"
+} 

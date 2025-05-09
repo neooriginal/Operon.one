@@ -1,48 +1,84 @@
-const ai = require('./tools/AI/ai');
-const browser = require('./tools/browser/main');
-const fileSystem = require('./tools/filesystem/main');
-const deepSearch = require('./tools/deepSearch/main');
-const webSearch = require('./tools/webSearch/main');
-const pythonExecute = require('./tools/pythonExecute/main');
-const bash = require('./tools/bash/index');
-const imageGeneration = require('./tools/imageGeneration/main');
-const math = require('./tools/math/main');
-const ascii = require('./utils/ascii');
 const fs = require('fs');
-const writer = require('./tools/writer/main');
-const react = require('./tools/react/main');
-const memory = require('./tools/memory/main');
-const contextManager = require('./utils/context');
 const path = require('path');
+const ascii = require('./utils/ascii');
+const contextManager = require('./utils/context');
 // Import socket.io
 const io = require('./socket');
 
 // Screenshot interval in milliseconds
 const SCREENSHOT_INTERVAL = 5000;
 
-let globalPrompt = `
+// Dynamically load tools based on their tool.json files
+const toolsDirectory = path.join(__dirname, 'tools');
+const tools = {};
+const toolDescriptions = [];
+
+// Function to load tools dynamically
+function loadTools() {
+  const toolFolders = fs.readdirSync(toolsDirectory).filter(folder => {
+    const stat = fs.statSync(path.join(toolsDirectory, folder));
+    return stat.isDirectory();
+  });
+
+  toolFolders.forEach(folder => {
+    const toolJsonPath = path.join(toolsDirectory, folder, 'tool.json');
+    
+    try {
+      if (fs.existsSync(toolJsonPath)) {
+        const toolConfig = JSON.parse(fs.readFileSync(toolJsonPath, 'utf8'));
+        
+        if (toolConfig.enabled) {
+          let mainFile = toolConfig.main || 'main.js';
+          if (mainFile === 'main.js' && !fs.existsSync(path.join(toolsDirectory, folder, mainFile))) {
+            if (fs.existsSync(path.join(toolsDirectory, folder, 'index.js'))) {
+              mainFile = 'index.js';
+            } else {
+              console.warn(`Warning: Main file ${mainFile} not found for tool ${folder}, skipping`);
+              return;
+            }
+          }
+          
+          const toolModule = require(path.join(toolsDirectory, folder, mainFile));
+          tools[toolConfig.title] = toolModule;
+          
+          // Add to tool descriptions for the prompt
+          toolDescriptions.push({
+            title: toolConfig.title,
+            description: toolConfig.description,
+            example: toolConfig.example
+          });
+          
+          console.log(`Loaded tool: ${toolConfig.title}`);
+        }
+      } else {
+        console.warn(`Warning: No tool.json found in ${folder}, skipping`);
+      }
+    } catch (error) {
+      console.error(`Error loading tool from ${folder}:`, error.message);
+    }
+  });
+}
+
+// Load all tools at startup
+loadTools();
+
+// Generate global prompt dynamically based on loaded tools
+function generateGlobalPrompt() {
+  // Sort tools by title for consistent ordering
+  const sortedTools = toolDescriptions.sort((a, b) => a.title.localeCompare(b.title));
+  
+  const toolsList = sortedTools.map(tool => `> - ${tool.title}: ${tool.description}`).join('\n');
+  
+  return `
 
 
 > **You are an autonomous AI agent with full access to the following tools, each of which can be invoked as needed to accomplish tasks independently and completely:**
 >
-> - webBrowser: for complex web browsing tasks that require interaction
-> - fileSystem: for saving, loading, and writing files
-> - chatCompletion: for answering questions, generating ideas, or performing logical reasoning
-> - webSearch: for quick information gathering (DuckDuckGo-based)
-> - deepResearch: for deep topic research (DuckDuckGo-based) - you can specify 'intensity' parameter (1-10) to control the number of websites to analyze
-> - execute: for writing and running Python code
-> - bash: for executing shell commands
-> - writer: for generating detailed written content. 
-> - math: for performing complex mathematical operations
-> - directAnswer: for immediately answering simple, chit-chat style questions without execution steps
-
-Every tool can only respond with plain text. only the fileSystem tool can create files.
-When creating files with a specific format, make sure it matches the format of programs using it. If not possible, use scripts or bash to convert the file.
+${toolsList}
 
 ### ⚙️ Core Directives:
 
 - **Do not ask the user for confirmation** at any point.
-- **Do not write lots of text into the plan**
 - **Do not pause execution** unless a required tool is unavailable.
 - Use the chatCompletion tool to **self-evaluate**, plan tasks, and analyze intermediate results as needed.
 - Always **complete tasks end-to-end**, writing full outputs to files using fileSystem.
@@ -54,6 +90,7 @@ When creating files with a specific format, make sure it matches the format of p
 - **Consider edge cases and provide fallback behaviors for all functions.**
 - **Always test your outputs with specific examples before submitting final solutions.**
 - **For simple questions that don't require complex processing, use directAnswer to respond immediately.**
+- **IMPORTANT: When providing file paths, ONLY include the actual path without any additional commentary, status messages, or instructions. Example: "/output/report.pdf" instead of "/output/report.pdf successfully created!"**
 
 ---
 
@@ -163,7 +200,8 @@ For simple questions or chit-chat, return:
   "answer": "I don't have access to current weather information without using a search tool. Would you like me to search for weather information for your location? If so, please provide your city or region."
 }
 
-`
+`;
+}
 
 async function centralOrchestrator(question, userId = 'default', chatId = 1){
   try {
@@ -184,12 +222,12 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
 
     let prompt = `
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
-    ${globalPrompt}
-    `
+    ${generateGlobalPrompt()}
+    `;
     console.log("[ ] Planning...");
     io.emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
-    let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId, chatId);
+    let planObject = await tools.chatCompletion.callAI(prompt, question, [], undefined, true, "auto", userId, chatId);
     
     // Check if this is a direct answer request
     if (planObject.directAnswer === true && planObject.answer) {
@@ -260,10 +298,10 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
    
     // Start screenshot interval if browser is used in the plan
     let screenshotInterval = null;
-    if (plan.some(step => step.action === "webBrowser")) {
+    if (plan.some(step => step.action === "webBrowser") && tools.webBrowser) {
       screenshotInterval = setInterval(async () => {
         try {
-          const screenshot = await browser.takeScreenshot(userId);
+          const screenshot = await tools.webBrowser.takeScreenshot(userId);
           if (screenshot) {
             io.emit('browser_screenshot', { userId, chatId, screenshot });
           }
@@ -281,7 +319,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       // ReAct: Process step with reasoning before execution
       console.log(`[ ] Reasoning about step: ${step.step} using ${step.action}`);
       io.emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
-      const enhancedStep = await react.processStep(step, userId, chatId);
+      const enhancedStep = await tools.react.processStep(step, userId, chatId);
       console.log(`[X] Reasoning complete`);
       
       console.log(`[ ] (${enhancedStep.action}) ${enhancedStep.step} `);
@@ -293,97 +331,30 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       const inputData = enhancedStep.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
       
       let summary;
-      switch(enhancedStep.action) {
-        case "webBrowser":
-          summary = await browser.runTask(
-            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
-            inputData, 
-            (summary) => {
-              console.log(`[X] ${enhancedStep.step}`);
-              io.emit('step_completed', { 
-                userId, 
-                chatId,
-                step: enhancedStep.step, 
-                action: enhancedStep.action,
-                metrics: {
-                  stepIndex: currentStepIndex,
-                  stepCount: currentStepIndex + 1,
-                  totalSteps: plan.length,
-                  successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                    step && step.output && !step.output.error && step.output.success !== false
-                  ).length
-                }
-              });
-            },
-            userId,
-            chatId
-          );
-          break;
-
-        case "fileSystem":
-          summary = await fileSystem.runTask(
-            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
-            inputData, 
-            (summary) => {
-              console.log(`[X] ${enhancedStep.step}`);
-              io.emit('step_completed', { 
-                userId, 
-                chatId,
-                step: enhancedStep.step, 
-                action: enhancedStep.action,
-                metrics: {
-                  stepIndex: currentStepIndex,
-                  stepCount: currentStepIndex + 1,
-                  totalSteps: plan.length,
-                  successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                    step && step.output && !step.output.error && step.output.success !== false
-                  ).length
-                }
-              });
-              // If a file is created or updated, emit file event
-              if (summary && summary.filePath) {
-                io.emit('file_updated', { 
-                  userId, 
-                  chatId,
-                  filePath: summary.filePath, 
-                  content: summary.content || 'File created/updated'
-                });
-              }
-            },
-            userId,
-            chatId
-          );
-          break;
-
-        case "chatCompletion":
-          summary = await ai.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId, chatId);
-          console.log(`[X] ${enhancedStep.step}`);
-          io.emit('step_completed', { 
-            userId, 
-            chatId,
-            step: enhancedStep.step, 
-            action: enhancedStep.action,
-            metrics: {
-              stepIndex: currentStepIndex,
-              stepCount: currentStepIndex + 1,
-              totalSteps: plan.length,
-              successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                step && step.output && !step.output.error && step.output.success !== false
-              ).length
-            }
-          });
+      
+      // Get the appropriate tool for this action
+      const tool = tools[enhancedStep.action];
+      
+      if (!tool) {
+        console.error(`Tool '${enhancedStep.action}' not found or not enabled`);
+        summary = { 
+          error: `Tool '${enhancedStep.action}' not found or not enabled`, 
+          success: false 
+        };
+      } else {
+        // Different tools have different methods for execution
+        if (enhancedStep.action === "chatCompletion") {
+          summary = await tool.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId, chatId);
           contextManager.addToHistory({
             role: "assistant", 
             content: [
               {type: "text", text: JSON.stringify(summary)}
             ]
           }, userId, chatId);
-          break;
-
-        case "deepResearch":
-          // Extract intensity parameter if provided (default to undefined if not specified)
+        } else if (["deepResearch", "webSearch"].includes(enhancedStep.action)) {
+          // Handle tools that use intensity parameter
           const intensity = enhancedStep.intensity || undefined;
-          summary = await deepSearch.runTask(enhancedStep.step, inputData, (summary) => {
+          summary = await tool.runTask(enhancedStep.step, inputData, (summary) => {
             console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
@@ -400,134 +371,8 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
               }
             });
           }, userId, chatId, intensity);
-          break;
-
-        case "webSearch":
-          summary = await webSearch.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
-            io.emit('step_completed', { 
-              userId, 
-              chatId,
-              step: enhancedStep.step, 
-              action: enhancedStep.action,
-              metrics: {
-                stepIndex: currentStepIndex,
-                stepCount: currentStepIndex + 1,
-                totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                  step && step.output && !step.output.error && step.output.success !== false
-                ).length
-              }
-            });
-          }, userId, chatId);
-          break;
-
-        case "execute":
-          summary = await pythonExecute.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
-            io.emit('step_completed', { 
-              userId, 
-              chatId,
-              step: enhancedStep.step, 
-              action: enhancedStep.action,
-              metrics: {
-                stepIndex: currentStepIndex,
-                stepCount: currentStepIndex + 1,
-                totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                  step && step.output && !step.output.error && step.output.success !== false
-                ).length
-              }
-            });
-          }, userId, chatId);
-          // --- Start Modification: Track created container files ---
-          if (summary && Array.isArray(summary.createdContainerFiles)) {
-            for (const containerPath of summary.createdContainerFiles) {
-              try {
-                // Assuming fileSystem.trackContainerFile exists - we'll add it later
-                await fileSystem.trackContainerFile(userId, containerPath, chatId);
-              } catch (trackingError) {
-                console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
-              }
-            }
-          }
-          // --- End Modification ---
-          break;
-
-        case "bash":
-          summary = await bash.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
-            io.emit('step_completed', { 
-              userId, 
-              chatId,
-              step: enhancedStep.step, 
-              action: enhancedStep.action,
-              metrics: {
-                stepIndex: currentStepIndex,
-                stepCount: currentStepIndex + 1,
-                totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                  step && step.output && !step.output.error && step.output.success !== false
-                ).length
-              }
-            });
-          }, userId, chatId);
-          // --- Start Modification: Track created container files ---
-          if (summary && Array.isArray(summary.createdContainerFiles)) {
-            for (const containerPath of summary.createdContainerFiles) {
-              try {
-                // Assuming fileSystem.trackContainerFile exists - we'll add it later
-                await fileSystem.trackContainerFile(userId, containerPath, chatId);
-              } catch (trackingError) {
-                console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
-              }
-            }
-          }
-          // --- End Modification ---
-          break;
-
-        case "imageGeneration":
-          summary = await imageGeneration.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
-            io.emit('step_completed', { 
-              userId, 
-              chatId,
-              step: enhancedStep.step, 
-              action: enhancedStep.action,
-              metrics: {
-                stepIndex: currentStepIndex,
-                stepCount: currentStepIndex + 1,
-                totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                  step && step.output && !step.output.error && step.output.success !== false
-                ).length
-              }
-            });
-          }, userId, chatId);
-          break;
-
-        case "math":
-          summary = await math.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
-            io.emit('step_completed', { 
-              userId, 
-              chatId,
-              step: enhancedStep.step, 
-              action: enhancedStep.action,
-              metrics: {
-                stepIndex: currentStepIndex,
-                stepCount: currentStepIndex + 1,
-                totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                  step && step.output && !step.output.error && step.output.success !== false
-                ).length
-              }
-            });
-          }, userId, chatId);
-          break;
-
-        case "writer":
-          summary = await writer.write(
+        } else if (enhancedStep.action === "writer") {
+          summary = await tool.write(
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData,
             userId,
@@ -543,49 +388,72 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
               partial: "Writer tool failed to generate content. See logs for details."
             };
           }
-          
-          console.log(`[X] ${enhancedStep.step}`);
-          io.emit('step_completed', { 
-            userId, 
-            chatId,
-            step: enhancedStep.step, 
-            action: enhancedStep.action,
-            metrics: {
-              stepIndex: currentStepIndex,
-              stepCount: currentStepIndex + 1,
-              totalSteps: plan.length,
-              successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                step && step.output && !step.output.error && step.output.success !== false
-              ).length
-            }
-          });
-          break;
-        
-        case "memory":
-          summary = await memory.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
-            io.emit('step_completed', { 
-              userId, 
-              chatId,
-              step: enhancedStep.step, 
-              action: enhancedStep.action,
-              metrics: {
-                stepIndex: currentStepIndex,
-                stepCount: currentStepIndex + 1,
-                totalSteps: plan.length,
-                successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-                  step && step.output && !step.output.error && step.output.success !== false
-                ).length
+        } else {
+          // General case for most tools
+          summary = await tool.runTask(
+            `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
+            inputData, 
+            (summary) => {
+              console.log(`[X] ${enhancedStep.step}`);
+              io.emit('step_completed', { 
+                userId, 
+                chatId,
+                step: enhancedStep.step, 
+                action: enhancedStep.action,
+                metrics: {
+                  stepIndex: currentStepIndex,
+                  stepCount: currentStepIndex + 1,
+                  totalSteps: plan.length,
+                  successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
+                    step && step.output && !step.output.error && step.output.success !== false
+                  ).length
+                }
+              });
+              
+              // If this is the fileSystem tool and a file was created/updated, emit file event
+              if (enhancedStep.action === "fileSystem" && summary && summary.filePath) {
+                io.emit('file_updated', { 
+                  userId, 
+                  chatId,
+                  filePath: summary.filePath, 
+                  content: summary.content || 'File created/updated'
+                });
               }
-            });
-          }, userId, chatId);
-          break;
-        
-        default:
-          console.warn(`[!] Unknown action type: ${enhancedStep.action}`);
-          summary = { error: `Unknown action type: ${enhancedStep.action}`, success: false };
-          break;
+            },
+            userId,
+            chatId
+          );
+          
+          // Handle container files for execute and bash tools
+          if (["execute", "bash"].includes(enhancedStep.action) && 
+              summary && Array.isArray(summary.createdContainerFiles) && 
+              tools.fileSystem) {
+            for (const containerPath of summary.createdContainerFiles) {
+              try {
+                await tools.fileSystem.trackContainerFile(userId, containerPath, chatId);
+              } catch (trackingError) {
+                console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
+              }
+            }
+          }
+        }
       }
+      
+      console.log(`[X] ${enhancedStep.step}`);
+      io.emit('step_completed', { 
+        userId, 
+        chatId,
+        step: enhancedStep.step, 
+        action: enhancedStep.action,
+        metrics: {
+          stepIndex: currentStepIndex,
+          stepCount: currentStepIndex + 1,
+          totalSteps: plan.length,
+          successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
+            step && step.output && !step.output.error && step.output.success !== false
+          ).length
+        }
+      });
       
       // Store the output of the step
       contextManager.addStepOutput({
@@ -597,7 +465,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       // ReAct: Reflect on the result after execution
       console.log(`[ ] Reflecting on result for step: ${enhancedStep.step}`);
       io.emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
-      const reflection = await react.reflectOnResult(enhancedStep, summary, userId, chatId);
+      const reflection = await tools.react.reflectOnResult(enhancedStep, summary, userId, chatId);
       console.log(`[X] Reflection complete`);
       
       // Check progress and potentially update plan
@@ -624,7 +492,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       
       // Save the thought chain periodically
       if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {
-        await react.saveThoughtChain(fileSystem, userId, chatId);
+        await tools.react.saveThoughtChain(tools.fileSystem, userId, chatId);
       }
     }
     
@@ -650,7 +518,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
       const duration = contextManager.getTaskDuration(userId, chatId);
       
       // Get output files from the file system tool's tracked list
-      const fileData = await fileSystem.getWrittenFiles(userId, chatId);
+      const fileData = await tools.fileSystem.getWrittenFiles(userId, chatId);
       
       // Map host files correctly using properties from getWrittenFiles
       const hostFiles = fileData.hostFiles.map(file => ({
@@ -798,7 +666,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     `;
     
     const response = await withTimeout(
-      ai.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true, "auto", userId, chatId),
+      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true, "auto", userId, chatId),
       30000 // 30-second timeout
     );
     
@@ -849,7 +717,7 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     `;
     
     const response = await withTimeout(
-      ai.callAI(prompt, "Generate final response", [], undefined, false, "auto", userId, chatId),
+      tools.chatCompletion.callAI(prompt, "Generate final response", [], undefined, false, "auto", userId, chatId),
       60000 // 60-second timeout
     );
     
@@ -866,19 +734,19 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
   }
 }
 
-
-
 /**
  * Clean up resources for a specific user after task completion
  * @param {string} userId - User identifier
  */
 async function cleanupUserResources(userId) {
-    // Close any browser instances using the browser module
+  // Close any browser instances if the browser tool exists
+  if (tools.webBrowser) {
     try {
-      await browser.cleanupResources(userId);
+      await tools.webBrowser.cleanupResources(userId);
     } catch (browserError) {
       console.error("Error closing browser instance:", browserError.message);
     }
+  }
 }
 
 // Export the centralOrchestrator function for use in test-server.js

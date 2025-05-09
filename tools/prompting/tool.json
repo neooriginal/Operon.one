@@ -1,0 +1,7 @@
+{
+  "title": "prompting",
+  "description": "For generating effective prompts for specific tasks",
+  "example": "prompting: Create a prompt for generating a story",
+  "enabled": true,
+  "main": "promptImprover.js"
+} 

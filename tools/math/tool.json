@@ -1,0 +1,7 @@
+{
+  "title": "math",
+  "description": "For performing complex mathematical operations",
+  "example": "math: Calculate the derivative of x^2 + 2x + 1",
+  "enabled": true,
+  "main": "main.js"
+} 

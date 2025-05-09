@@ -1,0 +1,7 @@
+{
+  "title": "webBrowser",
+  "description": "For complex web browsing tasks that require interaction",
+  "example": "webBrowser: Search for information on a specific website",
+  "enabled": true,
+  "main": "main.js"
+} 

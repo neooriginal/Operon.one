@@ -1,0 +1,7 @@
+{
+  "title": "execute",
+  "description": "For writing and running Python code",
+  "example": "execute: Run a Python script to analyze data",
+  "enabled": true,
+  "main": "main.js"
+} 

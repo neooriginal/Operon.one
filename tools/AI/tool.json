@@ -1,0 +1,7 @@
+{
+  "title": "chatCompletion",
+  "description": "For answering questions, generating ideas, or performing logical reasoning",
+  "example": "chatCompletion: Explain how JavaScript promises work",
+  "enabled": true,
+  "main": "ai.js"
+} 

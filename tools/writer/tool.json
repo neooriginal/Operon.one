@@ -1,0 +1,7 @@
+{
+  "title": "writer",
+  "description": "For generating detailed written content",
+  "example": "writer: Generate a blog post about artificial intelligence",
+  "enabled": true,
+  "main": "main.js"
+} 
