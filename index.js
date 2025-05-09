@@ -165,13 +165,15 @@ For simple questions or chit-chat, return:
 
 `
 
-async function centralOrchestrator(question, userId = 'default', chatId = 1){
+async function centralOrchestrator(question, userId = 'default', chatId = 1, isFollowUp = false){
   try {
     // Initialize context for this user and chat
-    contextManager.resetContext(userId, chatId);
+    if (!isFollowUp) {
+      contextManager.resetContext(userId, chatId);
+    }
     
     // Emit task received event
-    io.emit('task_received', { userId, chatId, task: question });
+    io.emit('task_received', { userId, chatId, task: question, isFollowUp });
     
     await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
@@ -189,7 +191,8 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
     console.log("[ ] Planning...");
     io.emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
-    let planObject = await ai.callAI(prompt, question, [], undefined, true, "auto", userId, chatId);
+    const currentHistory = contextManager.getHistory(userId, chatId) || [];
+    let planObject = await ai.callAI(prompt, question, currentHistory, undefined, true, "auto", userId, chatId);
     
     // Check if this is a direct answer request
     if (planObject.directAnswer === true && planObject.answer) {
@@ -356,7 +359,8 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1){
           break;
 
         case "chatCompletion":
-          summary = await ai.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId, chatId);
+          const chatHistoryForCompletion = contextManager.getHistory(userId, chatId) || [];
+          summary = await ai.callAI(enhancedStep.step, inputData, chatHistoryForCompletion, undefined, true, "auto", userId, chatId);
           console.log(`[X] ${enhancedStep.step}`);
           io.emit('step_completed', { 
             userId, 
@@ -893,11 +897,11 @@ if (require.main === module) {
     console.log('Client connected');
     
     socket.on('submit_task', async (data) => {
-      const { task, userId = `socket_${Date.now()}`, chatId = 1 } = data;
-      console.log(`Received task from socket for user ${userId} in chat ${chatId}: ${task}`);
+      const { task, userId = `socket_${Date.now()}`, chatId = 1, isFollowUp = false } = data;
+      console.log(`Received task from socket (isFollowUp: ${isFollowUp}) for user ${userId} in chat ${chatId}: ${task}`);
       
       // Execute the task
-      centralOrchestrator(task, userId, chatId);
+      centralOrchestrator(task, userId, chatId, isFollowUp);
     });
     
     socket.on('disconnect', () => {
