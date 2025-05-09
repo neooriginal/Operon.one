@@ -162,7 +162,7 @@ async function listFiles(containerName, userPath) {
 
 async function listDirectories(containerName, userPath) {
     // Normalize path for Docker (forward slashes), default path to /app/output
-.    const normalizedPath = userPath?.replace(/\\/g, '\/') || '/app/output';
+    const normalizedPath = userPath?.replace(/\\/g, '\/') || '/app/output';
     
     // Ensure the path is absolute
     if (!path.posix.isAbsolute(normalizedPath)) {
