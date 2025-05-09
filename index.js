@@ -37,6 +37,7 @@ let globalPrompt = `
 > - directAnswer: for immediately answering simple, chit-chat style questions without execution steps
 
 Every tool can only respond with plain text. only the fileSystem tool can create files.
+When creating files with a specific format, make sure it matches the format of programs using it. If not possible, use scripts or bash to convert the file.
 
 ### ⚙️ Core Directives:
 
