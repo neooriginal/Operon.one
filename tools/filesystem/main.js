@@ -162,7 +162,7 @@ async function listFiles(containerName, userPath) {
 
 async function listDirectories(containerName, userPath) {
     // Normalize path for Docker (forward slashes), default path to /app/output
-    const normalizedPath = userPath?.replace(/\\/g, '/') || '/app/output';
+    const normalizedPath = userPath?.replace(/\\/g, '\/') || '/app/output';
     
     // Ensure the path is absolute
     if (!path.posix.isAbsolute(normalizedPath)) {
@@ -171,7 +171,8 @@ async function listDirectories(containerName, userPath) {
     
     // Use find with -maxdepth 1 to list only directories in the target directory
     // Exclude the directory itself ('.')
-    const { stdout } = await docker.executeCommand(containerName, `find ${normalizedPath} -maxdepth 1 -type d -not -path "${normalizedPath}" -printf "%f\\n"`);
+    const command = `mkdir -p ${normalizedPath} && find ${normalizedPath} -maxdepth 1 -type d -not -path "${normalizedPath}" -printf "%f\\n"`;
+    const { stdout } = await docker.executeCommand(containerName, command);
     return stdout.split('\\n').filter(Boolean);
 }
 
