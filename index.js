@@ -230,7 +230,11 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     console.log("[ ] Planning...");
     io.emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
-    let planObject = await tools.chatCompletion.callAI(prompt, question, [], undefined, true, "auto", userId, chatId);
+    // Get existing history for this chat
+    const history = contextManager.getHistoryWithChatId(userId, chatId);
+    
+    // Use the history instead of empty array
+    let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "auto", userId, chatId);
     
     // Check if this is a direct answer request
     if (planObject.directAnswer === true && planObject.answer) {
