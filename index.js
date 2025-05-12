@@ -59,6 +59,8 @@ function loadTools() {
   });
 }
 
+ascii.printWelcome();
+
 // Load all tools at startup
 loadTools();
 
@@ -213,7 +215,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     // Emit task received event
     io.emit('task_received', { userId, chatId, task: question, isFollowUp });
     
-    await ascii.printWelcome();
     console.log("[ ] Cleaning workspace");
     
     console.log("[X] Cleaning workspace");
