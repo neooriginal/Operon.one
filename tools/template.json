@@ -1,0 +1,7 @@
+{
+  "title": "Tool Name",
+  "description": "Description of what the tool does",
+  "example": "Example of how to use the tool",
+  "enabled": true,
+  "main": "main.js"
+} 

@@ -1,0 +1,7 @@
+{
+  "title": "deepResearch",
+  "description": "For deep topic research (DuckDuckGo-based) - you can specify 'intensity' parameter (1-10) to control the number of websites to analyze",
+  "example": "deepResearch: Research the history of artificial intelligence with intensity 5",
+  "enabled": true,
+  "main": "main.js"
+} 

@@ -1,0 +1,7 @@
+{
+  "title": "memory",
+  "description": "For storing and retrieving information across sessions",
+  "example": "memory: Store this information for later use",
+  "enabled": true,
+  "main": "main.js"
+} 

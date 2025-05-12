@@ -1,0 +1,7 @@
+{
+  "title": "bash",
+  "description": "For executing shell commands",
+  "example": "bash: List all files in the current directory",
+  "enabled": true,
+  "main": "index.js"
+} 

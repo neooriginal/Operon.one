@@ -1,0 +1,7 @@
+{
+  "title": "fileSystem",
+  "description": "For saving, loading, and writing files",
+  "example": "fileSystem: Write content to a file named output.txt",
+  "enabled": true,
+  "main": "main.js"
+} 

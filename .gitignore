@@ -7,3 +7,4 @@ database.sqlite
 data/operonone.db
 .DS_Store
 .DS_Store
+/.cursor

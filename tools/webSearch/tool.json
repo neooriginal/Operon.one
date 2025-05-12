@@ -1,0 +1,7 @@
+{
+  "title": "webSearch",
+  "description": "For quick information gathering (DuckDuckGo-based)",
+  "example": "webSearch: Find information about climate change",
+  "enabled": true,
+  "main": "main.js"
+} 

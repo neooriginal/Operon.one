@@ -1,0 +1,7 @@
+{
+  "title": "docker",
+  "description": "For creating and managing Docker containers",
+  "example": "docker: Create a container for a web application",
+  "enabled": true,
+  "main": "docker.js"
+} 

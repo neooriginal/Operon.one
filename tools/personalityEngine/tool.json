@@ -1,0 +1,7 @@
+{
+  "title": "personality",
+  "description": "For generating text with specific personality traits or styles",
+  "example": "personality: Write a formal business email",
+  "enabled": true,
+  "main": "getPersonalityPrompt.js"
+} 
