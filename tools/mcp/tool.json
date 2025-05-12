@@ -1,7 +1,0 @@
-{
-  "title": "mcp",
-  "description": "For interacting with MCP (Model Context Protocol) servers",
-  "example": "mcp: Use a specific MCP server to gather information",
-  "enabled": true,
-  "main": "main.js"
-} 

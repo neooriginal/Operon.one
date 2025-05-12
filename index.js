@@ -736,27 +736,18 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
   }
 }
 
-// Function to clean up resources when a user session ends
+/**
+ * Clean up resources for a specific user after task completion
+ * @param {string} userId - User identifier
+ */
 async function cleanupUserResources(userId) {
-  console.log(`Cleaning up resources for user ${userId}`);
-  
-  try {
-    // Clean up user-specific context
-    contextManager.cleanupUserContext(userId);
-    
-    // Clean up any open containers
-    if (tools.docker && tools.docker.cleanupUserContainers) {
-      await tools.docker.cleanupUserContainers(userId);
+  // Close any browser instances if the browser tool exists
+  if (tools.webBrowser) {
+    try {
+      await tools.webBrowser.cleanupResources(userId);
+    } catch (browserError) {
+      console.error("Error closing browser instance:", browserError.message);
     }
-    
-    // Clean up any MCP resources
-    if (tools.mcp && tools.mcp.cleanupUserResources) {
-      tools.mcp.cleanupUserResources(userId);
-    }
-    
-    console.log(`Successfully cleaned up resources for user ${userId}`);
-  } catch (error) {
-    console.error(`Error cleaning up resources for user ${userId}:`, error.message);
   }
 }
 
