@@ -123,6 +123,15 @@ class Context {
     return this.getContext(userId).history;
   }
 
+  /**
+   * Get history for a specific chat
+   * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier
+   */
+  getHistoryWithChatId(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).history;
+  }
+
   async clearHistory(userId = 'default', chatId = 1) {
     this.getContext(userId, chatId).history = [];
     

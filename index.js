@@ -244,6 +244,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         ]
       }, userId, chatId);
       
+      // Store final answer in a clear, non-JSON format
       contextManager.addToHistory({
         role: "assistant", 
         content: [
@@ -251,14 +252,17 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         ]
       }, userId, chatId);
       
-      // Emit task completion event
+      // Emit task completion event with the same format as regular tasks
       io.emit('task_completed', { 
         userId, 
         chatId,
         result: planObject.answer,
         duration: 0,
         completedAt: new Date().toISOString(),
-        outputFiles: [],
+        outputFiles: {
+          host: [],
+          container: []
+        },
         metrics: {
           stepCount: 1,
           successCount: 1,
@@ -291,7 +295,9 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     contextManager.addToHistory({
       role: "assistant", 
       content: [
-          {type: "text", text: JSON.stringify(planObject)}
+          {type: "text", text: isFollowUp ? 
+            JSON.stringify(planObject) : 
+            (planObject.directAnswer === true ? planObject.answer : "Processing your task...")}
       ]
     }, userId, chatId);
     
@@ -515,6 +521,25 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         ).length
       }, null, 2));
     
+      // Replace the previous "Processing your task..." message with the final answer
+      // First, find and remove the processing message
+      const context = contextManager.getContext(userId, chatId);
+      const processedHistory = context.history.filter(msg => 
+        !(msg.role === "assistant" && msg.content && 
+          msg.content.length > 0 && 
+          msg.content[0].text === "Processing your task...")
+      );
+      
+      // Replace history with the cleaned version
+      context.history = processedHistory;
+      
+      // Add the final answer to history in plain text format
+      contextManager.addToHistory({
+        role: "assistant", 
+        content: [
+            {type: "text", text: finalOutput}
+        ]
+      }, userId, chatId);
       
       // Get task duration using the context manager
       const duration = contextManager.getTaskDuration(userId, chatId);
@@ -563,7 +588,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       io.emit('task_completed', { 
         userId, 
         chatId,
-        result: finalOutput,
+        result: cleanJsonResponses(finalOutput),
         duration: duration,
         completedAt: new Date().toISOString(),
         outputFiles: {
@@ -715,6 +740,9 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     
     Based on the completed steps and their outputs, generate a final comprehensive response.
     
+    IMPORTANT: Your response should be in plain text format. Do not use JSON or any other structured format.
+    Provide a direct, conversational answer as if you're speaking directly to the user.
+    
     Completed steps and outputs: ${JSON.stringify(formattedStepsOutput, null, 2)}
     `;
     
@@ -728,8 +756,35 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
       return "Task completed but final summary could not be generated.";
     }
     
+    // Process the response to ensure it's not in JSON format
+    let finalResponse = response;
+    
+    // Check if it's a JSON string and extract readable content if it is
+    try {
+      const parsedResponse = JSON.parse(response);
+      
+      // If it contains obvious text fields, use those instead
+      if (parsedResponse.answer) {
+        finalResponse = parsedResponse.answer;
+      } else if (parsedResponse.explanation) {
+        finalResponse = parsedResponse.explanation;
+      } else if (parsedResponse.result) {
+        finalResponse = parsedResponse.result;
+      } else if (parsedResponse.response) {
+        finalResponse = parsedResponse.response;
+      } else if (parsedResponse.text) {
+        finalResponse = parsedResponse.text;
+      } else if (parsedResponse.output) {
+        finalResponse = parsedResponse.output;
+      }
+      // If none of these fields exist, keep the original response
+    } catch (e) {
+      // Not JSON, which is actually what we want
+      finalResponse = response;
+    }
+    
     console.log("[X] Task finalized");
-    return response;
+    return finalResponse;
   } catch (error) {
     console.error("Error finalizing task:", error.message);
     return "Task completed but encountered an error during finalization: " + error.message;
@@ -751,6 +806,44 @@ async function cleanupUserResources(userId) {
   }
 }
 
+// Add utility function to clean JSON responses
+function cleanJsonResponses(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Check if it looks like JSON
+  if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(text);
+      
+      // Extract specific fields in priority order
+      if (parsed.directAnswer === true && parsed.answer) {
+        return parsed.answer;
+      } else if (parsed.explanation) {
+        return parsed.explanation;
+      } else if (parsed.answer) {
+        return parsed.answer;
+      } else if (parsed.result) {
+        return parsed.result;
+      } else if (parsed.response) {
+        return parsed.response;
+      } else if (parsed.output) {
+        return parsed.output;
+      } else if (parsed.text) {
+        return parsed.text;
+      }
+      
+      // If no recognizable fields, return the original text
+      return text;
+    } catch (e) {
+      // Not valid JSON
+      return text;
+    }
+  }
+  
+  // Not JSON-like, return as is
+  return text;
+}
+
 // Export the centralOrchestrator function for use in test-server.js
 module.exports = {
   centralOrchestrator
@@ -768,6 +861,74 @@ if (require.main === module) {
       
       // Execute the task
       centralOrchestrator(task, userId, chatId, isFollowUp);
+    });
+    
+    socket.on('load_history', async (data) => {
+      const { userId = `socket_${Date.now()}`, chatId = 1 } = data;
+      console.log(`Loading history for user ${userId} in chat ${chatId}`);
+      
+      try {
+        // Get history from context manager using the specific chat ID
+        const history = contextManager.getHistoryWithChatId(userId, chatId);
+        const context = contextManager.getContext(userId, chatId);
+        
+        if (history && history.length) {
+          // Find the last assistant message with the final answer
+          let finalAnswer = "";
+          let foundFinalAnswer = false;
+          
+          // Search from the end to find the most recent final answer
+          for (let i = history.length - 1; i >= 0; i--) {
+            const message = history[i];
+            if (message.role === "assistant" && message.content && message.content.length > 0) {
+              const content = message.content[0].text;
+              
+              // Filter out processing messages and JSON responses
+              if (!content.includes("Processing your task")) {
+                // Clean any JSON in the content
+                finalAnswer = cleanJsonResponses(content);
+                foundFinalAnswer = true;
+                break;
+              }
+            }
+          }
+          
+          if (!foundFinalAnswer) {
+            // Fallback to the original user query as context
+            const userQuestion = context.question || "Previous conversation";
+            finalAnswer = `I processed your request about "${userQuestion}" but couldn't find the final answer in the history.`;
+          }
+          
+          // Get any written files from the history
+          const filesData = { host: [], container: [] };
+          try {
+            if (tools.fileSystem) {
+              const files = await tools.fileSystem.getWrittenFiles(userId, chatId);
+              if (files) {
+                filesData.host = files.hostFiles || [];
+                filesData.container = files.containerFiles || [];
+              }
+            }
+          } catch (fileError) {
+            console.error('Error getting files from history:', fileError);
+          }
+          
+          // Emit the same format as task_completed for consistency
+          socket.emit('task_completed', {
+            userId,
+            chatId,
+            result: finalAnswer,
+            loadedFromHistory: true,
+            completedAt: new Date().toISOString(),
+            outputFiles: filesData
+          });
+        } else {
+          socket.emit('history_error', { error: 'No history found for this conversation' });
+        }
+      } catch (error) {
+        console.error(`Error loading history: ${error.message}`);
+        socket.emit('history_error', { error: error.message });
+      }
     });
     
     socket.on('disconnect', () => {
