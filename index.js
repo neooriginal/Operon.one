@@ -215,9 +215,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     // Emit task received event
     io.emit('task_received', { userId, chatId, task: question, isFollowUp });
     
-    console.log("[ ] Cleaning workspace");
-    
-    console.log("[X] Cleaning workspace");
     io.emit('status_update', { userId, chatId, status: 'Improving prompt' });
 
     // Store question in context
@@ -227,7 +224,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
     ${generateGlobalPrompt()}
     `;
-    console.log("[ ] Planning...");
     io.emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
     // Get existing history for this chat
@@ -306,7 +302,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       ]
     }, userId, chatId);
     
-    console.log("[X] Planning...");
     io.emit('steps', { userId, chatId, plan });
    
     // Start screenshot interval if browser is used in the plan
@@ -328,14 +323,10 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     while (contextManager.getCurrentStepIndex(userId, chatId) < plan.length) {
       const currentStepIndex = contextManager.getCurrentStepIndex(userId, chatId);
       const step = plan[currentStepIndex];
-      
-      // ReAct: Process step with reasoning before execution
-      console.log(`[ ] Reasoning about step: ${step.step} using ${step.action}`);
+
       io.emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
       const enhancedStep = await tools.react.processStep(step, userId, chatId);
-      console.log(`[X] Reasoning complete`);
-      
-      console.log(`[ ] (${enhancedStep.action}) ${enhancedStep.step} `);
+
       io.emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
       
       // Get filtered steps output from context
@@ -368,7 +359,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           // Handle tools that use intensity parameter
           const intensity = enhancedStep.intensity || undefined;
           summary = await tool.runTask(enhancedStep.step, inputData, (summary) => {
-            console.log(`[X] ${enhancedStep.step}`);
             io.emit('step_completed', { 
               userId, 
               chatId,
@@ -407,7 +397,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData, 
             (summary) => {
-              console.log(`[X] ${enhancedStep.step}`);
               io.emit('step_completed', { 
                 userId, 
                 chatId,
@@ -452,7 +441,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         }
       }
       
-      console.log(`[X] ${enhancedStep.step}`);
       io.emit('step_completed', { 
         userId, 
         chatId,
@@ -476,21 +464,17 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       }, userId, chatId);
       
       // ReAct: Reflect on the result after execution
-      console.log(`[ ] Reflecting on result for step: ${enhancedStep.step}`);
       io.emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
       const reflection = await tools.react.reflectOnResult(enhancedStep, summary, userId, chatId);
-      console.log(`[X] Reflection complete`);
       
       // Check progress and potentially update plan
       const currentPlan = contextManager.getPlan(userId, chatId);
       
       // Check if reflection suggests a plan change
       if (reflection && reflection.changePlan === true) {
-        console.log(`[ ] Reflection suggests changing plan: ${reflection.explanation}`);
         try {
           const updatedPlan = await checkProgress(question, currentPlan, contextManager.getStepsOutput(userId, chatId), contextManager.getCurrentStepIndex(userId, chatId), userId, chatId);
           if (updatedPlan !== currentPlan) {
-            console.log("Plan was updated based on reflection");
             contextManager.updatePlan(updatedPlan, userId, chatId);
             io.emit('steps', { userId, chatId, plan: updatedPlan });
           }
@@ -518,13 +502,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     let finalOutput;
     try {
       finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId, chatId), userId, chatId);
-      console.log(JSON.stringify({
-        status: "completed",
-        stepCount: contextManager.getStepsOutput(userId, chatId).length,
-        successCount: contextManager.getStepsOutput(userId, chatId).filter(step => 
-          step && step.output && !step.output.error && step.output.success !== false
-        ).length
-      }, null, 2));
+
     
       // Replace the previous "Processing your task..." message with the final answer
       // First, find and remove the processing message
@@ -569,25 +547,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           content: file.content   // Include the content
         };
       }) || [];
-      
-      console.log(`[ ] Host files tracked: ${hostFiles.length}, Container files tracked: ${containerFiles.length}`);
-      
-      // Log detailed information about tracked files
-      if (hostFiles.length > 0) {
-        console.log("Host files:");
-        hostFiles.forEach(file => {
-          console.log(`  - ${file.fileName || 'unnamed-file'} (${file.path || 'unknown-path'}) [ID: ${file.id || 'unknown'}]`);
-          console.log(`    Content: ${file.content ? file.content.substring(0, 100) + (file.content.length > 100 ? '...' : '') : '(no content available)'}`);
-        });
-      }
-      
-      if (containerFiles.length > 0) {
-        console.log("Container files:");
-        containerFiles.forEach(file => {
-          console.log(`  - ${file.fileName || 'unnamed-file'} (${file.path || 'unknown-path'}) [ID: ${file.id || 'unknown'}]`);
-          console.log(`    Content: ${file.content ? file.content.substring(0, 100) + (file.content.length > 100 ? '...' : '') : '(no content available)'}`);
-        });
-      }
       
       // Emit task completion event with enhanced data
       io.emit('task_completed', { 
@@ -670,8 +629,6 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
       return plan;
     }
     
-    console.log("[ ] Checking progress");
-    
     // Format the steps output for better analysis
     const formattedStepsOutput = stepsOutput.map(output => {
       return {
@@ -703,12 +660,9 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     );
     
     if (!response || response.error || response === "NO_CHANGES_NEEDED") {
-      console.log("[X] No plan changes needed");
       return plan;
     }
-    
-    console.log("[!] Plan updated based on progress");
-    
+  
     // Validate the updated plan structure
     const updatedPlan = Array.isArray(response) ? response : Object.values(response);
     
@@ -726,8 +680,6 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
 
 async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 1) {
   try {
-    console.log("[ ] Finalizing task");
-    
     // Format step outputs to prevent serialization issues
     const formattedStepsOutput = stepsOutput.map(output => {
       return {
@@ -788,7 +740,6 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
       finalResponse = response;
     }
     
-    console.log("[X] Task finalized");
     return finalResponse;
   } catch (error) {
     console.error("Error finalizing task:", error.message);
@@ -858,11 +809,8 @@ module.exports = {
 if (require.main === module) {
   // Set up socket event listener for receiving tasks
   io.on('connection', (socket) => {
-    console.log('Client connected');
-    
     socket.on('submit_task', async (data) => {
       const { task, userId = `socket_${Date.now()}`, chatId = 1, isFollowUp = false } = data;
-      console.log(`Received task from socket (isFollowUp: ${isFollowUp}) for user ${userId} in chat ${chatId}: ${task}`);
       
       // Execute the task
       centralOrchestrator(task, userId, chatId, isFollowUp);
@@ -870,7 +818,6 @@ if (require.main === module) {
     
     socket.on('load_history', async (data) => {
       const { userId = `socket_${Date.now()}`, chatId = 1 } = data;
-      console.log(`Loading history for user ${userId} in chat ${chatId}`);
       
       try {
         // Get history from context manager using the specific chat ID
@@ -934,10 +881,6 @@ if (require.main === module) {
         console.error(`Error loading history: ${error.message}`);
         socket.emit('history_error', { error: error.message });
       }
-    });
-    
-    socket.on('disconnect', () => {
-      console.log('Client disconnected');
     });
   });
 }
