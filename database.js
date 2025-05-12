@@ -154,6 +154,30 @@ function initDatabase() {
       console.log('Settings table ready');
     }
   });
+
+  // MCP Servers table (for storing user MCP server configurations)
+  db.run(`CREATE TABLE IF NOT EXISTS mcp_servers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, 
+    endpoint TEXT NOT NULL,
+    command TEXT,
+    args TEXT,
+    envVars TEXT,
+    description TEXT,
+    enabled BOOLEAN DEFAULT 1,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id),
+    UNIQUE(userId, name)
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating mcp_servers table:', err.message);
+    } else {
+      console.log('MCP Servers table ready');
+    }
+  });
 }
 
 // User functions
@@ -767,6 +791,185 @@ function tryParseJSON(str, defaultValue) {
   return defaultValue !== undefined ? defaultValue : str;
 }
 
+// MCP Server functions
+const mcpServerFunctions = {
+  // Add a new MCP server for a user
+  addMCPServer(userId, serverData) {
+    const { name, type, endpoint, command, args, envVars, description } = serverData;
+    
+    return new Promise((resolve, reject) => {
+      // Convert arrays or objects to JSON strings for storage
+      const serializedArgs = Array.isArray(args) ? JSON.stringify(args) : args;
+      const serializedEnvVars = typeof envVars === 'object' ? JSON.stringify(envVars) : envVars;
+      
+      db.run(
+        `INSERT INTO mcp_servers 
+         (userId, name, type, endpoint, command, args, envVars, description)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, name, type, endpoint, command, serializedArgs, serializedEnvVars, description],
+        function(err) {
+          if (err) {
+            // Check for unique constraint violation
+            if (err.message.includes('UNIQUE constraint failed')) {
+              reject(new Error(`An MCP server with the name "${name}" already exists for this user`));
+            } else {
+              reject(err);
+            }
+          } else {
+            resolve({ 
+              id: this.lastID, 
+              name, 
+              type, 
+              endpoint, 
+              command, 
+              args: tryParseJSON(serializedArgs, args),
+              envVars: tryParseJSON(serializedEnvVars, envVars),
+              description,
+              enabled: 1
+            });
+          }
+        }
+      );
+    });
+  },
+
+  // Get all MCP servers for a user
+  getMCPServers(userId) {
+    return new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM mcp_servers WHERE userId = ?',
+        [userId],
+        (err, servers) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Parse JSON strings back to their original form
+            const parsedServers = servers.map(server => ({
+              ...server,
+              args: tryParseJSON(server.args, []),
+              envVars: tryParseJSON(server.envVars, {})
+            }));
+            resolve(parsedServers);
+          }
+        }
+      );
+    });
+  },
+
+  // Get a specific MCP server by ID for a user
+  getMCPServerById(userId, serverId) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM mcp_servers WHERE userId = ? AND id = ?',
+        [userId, serverId],
+        (err, server) => {
+          if (err) {
+            reject(err);
+          } else if (!server) {
+            reject(new Error('MCP server not found'));
+          } else {
+            // Parse JSON strings back to their original form
+            resolve({
+              ...server,
+              args: tryParseJSON(server.args, []),
+              envVars: tryParseJSON(server.envVars, {})
+            });
+          }
+        }
+      );
+    });
+  },
+
+  // Update an MCP server
+  updateMCPServer(userId, serverId, serverData) {
+    const { name, type, endpoint, command, args, envVars, description, enabled } = serverData;
+    
+    return new Promise((resolve, reject) => {
+      // Convert arrays or objects to JSON strings for storage
+      const serializedArgs = Array.isArray(args) ? JSON.stringify(args) : args;
+      const serializedEnvVars = typeof envVars === 'object' ? JSON.stringify(envVars) : envVars;
+      
+      db.run(
+        `UPDATE mcp_servers 
+         SET name = ?, type = ?, endpoint = ?, command = ?, 
+         args = ?, envVars = ?, description = ?, enabled = ?, updatedAt = CURRENT_TIMESTAMP
+         WHERE userId = ? AND id = ?`,
+        [name, type, endpoint, command, serializedArgs, serializedEnvVars, description, 
+         enabled !== undefined ? enabled : 1, userId, serverId],
+        function(err) {
+          if (err) {
+            // Check for unique constraint violation
+            if (err.message.includes('UNIQUE constraint failed')) {
+              reject(new Error(`An MCP server with the name "${name}" already exists for this user`));
+            } else {
+              reject(err);
+            }
+          } else if (this.changes === 0) {
+            reject(new Error('MCP server not found or no changes made'));
+          } else {
+            resolve({ 
+              id: serverId, 
+              name, 
+              type, 
+              endpoint, 
+              command, 
+              args: tryParseJSON(serializedArgs, args),
+              envVars: tryParseJSON(serializedEnvVars, envVars),
+              description,
+              enabled: enabled !== undefined ? enabled : 1,
+              updated: true
+            });
+          }
+        }
+      );
+    });
+  },
+
+  // Delete an MCP server
+  deleteMCPServer(userId, serverId) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'DELETE FROM mcp_servers WHERE userId = ? AND id = ?',
+        [userId, serverId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else if (this.changes === 0) {
+            reject(new Error('MCP server not found'));
+          } else {
+            resolve({ deleted: true, id: serverId });
+          }
+        }
+      );
+    });
+  },
+
+  // Toggle MCP server enabled state
+  toggleMCPServerEnabled(userId, serverId, enabled) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE mcp_servers 
+         SET enabled = ?, updatedAt = CURRENT_TIMESTAMP
+         WHERE userId = ? AND id = ?`,
+        [enabled ? 1 : 0, userId, serverId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else if (this.changes === 0) {
+            reject(new Error('MCP server not found'));
+          } else {
+            resolve({ 
+              id: serverId, 
+              enabled: enabled ? 1 : 0,
+              updated: true
+            });
+          }
+        }
+      );
+    });
+  }
+};
+
 // Close the database connection when the process exits
 process.on('exit', () => {
   db.close((err) => {
@@ -790,5 +993,6 @@ module.exports = {
   chatFunctions,
   fileFunctions,
   settingsFunctions,
+  mcpServerFunctions,
   getDb  // Export the database connection
 }; 
