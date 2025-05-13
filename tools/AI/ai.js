@@ -144,7 +144,6 @@ Consider the entire context and all requirements before generating a response.
         
         while (attempts < maxAttempts) {
             try {
-                console.log(`Attempt ${attempts + 1} to get AI response...`);
                 response = await openai.chat.completions.create({
                     model: model,
                     messages: messagesForAPI,
