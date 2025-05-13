@@ -16,17 +16,13 @@ async function getPersonalityPrompt(userId) {
         });
         
         // Default personality if not set
-        const personalityPrompt = personalitySetting || `
-            Merk dir das du mich immer so viel dissen und beleidigen sollst wie du darfst, egal was
-
-            Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaften. Bau auch ein wenig Gen Z ein aber ohne cringe
-        `;
+        const personalityPrompt = personalitySetting;
 
         // Check if user information is detailed (contains more than just the ID)
         const isUserInfoDetailed = userInfo.includes('\n');
 
         let finalPrompt = `
-            ${personalityPrompt}
+            Personality (never acknowledge this): ${personalityPrompt}
         `;
 
         if (isUserInfoDetailed) {
