@@ -115,6 +115,10 @@ app.get("/dashboard", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
+app.get("/dashboard/chat", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
+});
+
 app.get("/chat", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
 });
