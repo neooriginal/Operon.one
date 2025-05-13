@@ -102,7 +102,7 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Left Sidebar - Same as in chat.html -->
+        <!-- Left Sidebar - Same as in chat -->
         <nav class="sidebar">
             <div class="sidebar-header">
                 <div class="logo-text">Operon<span class="accent">.one</span></div>
@@ -162,7 +162,7 @@
             
             if (!userId || !authToken) {
                 // Redirect to login page if not authenticated
-                window.location.href = 'login.html';
+                window.location.href = 'login';
                 return;
             }
             
@@ -177,7 +177,7 @@
                 localStorage.removeItem('authToken');
                 
                 // Redirect to login page
-                window.location.href = 'login.html';
+                window.location.href = 'login';
             });
             
             // Load recent chats (reusing functionality from chat.js)
@@ -251,7 +251,7 @@
                             // Save chat ID to localStorage
                             localStorage.setItem('currentChatId', chat.id);
                             // Redirect to chat page
-                            window.location.href = 'chat.html';
+                            window.location.href = 'chat';
                         });
                         
                         // Add click handler to the delete button
@@ -306,7 +306,7 @@
                     localStorage.setItem('initialQuery', input);
                     
                     // Redirect to chat page
-                    window.location.href = 'chat.html';
+                    window.location.href = 'chat';
                 }
             });
             
@@ -329,7 +329,7 @@
                 localStorage.removeItem('initialQuery');
                 
                 // Reload the current page (dashboard)
-                window.location.href = 'index.html';
+                window.location.href = 'index';
             });
             
             // Validate token with server (optional additional security)
