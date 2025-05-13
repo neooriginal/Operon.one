@@ -3,233 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Operon.one - Advanced autonomous AI agent system for complex tasks - Currently in beta for selected users">
-    <title>Operon.one | Autonomous AI Agent System - Beta</title>
+    <meta name="description" content="Operon.one - Your personal AI agent to automate tasks, research, coding, and more.">
+    <title>Operon.one | Automate Anything with AI</title>
+    <!-- Use a modern font like Lexend -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="landingpage/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Include GSAP for animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     <style>
+        /* Inline styles to ensure content visibility */
+        body {
+            padding-top: 90px; /* Account for header and banner */
+        }
         .beta-banner {
-            background: linear-gradient(135deg, rgba(255, 59, 48, 0.8), rgba(255, 59, 48, 0.6));
-            color: white;
-            text-align: center;
-            padding: 12px 20px;
-            font-weight: 600;
-            position: relative;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 999;
+        }
+        #main-header {
+            position: fixed;
+            top: 44px; /* Match banner height */
+            left: 0;
+            width: 100%;
             z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        
-        header {
-            position: relative;
-            z-index: 900;
+        .hero-section {
+            padding-top: 6rem;
         }
-        
-        .exclusive-badge {
-            position: absolute;
-            top: 24px;
-            right: 24px;
-            background: linear-gradient(135deg, #6e42e5, #a065ec);
-            color: white;
-            padding: 8px 16px;
+        /* Force visibility */
+        h1, h2, h3, h4, p, a, button, .hero-headline, .hero-subheadline, 
+        .step-card, .use-case-card, .hero-cta, .invite-note {
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        /* GitHub badge style */
+        .github-badge {
+            display: inline-flex;
+            align-items: center;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
             border-radius: 30px;
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(110, 66, 229, 0.3);
-            z-index: 100;
+            margin-top: 1rem;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .github-badge:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        .github-badge i {
+            font-size: 1.3rem;
+            margin-right: 8px;
+        }
+        .open-source-note {
+            margin-top: 1.5rem;
             display: flex;
             align-items: center;
-            gap: 8px;
-        }
-        
-        .hero-content h1 {
-            font-size: 3.2rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        .hero-content .subtitle {
-            font-size: 1.3rem;
-            line-height: 1.6;
-            max-width: 600px;
-            margin-bottom: 2rem;
-        }
-        
-        .restricted-note {
-            background: rgba(0, 0, 0, 0.08);
-            border-left: 4px solid #6e42e5;
-            padding: 12px 20px;
-            border-radius: 0 8px 8px 0;
-            margin: 32px 0;
-            font-size: 0.95rem;
-        }
-        
-        main {
-            position: relative;
-            z-index: 50;
-        }
-        
-        #hero {
-            padding-top: 80px;
+            justify-content: center;
+            gap: 0.5rem;
         }
     </style>
 </head>
 <body>
     <div class="beta-banner">
-        <i class="fas fa-flask"></i> BETA VERSION: Currently in development and available by invitation only
+        <i class="fas fa-flask-vial"></i> BETA ACCESS: Available by invitation only. Features are rapidly evolving.
     </div>
-    <div class="noise"></div>
-    <header>
-        <nav>
+
+    <header id="main-header">
+        <nav class="container">
             <div class="logo">
                 <span class="logo-text">Operon<span class="accent">.one</span></span>
             </div>
             <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#capabilities">Capabilities</a>
-                <a href="/register" class="btn-primary">Login / Register</a>
+                <a href="#how-it-works">How It Works</a>
+                <a href="#use-cases">Use Cases</a>
+                <a href="https://github.com/neooriginal/Operon.one" target="_blank" rel="noopener">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+                <a href="/login" class="btn btn-outline">Login</a>
             </div>
-            <div class="menu-toggle">
+            <button class="menu-toggle" aria-label="Toggle Menu">
                 <i class="fas fa-bars"></i>
-            </div>
+            </button>
         </nav>
     </header>
 
     <main>
-        <section id="hero">
-            <div class="exclusive-badge">
-                <i class="fas fa-crown"></i> Invite-Only Access
-            </div>
-            <div class="container">
+        <!-- Hero Section -->
+        <section id="hero" class="hero-section">
+            <div class="container hero-container">
                 <div class="hero-content">
-                    <h1>The Future of <span class="gradient-text">Autonomous AI</span></h1>
-                    <p class="subtitle">A sophisticated AI agent system that performs complex tasks independently, currently in beta and available to selected users only.</p>
-                    <div class="restricted-note">
-                        <strong>Limited Access:</strong> Operon.one is currently in active development and available by invitation only.
+                    <h1 class="hero-headline" style="opacity: 1; visibility: visible;">
+                        <span class="line" style="opacity: 1; visibility: visible;">Put Your Tasks</span>
+                        <span class="line" style="opacity: 1; visibility: visible;"><span class="gradient-text">on Autopilot</span></span>
+                    </h1>
+                    <p class="hero-subheadline" style="opacity: 1; visibility: visible;">Operon.one is your personal AI agent that tackles complex tasks, from research and coding to managing your digital world, all on its own.</p>
+                    <div class="hero-cta" style="opacity: 1; visibility: visible;">
+                        <a href="#use-cases" class="btn btn-primary btn-large">See What It Can Do</a>
+                        <a href="/login" class="btn btn-secondary btn-large">Login <i class="fas fa-arrow-right"></i></a>
                     </div>
-                    <div class="hero-buttons">
-                        <a href="#features" class="btn-secondary">Learn More</a>
+                    <p class="invite-note" style="opacity: 1; visibility: visible;"><i class="fas fa-lock"></i> Currently invite-only during beta phase.</p>
+                    
+                    <div class="open-source-note">
+                        <a href="https://github.com/neooriginal/Operon.one" class="github-badge" target="_blank" rel="noopener">
+                            <i class="fab fa-github"></i> Open Source on GitHub
+                        </a>
                     </div>
                 </div>
                 <div class="hero-visual">
-                    <div class="neural-network">
-                        <div class="network-container">
-                            <canvas id="networkCanvas"></canvas>
-                            <div class="glow-orb"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="scroll-indicator">
-                <div class="mouse">
-                    <div class="wheel"></div>
-                </div>
-                <div class="arrow">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </section>
-
-        <section id="features">
-            <div class="container">
-                <h2 class="section-title">Key Features</h2>
-                <div class="features-grid">
-                    <div class="feature-card" data-aos="fade-up">
-                        <div class="feature-icon">
-                            <i class="fas fa-globe"></i>
-                        </div>
-                        <h3>Web Browsing & Research</h3>
-                        <p>Complex web interactions, search functionality via DuckDuckGo, and deep research capabilities</p>
-                    </div>
-                    <div class="feature-card" data-aos="fade-up" data-aos-delay="100">
-                        <div class="feature-icon">
-                            <i class="fas fa-folder-open"></i>
-                        </div>
-                        <h3>File System Operations</h3>
-                        <p>Save, load, and write files with sophisticated management of project outputs</p>
-                    </div>
-                    <div class="feature-card" data-aos="fade-up" data-aos-delay="200">
-                        <div class="feature-icon">
-                            <i class="fas fa-magic"></i>
-                        </div>
-                        <h3>AI Content Generation</h3>
-                        <p>Chat completion, image generation, content writing, and prompt optimization</p>
-                    </div>
-                    <div class="feature-card" data-aos="fade-up" data-aos-delay="300">
-                        <div class="feature-icon">
-                            <i class="fas fa-terminal"></i>
-                        </div>
-                        <h3>Code Execution</h3>
-                        <p>Python and Bash execution with complex mathematical operations support</p>
+                    <!-- Abstract animation container -->
+                    <div class="animation-container">
+                         <div class="shape shape-1"></div>
+                         <div class="shape shape-2"></div>
+                         <div class="shape shape-3"></div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <section id="capabilities">
+        <!-- How It Works Section -->
+        <section id="how-it-works" class="how-it-works-section">
             <div class="container">
-                <div class="capabilities-content">
-                    <h2 class="section-title">Autonomous Operation</h2>
-                    <ul class="capability-list">
-                        <li class="capability-item">
-                            <div class="check-mark"><i class="fas fa-check"></i></div>
-                            <p>Works independently without requiring user confirmation</p>
-                        </li>
-                        <li class="capability-item">
-                            <div class="check-mark"><i class="fas fa-check"></i></div>
-                            <p>Self-evaluates and plans complex tasks</p>
-                        </li>
-                        <li class="capability-item">
-                            <div class="check-mark"><i class="fas fa-check"></i></div>
-                            <p>Maintains execution history and progress tracking</p>
-                        </li>
-                        <li class="capability-item">
-                            <div class="check-mark"><i class="fas fa-check"></i></div>
-                            <p>Handles timeouts and monitors progress automatically</p>
-                        </li>
-                        <li class="capability-item">
-                            <div class="check-mark"><i class="fas fa-check"></i></div>
-                            <p>Creates and manages multi-file web applications</p>
-                        </li>
-                    </ul>
-                </div>
-                <div class="capabilities-visual">
-                    <div class="floating-elements">
-                        <div class="floating-element fe1">
-                            <i class="fas fa-project-diagram"></i>
-                        </div>
-                        <div class="floating-element fe2">
-                            <i class="fas fa-robot"></i>
-                        </div>
-                        <div class="floating-element fe3">
-                            <i class="fas fa-cogs"></i>
-                        </div>
-                        <div class="floating-element fe4">
-                            <i class="fas fa-tasks"></i>
-                        </div>
-                        <div class="floating-element fe5">
-                            <i class="fas fa-chart-line"></i>
-                        </div>
+                <h2 class="section-title" style="opacity: 1; visibility: visible;">How Operon.one Works</h2>
+                <p class="section-subtitle" style="opacity: 1; visibility: visible;">A simple process to automate complexity.</p>
+                <div class="steps-container">
+                    <div class="step-card" style="opacity: 1; visibility: visible;">
+                        <div class="step-icon"><i class="fas fa-lightbulb"></i></div>
+                        <h3>1. Define Your Goal</h3>
+                        <p>Tell Operon.one what you need done, in plain English. From simple requests to multi-step projects.</p>
+                    </div>
+                    <div class="step-connector"></div>
+                    <div class="step-card" style="opacity: 1; visibility: visible;">
+                        <div class="step-icon"><i class="fas fa-cogs"></i></div>
+                        <h3>2. AI Takes Over</h3>
+                        <p>Our intelligent agent analyzes your request, breaks it down, and uses its tools to execute the task autonomously.</p>
+                    </div>
+                    <div class="step-connector"></div>
+                    <div class="step-card" style="opacity: 1; visibility: visible;">
+                        <div class="step-icon"><i class="fas fa-check-double"></i></div>
+                        <h3>3. Get Results</h3>
+                        <p>Operon.one delivers the completed work, whether it's a research report, generated code, or an automated workflow.</p>
                     </div>
                 </div>
             </div>
         </section>
+
+        <!-- Use Cases Section -->
+        <section id="use-cases" class="use-cases-section">
+            <div class="container">
+                <h2 class="section-title" style="opacity: 1; visibility: visible;">Unlock Your Potential</h2>
+                <p class="section-subtitle" style="opacity: 1; visibility: visible;">See what Operon.one can automate for you.</p>
+                <div class="use-cases-grid">
+                    <div class="use-case-card" style="opacity: 1; visibility: visible;">
+                        <div class="use-case-icon"><i class="fas fa-search"></i></div>
+                        <h4>Automated Research</h4>
+                        <p>Gather, synthesize, and summarize information from the web automatically.</p>
+                    </div>
+                    <div class="use-case-card" style="opacity: 1; visibility: visible;">
+                        <div class="use-case-icon"><i class="fas fa-code"></i></div>
+                        <h4>Code Generation</h4>
+                        <p>Generate code snippets or entire applications based on your specifications.</p>
+                    </div>
+                    <div class="use-case-card" style="opacity: 1; visibility: visible;">
+                        <div class="use-case-icon"><i class="fas fa-file-alt"></i></div>
+                        <h4>Content Creation</h4>
+                        <p>Draft emails, reports, articles, and other written content effortlessly.</p>
+                    </div>
+                    <div class="use-case-card" style="opacity: 1; visibility: visible;">
+                        <div class="use-case-icon"><i class="fas fa-tasks"></i></div>
+                        <h4>Workflow Automation</h4>
+                        <p>Automate repetitive digital tasks across different platforms and services.</p>
+                    </div>
+                     <div class="use-case-card" style="opacity: 1; visibility: visible;">
+                        <div class="use-case-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                        <h4>Data Management</h4>
+                        <p>Organize files, manage data entries, and perform complex data operations.</p>
+                    </div>
+                     <div class="use-case-card" style="opacity: 1; visibility: visible;">
+                        <div class="use-case-icon"><i class="fas fa-infinity"></i></div>
+                        <h4>And Much More...</h4>
+                        <p>Operon.one's capabilities are constantly expanding. What will you automate?</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <footer>
         <div class="container">
             <div class="footer-content">
-                <div class="footer-logo">
+                <div class="footer-about">
                     <span class="logo-text">Operon<span class="accent">.one</span></span>
-                    <p>The future of autonomous AI agents</p>
-                    <p><small>Currently in beta, access by invitation only</small></p>
+                    <p>Automating complexity with AI.</p>
+                    <p><small>&copy; 2024 Operon.one. All rights reserved.</small></p>
+                    <p><small>100% open-source. <a href="https://github.com/neooriginal/Operon.one" target="_blank" rel="noopener">View on GitHub</a></small></p>
                 </div>
                 <div class="footer-links">
                     <div class="footer-column">
-                        <h4>Navigation</h4>
-                        <a href="#features">Features</a>
-                        <a href="#capabilities">Capabilities</a>
+                        <h4>Product</h4>
+                        <a href="#how-it-works">How It Works</a>
+                        <a href="#use-cases">Use Cases</a>
+                        <a href="/login">Login</a>
                     </div>
                     <div class="footer-column">
                         <h4>Legal</h4>
@@ -237,24 +218,20 @@
                         <a href="/legal/terms">Terms of Service</a>
                         <a href="/legal/cookies">Cookie Policy</a>
                     </div>
-                    <div class="footer-column">
+                     <div class="footer-column">
                         <h4>Connect</h4>
                         <div class="social-links">
-                            <a href="https://x.com/neo_original_x"><i class="fab fa-x"></i></a>
-                            <a href="https://github.com/neooriginal"><i class="fab fa-github"></i></a>
-                            <a href="https://discord.gg/eUdJ5xdw8Q"><i class="fab fa-discord"></i></a>
+                             <a href="https://x.com/neo_original_x" aria-label="X Profile"><i class="fab fa-xing"></i></a>
+                             <a href="https://github.com/neooriginal/Operon.one" aria-label="GitHub Repository" target="_blank" rel="noopener"><i class="fab fa-github"></i></a>
+                            <!-- Add other relevant social links -->
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="footer-bottom">
-                <p>&copy; 2025 Operon.one. All rights reserved.</p>
-                <p class="powered-by">Powered by <a href="https://github.com/neooriginal" target="_blank" rel="noopener noreferrer">NeoLabs</a></p>
-            </div>
         </div>
     </footer>
 
-    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <!-- Include the script last -->
     <script src="landingpage/script.js"></script>
 </body>
 </html> 

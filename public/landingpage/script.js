@@ -1,155 +1,171 @@
-// Wait for DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize AOS (Animate On Scroll)
-    AOS.init({
-        duration: 800,
-        easing: 'ease-out',
-        once: false,
-        mirror: true
+    // Initialize ScrollTrigger but don't use it for animations yet
+    if (typeof gsap !== 'undefined' && gsap.registerPlugin) {
+        gsap.registerPlugin(ScrollTrigger);
+    }
+
+    // --- Smooth Scroll for Anchor Links ---
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const targetId = this.getAttribute('href');
+            if (targetId === '#' || !document.querySelector(targetId)) return;
+
+            const targetElement = document.querySelector(targetId);
+            const headerOffset = document.getElementById('main-header')?.offsetHeight || 0;
+            const elementPosition = targetElement.getBoundingClientRect().top;
+            const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+            window.scrollTo({
+                top: offsetPosition,
+                behavior: "smooth"
+            });
+
+            // Close mobile nav if open
+            const navLinks = document.querySelector('.nav-links');
+            const menuToggle = document.querySelector('.menu-toggle');
+            if (navLinks && navLinks.classList.contains('active')) {
+                navLinks.classList.remove('active');
+                menuToggle.classList.remove('active');
+                document.body.classList.remove('no-scroll');
+            }
+        });
     });
 
-    // Initialize neural network visualization
-    initNetworkVisualization();
-
-    // Navigation menu toggle for mobile
+    // --- Mobile Navigation Toggle ---
     const menuToggle = document.querySelector('.menu-toggle');
     const navLinks = document.querySelector('.nav-links');
 
     if (menuToggle && navLinks) {
         menuToggle.addEventListener('click', () => {
-            menuToggle.classList.toggle('active');
             navLinks.classList.toggle('active');
-        });
-
-        // Close mobile menu when clicking on a navigation link
-        const navItems = document.querySelectorAll('.nav-links a');
-        navItems.forEach(item => {
-            item.addEventListener('click', () => {
-                menuToggle.classList.remove('active');
-                navLinks.classList.remove('active');
-            });
+            menuToggle.classList.toggle('active');
+            document.body.classList.toggle('no-scroll'); // Prevent scrolling when nav is open
         });
     }
 
-    // Sticky header on scroll
-    const header = document.querySelector('header');
+    // --- Sticky Header on Scroll ---
+    const header = document.getElementById('main-header');
+    const banner = document.querySelector('.beta-banner');
+    const bannerHeight = banner ? banner.offsetHeight : 0;
     const scrollThreshold = 50;
 
     function toggleHeaderClass() {
         if (window.scrollY > scrollThreshold) {
-            header.classList.add('scrolled');
+            if (header) header.classList.add('scrolled');
         } else {
-            header.classList.remove('scrolled');
+            if (header) header.classList.remove('scrolled');
         }
     }
-
+    
     window.addEventListener('scroll', toggleHeaderClass);
-    toggleHeaderClass(); // Check initial state
+    toggleHeaderClass();
 
-    // Smooth scrolling for anchor links
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function(e) {
+    // Disable all GSAP animations for now to ensure text visibility
+    /*
+    // --- Hero Section Animations ---
+    if (document.querySelector(".hero-headline .line")) {
+        const heroTimeline = gsap.timeline({ delay: 0.2 });
+        heroTimeline
+            .from(".hero-headline .line", { duration: 0.8, y: 50, opacity: 0, stagger: 0.2, ease: "power3.out" })
+            .from(".hero-subheadline", { duration: 0.7, y: 30, opacity: 0, ease: "power3.out" }, "-=0.5")
+            .from(".hero-cta .btn", { duration: 0.6, y: 20, opacity: 0, stagger: 0.15, ease: "back.out(1.7)" }, "-=0.3")
+            .from(".invite-note", { duration: 0.5, opacity: 0, ease: "sine.inOut" }, "-=0.2")
+            .from(".hero-visual .shape", { duration: 1, scale: 0, opacity: 0, stagger: 0.2, ease: "elastic.out(1, 0.75)" }, "-=0.8");
+    }
+
+    // --- Scroll-Triggered Animations for Sections & Elements ---
+    const sections = document.querySelectorAll('section:not(#hero)');
+    sections.forEach((section) => {
+        const sectionTitle = section.querySelector('.section-title');
+        const sectionSubtitle = section.querySelector('.section-subtitle');
+        const animatedCards = section.querySelectorAll('.step-card, .use-case-card');
+        const waitlistForm = section.querySelector('.waitlist-form');
+
+        const tl = gsap.timeline({
+            scrollTrigger: {
+                trigger: section,
+                start: "top 80%", // Trigger when 80% of the section is in view
+                toggleActions: "play none none none", // Play animation once
+            }
+        });
+
+        if (sectionTitle) {
+            tl.from(sectionTitle, { duration: 0.6, y: 30, opacity: 0, ease: "power3.out" });
+        }
+        if (sectionSubtitle) {
+            tl.from(sectionSubtitle, { duration: 0.6, y: 20, opacity: 0, ease: "power3.out" }, "-=0.3");
+        }
+        if (animatedCards.length > 0) {
+            tl.from(animatedCards, { duration: 0.5, y: 30, opacity: 0, stagger: 0.15, ease: "power2.out" }, "-=0.2");
+        }
+        if (waitlistForm) {
+            tl.from(waitlistForm, { duration: 0.7, y: 30, opacity: 0, ease: "expo.out" }, "-=0.2");
+        }
+    });
+    */
+    
+    // --- Abstract Hero Animation Movement (Simpler version) ---
+    const shapes = document.querySelectorAll(".hero-visual .shape");
+    if (shapes.length > 0 && typeof gsap !== 'undefined') {
+        // Use a simpler animation just for the shapes
+        gsap.to(shapes, {
+            duration: 20,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut",
+            stagger: {
+                each: 2,
+                from: "random"
+            },
+            x: "random(-30, 30)",
+            y: "random(-30, 30)",
+        });
+    }
+
+    // --- Waitlist Form Submission (Placeholder) ---
+    const waitlistForm = document.querySelector('.waitlist-form');
+    if (waitlistForm) {
+        waitlistForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            const emailInput = this.querySelector('input[type="email"]');
+            const submitButton = this.querySelector('button[type="submit"]');
 
-            const targetId = this.getAttribute('href');
-            if (targetId === '#') return;
-
-            const targetElement = document.querySelector(targetId);
-            if (targetElement) {
-                const offsetTop = targetElement.getBoundingClientRect().top + window.pageYOffset;
-                const headerHeight = header.offsetHeight;
-                
-                window.scrollTo({
-                    top: offsetTop - headerHeight,
-                    behavior: 'smooth'
-                });
+            if (emailInput.value.trim() === "" || !emailInput.checkValidity()) {
+                alert("Please enter a valid email address.");
+                emailInput.focus();
+                return;
             }
-        });
-    });
 
-    // Parallax effect for hero section
-    const heroSection = document.getElementById('hero');
-    
-    window.addEventListener('scroll', () => {
-        if (heroSection) {
-            const scrollY = window.scrollY;
-            heroSection.style.backgroundPositionY = `${scrollY * 0.5}px`;
-        }
-    });
+            // Simulate submission
+            submitButton.textContent = 'Sending...';
+            submitButton.disabled = true;
+            emailInput.disabled = true;
 
-    // Create particles background effect
-    createParticlesBackground();
-
-    // Animated counters for statistics (if applicable)
-    animateCounters();
-
-    // Form validation for contact form
-    const contactForm = document.querySelector('.contact-form');
-    if (contactForm) {
-        const formInputs = contactForm.querySelectorAll('input, textarea');
-        const submitButton = contactForm.querySelector('button');
-
-        if (submitButton) {
-            submitButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                
-                let isValid = true;
-                formInputs.forEach(input => {
-                    if (input.value.trim() === '') {
-                        isValid = false;
-                        input.style.borderColor = 'var(--secondary)';
-                        
-                        // Add shake animation
-                        input.classList.add('shake');
-                        setTimeout(() => {
-                            input.classList.remove('shake');
-                        }, 500);
-                    } else {
-                        input.style.borderColor = 'var(--gray-dark)';
-                    }
-                });
-
-                if (isValid) {
-                    // Simulate form submission success
-                    submitButton.textContent = 'Thanks!';
-                    submitButton.disabled = true;
-                    
-                    // Reset form after simulated success
-                    setTimeout(() => {
-                        formInputs.forEach(input => input.value = '');
-                        submitButton.textContent = 'Request Access';
-                        submitButton.disabled = false;
-                    }, 3000);
-                }
-            });
-        }
-
-        // Reset validation styling on input
-        formInputs.forEach(input => {
-            input.addEventListener('input', () => {
-                input.style.borderColor = 'var(--gray-dark)';
-            });
+            setTimeout(() => {
+                submitButton.textContent = 'Invite Requested!';
+                // Potentially show a success message next to the form
+                 const successMessage = document.createElement('p');
+                 successMessage.textContent = "Thanks! We'll be in touch soon.";
+                 successMessage.style.color = "var(--primary)";
+                 successMessage.style.marginTop = "10px";
+                 this.appendChild(successMessage);
+            }, 1500);
         });
     }
-    
-    // Add dynamic typing effect to hero subtitle
-    const subtitle = document.querySelector('.subtitle');
-    if (subtitle) {
-        const originalText = subtitle.textContent;
-        subtitle.textContent = '';
+
+    // Once everything is loaded, ensure elements are visible
+    window.addEventListener('load', () => {
+        document.body.classList.add('content-loaded');
         
-        let i = 0;
-        const typeWriter = () => {
-            if (i < originalText.length) {
-                subtitle.textContent += originalText.charAt(i);
-                i++;
-                setTimeout(typeWriter, 30);
-            }
-        };
-        
-        // Start typing after a delay
-        setTimeout(typeWriter, 500);
-    }
+        // Make sure all elements are visible
+        const elements = document.querySelectorAll('h1, h2, h3, h4, h5, p, a, button, input, .hero-headline, .hero-subheadline, .hero-cta, .invite-note, .section-title, .section-subtitle, .step-card, .use-case-card, .waitlist-form');
+        elements.forEach(el => {
+            el.style.opacity = '1';
+            el.style.visibility = 'visible';
+            el.style.transform = 'none';
+        });
+    });
 });
 
 // Neural Network Visualization
