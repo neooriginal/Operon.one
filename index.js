@@ -307,7 +307,6 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     
     // Check if this is a direct answer request
     if (planObject.directAnswer === true && planObject.answer) {
-      console.log("[X] Direct answer provided");
       io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Direct answer provided' });
       
       // Store the response in context
@@ -421,7 +420,9 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       } else {
         // Different tools have different methods for execution
         if (enhancedStep.action === "chatCompletion") {
-          summary = await tool.callAI(enhancedStep.step, inputData, [], undefined, true, "auto", userId, chatId);
+          // Get updated history for each chatCompletion call
+          const updatedHistory = contextManager.getHistoryWithChatId(userId, chatId);
+          summary = await tool.callAI(enhancedStep.step, inputData, updatedHistory, undefined, true, "auto", userId, chatId);
           contextManager.addToHistory({
             role: "assistant", 
             content: [
@@ -574,6 +575,8 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     // After the loop completes, finalize the task
     let finalOutput;
     try {
+      // Use updated history for the final task
+      const finalHistory = contextManager.getHistoryWithChatId(userId, chatId);
       finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId, chatId), userId, chatId);
 
     
@@ -727,8 +730,11 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     Remaining steps in the plan: ${JSON.stringify(plan.slice(currentStepIndex), null, 2)}
     `;
     
+    // Get updated conversation history for context
+    const history = contextManager.getHistoryWithChatId(userId, chatId);
+    
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", [], undefined, true, "auto", userId, chatId),
+      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "auto", userId, chatId),
       30000 // 30-second timeout
     );
     
@@ -776,8 +782,11 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     Completed steps and outputs: ${JSON.stringify(formattedStepsOutput, null, 2)}
     `;
     
+    // Get conversation history for context
+    const history = contextManager.getHistoryWithChatId(userId, chatId);
+    
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Generate final response", [], undefined, false, "auto", userId, chatId),
+      tools.chatCompletion.callAI(prompt, "Generate final response", history, undefined, false, "auto", userId, chatId),
       60000 // 60-second timeout
     );
     
