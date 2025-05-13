@@ -8,6 +8,18 @@ const router = express.Router();
 // JWT secret key - should be in environment variables for security
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Email whitelist - should be in environment variables for security
+// Format: comma-separated list of allowed emails
+const EMAIL_WHITELIST = process.env.EMAIL_WHITELIST ? process.env.EMAIL_WHITELIST.split(',').map(email => email.trim().toLowerCase()) : [];
+
+// Helper function to check if an email is in the whitelist
+function isEmailWhitelisted(email) {
+  if (!EMAIL_WHITELIST.length) {
+    return false; // If whitelist is empty, no emails are allowed
+  }
+  return EMAIL_WHITELIST.includes(email.toLowerCase());
+}
+
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
@@ -21,6 +33,11 @@ router.post('/register', async (req, res) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
+    }
+    
+    // Check if email is in the whitelist
+    if (!isEmailWhitelisted(email)) {
+      return res.status(403).json({ error: 'Access restricted. This platform is currently invite-only.' });
     }
     
     // Check password strength

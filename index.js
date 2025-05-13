@@ -4,9 +4,66 @@ const ascii = require('./utils/ascii');
 const contextManager = require('./utils/context');
 // Import socket.io
 const io = require('./socket');
+const sanitize = require('sanitize-filename');
+require('dotenv').config();
+
+// Check if email whitelist is configured
+const EMAIL_WHITELIST = process.env.EMAIL_WHITELIST ? process.env.EMAIL_WHITELIST.split(',').map(email => email.trim().toLowerCase()) : [];
+if (EMAIL_WHITELIST.length > 0) {
+  console.log(`Email whitelist enabled with ${EMAIL_WHITELIST.length} allowed addresses`);
+} else {
+  console.warn('WARNING: Email whitelist is empty. No new users will be able to register.');
+}
 
 // Screenshot interval in milliseconds
 const SCREENSHOT_INTERVAL = 5000;
+
+// Path sanitization utility
+function sanitizePath(unsafePath) {
+  if (!unsafePath) return '';
+  
+  // Handle absolute paths safely
+  const isAbsolute = path.isAbsolute(unsafePath);
+  
+  // Split path into segments and sanitize each one
+  const pathSegments = unsafePath.split(/[\/\\]/g).map(segment => sanitize(segment));
+  
+  // Rebuild path with proper separators
+  let safePath = pathSegments.join(path.sep);
+  
+  // Restore absolute path indicator if needed
+  if (isAbsolute && !path.isAbsolute(safePath)) {
+    safePath = path.resolve('/', safePath);
+  }
+  
+  return safePath;
+}
+
+// Function to sanitize file paths
+function sanitizeFilePath(unsafePath, userId) {
+  // First apply general path sanitization
+  let safePath = sanitizePath(unsafePath);
+  
+  // Create user-specific directory if needed
+  if (userId && userId !== 'default') {
+    // If the path is not already in the user's directory, place it there
+    const userDir = path.join('output', userId);
+    
+    // Ensure the user directory exists
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+    
+    // If this isn't already a path inside the user's directory, place it there
+    if (!safePath.startsWith(userDir)) {
+      // For absolute paths, move just the filename to the user directory
+      const filename = path.basename(safePath);
+      safePath = path.join(userDir, filename);
+    }
+  }
+  
+  return safePath;
+}
 
 // Dynamically load tools based on their tool.json files
 const toolsDirectory = path.join(__dirname, 'tools');
@@ -207,15 +264,31 @@ For simple questions or chit-chat, return:
 
 async function centralOrchestrator(question, userId = 'default', chatId = 1, isFollowUp = false){
   try {
+    // Validate inputs to prevent injection attacks
+    if (!question || typeof question !== 'string') {
+      throw new Error('Invalid question format');
+    }
+    
+    // Ensure userId is properly validated
+    if (!userId || userId === 'default') {
+      throw new Error('Authentication required: valid user ID is mandatory for production use');
+    }
+    
+    // Ensure chatId is a number
+    chatId = parseInt(chatId, 10);
+    if (isNaN(chatId) || chatId < 1) {
+      chatId = 1; // Default to 1 if invalid
+    }
+    
     // Initialize context for this user and chat
     if (!isFollowUp) {
       contextManager.resetContext(userId, chatId);
     }
     
     // Emit task received event
-    io.emit('task_received', { userId, chatId, task: question, isFollowUp });
+    io.to(`user:${userId}`).emit('task_received', { userId, chatId, task: question, isFollowUp });
     
-    io.emit('status_update', { userId, chatId, status: 'Improving prompt' });
+    io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Improving prompt' });
 
     // Store question in context
     contextManager.setQuestion(question, userId, chatId);
@@ -224,7 +297,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
     ${generateGlobalPrompt()}
     `;
-    io.emit('status_update', { userId, chatId, status: 'Planning task execution' });
+    io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
     // Get existing history for this chat
     const history = contextManager.getHistoryWithChatId(userId, chatId);
@@ -235,7 +308,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     // Check if this is a direct answer request
     if (planObject.directAnswer === true && planObject.answer) {
       console.log("[X] Direct answer provided");
-      io.emit('status_update', { userId, chatId, status: 'Direct answer provided' });
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Direct answer provided' });
       
       // Store the response in context
       contextManager.addToHistory({
@@ -254,7 +327,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       }, userId, chatId);
       
       // Emit task completion event with the same format as regular tasks
-      io.emit('task_completed', { 
+      io.to(`user:${userId}`).emit('task_completed', { 
         userId, 
         chatId,
         result: planObject.answer,
@@ -302,7 +375,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       ]
     }, userId, chatId);
     
-    io.emit('steps', { userId, chatId, plan });
+    io.to(`user:${userId}`).emit('steps', { userId, chatId, plan });
    
     // Start screenshot interval if browser is used in the plan
     let screenshotInterval = null;
@@ -311,7 +384,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         try {
           const screenshot = await tools.webBrowser.takeScreenshot(userId);
           if (screenshot) {
-            io.emit('browser_screenshot', { userId, chatId, screenshot });
+            io.to(`user:${userId}`).emit('browser_screenshot', { userId, chatId, screenshot });
           }
         } catch (error) {
           console.error("Error taking screenshot:", error.message);
@@ -324,10 +397,10 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       const currentStepIndex = contextManager.getCurrentStepIndex(userId, chatId);
       const step = plan[currentStepIndex];
 
-      io.emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
       const enhancedStep = await tools.react.processStep(step, userId, chatId);
 
-      io.emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
       
       // Get filtered steps output from context
       const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId, chatId);
@@ -359,7 +432,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           // Handle tools that use intensity parameter
           const intensity = enhancedStep.intensity || undefined;
           summary = await tool.runTask(enhancedStep.step, inputData, (summary) => {
-            io.emit('step_completed', { 
+            io.to(`user:${userId}`).emit('step_completed', { 
               userId, 
               chatId,
               step: enhancedStep.step, 
@@ -397,7 +470,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData, 
             (summary) => {
-              io.emit('step_completed', { 
+              io.to(`user:${userId}`).emit('step_completed', { 
                 userId, 
                 chatId,
                 step: enhancedStep.step, 
@@ -414,7 +487,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
               
               // If this is the fileSystem tool and a file was created/updated, emit file event
               if (enhancedStep.action === "fileSystem" && summary && summary.filePath) {
-                io.emit('file_updated', { 
+                io.to(`user:${userId}`).emit('file_updated', { 
                   userId, 
                   chatId,
                   filePath: summary.filePath, 
@@ -441,7 +514,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         }
       }
       
-      io.emit('step_completed', { 
+      io.to(`user:${userId}`).emit('step_completed', { 
         userId, 
         chatId,
         step: enhancedStep.step, 
@@ -464,7 +537,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       }, userId, chatId);
       
       // ReAct: Reflect on the result after execution
-      io.emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
       const reflection = await tools.react.reflectOnResult(enhancedStep, summary, userId, chatId);
       
       // Check progress and potentially update plan
@@ -476,7 +549,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           const updatedPlan = await checkProgress(question, currentPlan, contextManager.getStepsOutput(userId, chatId), contextManager.getCurrentStepIndex(userId, chatId), userId, chatId);
           if (updatedPlan !== currentPlan) {
             contextManager.updatePlan(updatedPlan, userId, chatId);
-            io.emit('steps', { userId, chatId, plan: updatedPlan });
+            io.to(`user:${userId}`).emit('steps', { userId, chatId, plan: updatedPlan });
           }
         } catch (error) {
           console.error("Error updating plan based on reflection:", error.message);
@@ -549,7 +622,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       }) || [];
       
       // Emit task completion event with enhanced data
-      io.emit('task_completed', { 
+      io.to(`user:${userId}`).emit('task_completed', { 
         userId, 
         chatId,
         result: cleanJsonResponses(finalOutput),
@@ -573,7 +646,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     } catch (error) {
       console.error("Error finalizing task:", error.message);
       finalOutput = "Task completed but could not be finalized: " + error.message;
-      io.emit('task_error', { userId, chatId, error: error.message });
+      io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
     }
     
     // Cleanup resources for this user
@@ -584,7 +657,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     console.error("Critical error in orchestration:", error.message);
     
     // Emit error event
-    io.emit('task_error', { userId, chatId, error: error.message });
+    io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
     
     // Ensure cleanup even on error
     try {
@@ -802,7 +875,9 @@ function cleanJsonResponses(text) {
 
 // Export the centralOrchestrator function for use in test-server.js
 module.exports = {
-  centralOrchestrator
+  centralOrchestrator,
+  cleanupUserResources,
+  sanitizeFilePath
 };
 
 // Run the orchestrator if this file is executed directly

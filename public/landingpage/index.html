@@ -3,13 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Operon.one - Advanced autonomous AI agent system for complex tasks">
-    <title>Operon.one | Autonomous AI Agent System</title>
+    <meta name="description" content="Operon.one - Advanced autonomous AI agent system for complex tasks - Currently in beta for selected users">
+    <title>Operon.one | Autonomous AI Agent System - Beta</title>
     <link rel="stylesheet" href="landingpage/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+    <style>
+        .beta-banner {
+            background: linear-gradient(135deg, rgba(255, 59, 48, 0.8), rgba(255, 59, 48, 0.6));
+            color: white;
+            text-align: center;
+            padding: 12px 20px;
+            font-weight: 600;
+            position: relative;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        header {
+            position: relative;
+            z-index: 900;
+        }
+        
+        .exclusive-badge {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: linear-gradient(135deg, #6e42e5, #a065ec);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(110, 66, 229, 0.3);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .hero-content h1 {
+            font-size: 3.2rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .hero-content .subtitle {
+            font-size: 1.3rem;
+            line-height: 1.6;
+            max-width: 600px;
+            margin-bottom: 2rem;
+        }
+        
+        .restricted-note {
+            background: rgba(0, 0, 0, 0.08);
+            border-left: 4px solid #6e42e5;
+            padding: 12px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 32px 0;
+            font-size: 0.95rem;
+        }
+        
+        main {
+            position: relative;
+            z-index: 50;
+        }
+        
+        #hero {
+            padding-top: 80px;
+        }
+    </style>
 </head>
 <body>
+    <div class="beta-banner">
+        <i class="fas fa-flask"></i> BETA VERSION: Currently in development and available by invitation only
+    </div>
     <div class="noise"></div>
     <header>
         <nav>
@@ -19,7 +86,7 @@
             <div class="nav-links">
                 <a href="#features">Features</a>
                 <a href="#capabilities">Capabilities</a>
-                <a href="#contact" class="btn-primary">Get Started</a>
+                <a href="/auth" class="btn-primary">Login / Register</a>
             </div>
             <div class="menu-toggle">
                 <i class="fas fa-bars"></i>
@@ -29,12 +96,17 @@
 
     <main>
         <section id="hero">
+            <div class="exclusive-badge">
+                <i class="fas fa-crown"></i> Invite-Only Access
+            </div>
             <div class="container">
                 <div class="hero-content">
                     <h1>The Future of <span class="gradient-text">Autonomous AI</span></h1>
-                    <p class="subtitle">A sophisticated AI agent system that performs complex tasks independently</p>
+                    <p class="subtitle">A sophisticated AI agent system that performs complex tasks independently, currently in beta and available to selected users only.</p>
+                    <div class="restricted-note">
+                        <strong>Limited Access:</strong> Operon.one is currently in active development and available by invitation only.
+                    </div>
                     <div class="hero-buttons">
-                        <a href="/dashboard" class="btn-primary">Get Started</a>
                         <a href="#features" class="btn-secondary">Learn More</a>
                     </div>
                 </div>
@@ -143,25 +215,6 @@
                 </div>
             </div>
         </section>
-
-        <section id="contact">
-            <div class="container">
-                <h2 class="section-title">Ready to Get Started?</h2>
-                <p class="contact-subtitle">Experience the power of autonomous AI with Operon.one</p>
-                <div class="contact-form">
-                    <div class="form-group">
-                        <input type="text" placeholder="Your Name">
-                    </div>
-                    <div class="form-group">
-                        <input type="email" placeholder="Your Email">
-                    </div>
-                    <div class="form-group full-width">
-                        <textarea placeholder="What would you like to accomplish with Operon.one?"></textarea>
-                    </div>
-                    <button class="btn-primary">Request Access</button>
-                </div>
-            </div>
-        </section>
     </main>
 
     <footer>
@@ -170,13 +223,13 @@
                 <div class="footer-logo">
                     <span class="logo-text">Operon<span class="accent">.one</span></span>
                     <p>The future of autonomous AI agents</p>
+                    <p><small>Currently in beta, access by invitation only</small></p>
                 </div>
                 <div class="footer-links">
                     <div class="footer-column">
                         <h4>Navigation</h4>
                         <a href="#features">Features</a>
                         <a href="#capabilities">Capabilities</a>
-                        <a href="#contact">Contact</a>
                     </div>
                     <div class="footer-column">
                         <h4>Legal</h4>

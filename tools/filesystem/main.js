@@ -469,44 +469,60 @@ async function runStep(containerName, task, otherAIData, userId = 'default', cha
     }
 }
 
-// Modified writeFileDirectly to store content directly in database
+// Modified to use sanitizeFilePath from main index.js
 async function writeFileDirectly(content, userPath, filename, userId = 'default', chatId = 1) {
-    let containerName = null;
     try {
-        containerName = await getContainer(userId); // Get container for this specific operation
-        const absoluteFilePath = await saveToFile(containerName, content, userPath, filename);
-
-        // Update tool state if necessary
+        // Get the sanitizeFilePath function from index.js
+        const { sanitizeFilePath } = require('../../index');
+        
+        // Default to writing in 'output' folder if not specified
+        const baseDir = userPath || 'output';
+        
+        // Sanitize the path and ensure it's within user's directory
+        const sanitizedFullPath = sanitizeFilePath(path.join(baseDir, filename), userId);
+        
+        // Extract the directory part for creation
+        const dir = path.dirname(sanitizedFullPath);
+        
+        // Create the directory if it doesn't exist
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        // Write the file
+        fs.writeFileSync(sanitizedFullPath, content);
+        
+        // Track the file in database
+        const fileExtension = path.extname(sanitizedFullPath).replace('.', '');
+        await fileFunctions.trackHostFile(userId, sanitizedFullPath, filename, null, chatId, content, fileExtension);
+        
+        // Add to tool state for tracking
         const toolState = contextManager.getToolState('fileSystem', userId) || {
             history: [],
             operations: [],
             writtenFiles: []
         };
-        toolState.writtenFiles.push(absoluteFilePath);
-        toolState.writtenFiles = [...new Set(toolState.writtenFiles || [])];
+        
+        toolState.writtenFiles.push({
+            path: sanitizedFullPath,
+            fileName: filename,
+            content: content
+        });
+        
         contextManager.setToolState('fileSystem', toolState, userId);
         
-        // Extract file extension
-        const fileExtension = path.extname(filename).replace('.', '');
-        
-        // Track file in database with content
-        try {
-            await fileFunctions.trackContainerFile(userId, absoluteFilePath, filename, null, chatId, content, fileExtension);
-        } catch (trackingError) {
-            console.warn(`Failed to track container file ${absoluteFilePath}: ${trackingError.message}`);
-        }
-
-        return absoluteFilePath; // Return path
-
-    } finally {
-        // Clean up the container used for this operation
-        if (containerName) {
-            try {
-                await docker.removeContainer(containerName);
-            } catch (cleanupError) {
-                console.error(`Error during container cleanup: ${cleanupError.message}`);
-            }
-        }
+        return {
+            success: true,
+            message: `File written successfully`,
+            filePath: sanitizedFullPath,
+            content: content
+        };
+    } catch (error) {
+        console.error('Error writing file directly:', error);
+        return {
+            success: false,
+            error: `Error writing file: ${error.message}`
+        };
     }
 }
 
@@ -585,28 +601,61 @@ async function trackFile(userId, filePath, chatId = 1) {
  */
 async function getWrittenFiles(userId = 'default', chatId = 1) {
     try {
-        // Get tracked files from database
-        const trackedFiles = await fileFunctions.getTrackedFiles(userId, chatId);
+        // Get stored host and container files from database
+        let fileData;
+        try {
+            fileData = await fileFunctions.getTrackedFiles(userId, chatId);
+        } catch (dbError) {
+            console.error(`Database error retrieving tracked files: ${dbError.message}`);
+            fileData = { hostFiles: [], containerFiles: [] };
+        }
         
-        // Format the data for compatibility with existing code
-        return {
-            hostFiles: trackedFiles.hostFiles.map(file => ({
+        // Get tool state for additional tracking
+        const toolState = contextManager.getToolState('fileSystem', userId) || {};
+        
+        // Map host files with their content
+        const hostFiles = fileData.hostFiles.map(file => {
+            // Try to read content from disk if not in database
+            if (!file.fileContent && fs.existsSync(file.filePath)) {
+                try {
+                    file.fileContent = fs.readFileSync(file.filePath, 'utf8');
+                } catch (readError) {
+                    console.warn(`Could not read host file ${file.filePath}: ${readError.message}`);
+                }
+            }
+            
+            return {
                 id: file.id,
-                fileName: file.originalName || path.basename(file.filePath),
                 path: file.filePath,
-                content: file.fileContent,
-                extension: file.fileExtension
-            })),
-            containerFiles: trackedFiles.containerFiles.map(file => ({
-                id: file.id,
-                fileName: file.originalName || path.basename(file.containerPath),
-                path: file.containerPath,
-                content: file.fileContent,
-                extension: file.fileExtension
-            }))
+                fileName: file.originalName || path.basename(file.filePath),
+                content: file.fileContent || null
+            };
+        });
+        
+        // Add any host files from tool state that might not be in DB yet
+        const writtenFiles = toolState.writtenFiles || [];
+        for (const file of writtenFiles) {
+            if (typeof file === 'object' && file.path) {
+                // Check if file exists in hostFiles array
+                const exists = hostFiles.some(hostFile => hostFile.path === file.path);
+                if (!exists) {
+                    hostFiles.push({
+                        id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                        path: file.path,
+                        fileName: file.fileName || path.basename(file.path),
+                        content: file.content || null
+                    });
+                }
+            }
+        }
+        
+        // Return both host and container files
+        return {
+            hostFiles,
+            containerFiles: fileData.containerFiles || []
         };
     } catch (error) {
-        console.error('Error getting tracked files:', error.message);
+        console.error(`Error in getWrittenFiles: ${error.message}`);
         return { hostFiles: [], containerFiles: [] };
     }
 }

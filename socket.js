@@ -8,6 +8,7 @@ const cors = require('cors');
 const { router: authRoutes, authenticateToken } = require('./authRoutes');
 const { chatFunctions, fileFunctions } = require('./database');
 const mime = require('mime-types');
+const rateLimit = require('express-rate-limit');
 
 // Serve static files from the public directory
 const app = express();
@@ -16,6 +17,15 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// Rate limiting for API requests
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  message: { error: 'Too many requests, please try again later.' }
+});
+app.use('/api', apiLimiter);
 
 // Authentication middleware for file endpoints
 const isAuthenticated = (req, res, next) => {
@@ -63,13 +73,39 @@ io.use((socket, next) => {
     }
     
     try {
-        // You would verify the token here
-        // For now, just trust the token and userId
-        socket.userId = userId;
-        socket.authenticated = true;
-        return next();
+        // Verify the token properly using JWT
+        const jwt = require('jsonwebtoken');
+        const JWT_SECRET = process.env.JWT_SECRET;
+        
+        jwt.verify(token, JWT_SECRET, (err, decoded) => {
+            if (err) {
+                socket.authenticated = false;
+                return next(new Error('Invalid authentication token'));
+            }
+            
+            // Verify that the decoded user ID matches the claimed user ID
+            if (decoded.id != userId) {
+                socket.authenticated = false;
+                return next(new Error('User ID mismatch'));
+            }
+            
+            // Store user info in socket
+            socket.userId = userId;
+            socket.authenticated = true;
+            socket.user = decoded;
+            
+            // Set up socket-specific rate limiting
+            socket.taskCount = 0;
+            socket.taskLastReset = Date.now();
+            
+            // Join a room specific to this user for targeted events
+            socket.join(`user:${userId}`);
+            
+            return next();
+        });
     } catch (error) {
         console.error('Socket authentication error:', error.message);
+        socket.authenticated = false;
         return next(new Error('Authentication error'));
     }
 });
@@ -247,21 +283,85 @@ io.on('connection', (socketClient) => {
      const userId = socketClient.authenticated ? socketClient.userId : socketClient.id;
      
      socketClient.on('submit_task', async (data) => {
-         const { task, chatId = 1 } = data; // Default to chat ID 1 if not specified
-         // Use the userId from the message if authenticated, otherwise use socket ID
-         const taskUserId = socketClient.authenticated ? (data.userId || userId) : socketClient.id;
+         // Enforce authentication for task submission
+         if (!socketClient.authenticated) {
+             socketClient.emit('task_error', { 
+                 error: 'Authentication required for task submission',
+                 userId: socketClient.id
+             });
+             return;
+         }
          
-         console.log(`Task received from ${taskUserId} in chat ${chatId}: ${task}`);
+         // Rate limiting check
+         const MAX_TASKS_PER_MINUTE = 5;
+         const now = Date.now();
+         
+         // Reset counter if more than a minute has passed
+         if (now - socketClient.taskLastReset > 60000) {
+             socketClient.taskCount = 0;
+             socketClient.taskLastReset = now;
+         }
+         
+         // Check if rate limit exceeded
+         if (socketClient.taskCount >= MAX_TASKS_PER_MINUTE) {
+             socketClient.emit('task_error', { 
+                 error: 'Rate limit exceeded. Please try again later.',
+                 userId: socketClient.userId
+             });
+             return;
+         }
+         
+         // Increment task counter
+         socketClient.taskCount++;
+         
+         const { task, chatId = 1 } = data;
+         
+         // Security: Ensure chatId is a number and belongs to this user
+         const numericChatId = parseInt(chatId, 10);
+         if (isNaN(numericChatId)) {
+             socketClient.emit('task_error', { 
+                 error: 'Invalid chat ID format',
+                 userId: socketClient.userId
+             });
+             return;
+         }
+         
+         // Use the authenticated userId - ignore any userId passed in the message
+         const taskUserId = socketClient.userId;
+         
+         console.log(`Task received from ${taskUserId} in chat ${numericChatId}: ${task}`);
+         
          // Store current chatId for this user in the socket
-         socketClient.chatId = chatId;
+         socketClient.chatId = numericChatId;
          
-         // Rufe den Orchestrator auf (angenommen, er ist hier verfügbar)
-         // await centralOrchestrator(task, taskUserId, chatId);
-         // Stelle sicher, dass centralOrchestrator ioServer verwendet, um Events zu senden
+         try {
+             // Rufe den Orchestrator auf (angenommen, er ist hier verfügbar)
+             // await centralOrchestrator(task, taskUserId, numericChatId);
+             // Stelle sicher, dass centralOrchestrator ioServer verwendet, um Events zu senden
+         } catch (error) {
+             console.error(`Error processing task for ${taskUserId}:`, error);
+             socketClient.emit('task_error', { 
+                 error: 'Error processing your task',
+                 userId: taskUserId
+             });
+         }
      });
 
      socketClient.on('disconnect', () => {
          console.log(`User disconnected: ${socketClient.id}`);
+         
+         // Clean up any resources for this user
+         try {
+             // Assume there's a cleanupUserResources function available
+             const { cleanupUserResources } = require('./index');
+             if (typeof cleanupUserResources === 'function' && socketClient.authenticated) {
+                 cleanupUserResources(socketClient.userId).catch(err => {
+                     console.error(`Error cleaning up resources for ${socketClient.userId}:`, err);
+                 });
+             }
+         } catch (error) {
+             console.error('Error during disconnect cleanup:', error);
+         }
      });
  });
 
