@@ -2,7 +2,27 @@ const axios = require("axios");
 const ai = require("../AI/ai");
 const contextManager = require("../../utils/context");
 
-async function runTask(task, otherAIData, callback, userId = 'default', intensity){
+// Simple in-memory cache with TTL
+const cache = {
+    data: {},
+    set: function(key, value, ttlSeconds = 3600) {
+        this.data[key] = {
+            value,
+            expiry: Date.now() + (ttlSeconds * 1000)
+        };
+    },
+    get: function(key) {
+        const item = this.data[key];
+        if (!item) return null;
+        if (Date.now() > item.expiry) {
+            delete this.data[key];
+            return null;
+        }
+        return item.value;
+    }
+};
+
+async function runTask(task, otherAIData, callback, userId = 'default', intensity) {
     try {
         // Get or initialize user-specific context
         let userContext = contextManager.getContext(userId);
@@ -12,6 +32,14 @@ async function runTask(task, otherAIData, callback, userId = 'default', intensit
                 lastQueries: []
             };
             contextManager.updateContext(userId, userContext);
+        }
+
+        // Check cache for identical task
+        const cacheKey = `task_${userId}_${task}`;
+        const cachedReport = cache.get(cacheKey);
+        if (cachedReport) {
+            callback(cachedReport);
+            return;
         }
 
         let webData = await searchWeb(task, userId, intensity);
@@ -25,6 +53,10 @@ async function runTask(task, otherAIData, callback, userId = 'default', intensit
         contextManager.updateContext(userId, userContext);
         
         let report = await evaluatewithAI(task, webData+"\n\n Also, there is some information that previous tasks have gathered. Keep them in mind while evaluating the web data and add them to the report to not duplicate information and other things. Here is the information: "+otherAIData, userId);
+        
+        // Cache the report
+        cache.set(cacheKey, report);
+        
         callback(report);
     } catch (error) {
         console.error("Error in runTask:", error.message);
@@ -32,8 +64,15 @@ async function runTask(task, otherAIData, callback, userId = 'default', intensit
     }
 }
 
-async function getQuery(task, userId = 'default', intensity){
+async function getQuery(task, userId = 'default', intensity) {
     try {
+        // Check cache first
+        const cacheKey = `queries_${userId}_${task}`;
+        const cachedQueries = cache.get(cacheKey);
+        if (cachedQueries) {
+            return cachedQueries;
+        }
+        
         // Determine the maximum number of queries based on intensity
         const maxQueries = intensity ? Math.min(Math.max(3, intensity * 3), 30) : 15;
         
@@ -53,15 +92,26 @@ async function getQuery(task, userId = 'default', intensity){
         userContext.deepSearch.lastQueries = response.queries || [];
         contextManager.updateContext(userId, userContext);
         
-        return response.queries || [];
+        const queries = response.queries || [];
+        // Cache the result
+        cache.set(cacheKey, queries);
+        
+        return queries;
     } catch (error) {
         console.error("Error in getQuery:", error.message);
         return ["basic search for " + task.substring(0, 50)]; // Fallback query
     }
 }
 
-async function evaluatewithAI(task, webData, userId = 'default'){
+async function evaluatewithAI(task, webData, userId = 'default') {
     try {
+        // Check cache first
+        const cacheKey = `evaluation_${userId}_${task}_${webData.length}`;
+        const cachedEvaluation = cache.get(cacheKey);
+        if (cachedEvaluation) {
+            return cachedEvaluation;
+        }
+        
         let prompt = `
         You are an AI agent that can execute complex tasks. For this task, the user will provide a task and you are supposed to evaluate the web data scraped from the web and return a detailled report using the web data.
 
@@ -90,16 +140,19 @@ async function evaluatewithAI(task, webData, userId = 'default'){
         });
         contextManager.updateContext(userId, userContext);
         
-        return response.report || "No report could be generated";
+        const report = response.report || "No report could be generated";
+        // Cache the result
+        cache.set(cacheKey, report);
+        
+        return report;
     } catch (error) {
         console.error("Error in evaluatewithAI:", error.message);
         return `Error generating report: ${error.message}`;
     }
 }
 
-async function searchWeb(task, userId = 'default', intensity){
+async function searchWeb(task, userId = 'default', intensity) {
     try {
-        let urls = [];
         let webData = [];
         let queries = await getQuery(task, userId, intensity);
         
@@ -107,70 +160,59 @@ async function searchWeb(task, userId = 'default', intensity){
         const queryLimit = intensity ? Math.min(Math.max(1, intensity), 10) : 5;
         queries = queries.slice(0, queryLimit);
         
-        for(let query of queries){
+        // Process all queries in parallel with Promise.all
+        const results = await Promise.all(queries.map(async (query) => {
             try {
-                // Get DuckDuckGo search results
-                let duckDuckGoResults = await getDuckDuckGoResults(query, intensity);
+                const queryData = [];
+                const cacheKey = `query_results_${query}`;
+                const cachedResults = cache.get(cacheKey);
+                
+                if (cachedResults) {
+                    return cachedResults;
+                }
+                
+                // Run both DuckDuckGo and Wikipedia searches in parallel
+                const [duckDuckGoResults, wikipediaResult] = await Promise.all([
+                    getDuckDuckGoResults(query, intensity),
+                    getWikipediaArticle(query)
+                ]);
+                
                 if (duckDuckGoResults && duckDuckGoResults.length > 0) {
-                    webData.push(`DuckDuckGo results for "${query}":\n${duckDuckGoResults}`);
+                    queryData.push(`DuckDuckGo results for "${query}":\n${duckDuckGoResults}`);
                 }
                 
-                // Get Wikipedia article
-                let wikipediaArticle = await getWikipediaArticle(query);
-                if (wikipediaArticle) {
-                    webData.push(`Wikipedia article on "${query}":\n${wikipediaArticle}`);
+                if (wikipediaResult) {
+                    queryData.push(`Wikipedia article on "${query}":\n${wikipediaResult}`);
                 }
                 
-                // Use more reliable search API instead of screen scraping
-                try {
-                    // For now, let's use a more reliable public API - Wikipedia's API for related articles
-                    if (wikipediaArticle) {
-                        // Adjust the number of related articles based on intensity
-                        const relatedLimit = intensity ? Math.min(Math.max(1, intensity), 10) : 5;
-                        const relatedArticlesUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=${relatedLimit}`;
-                        const relatedResponse = await axios.get(relatedArticlesUrl, { timeout: 15000 });
-                        
-                        if (relatedResponse.data.query && relatedResponse.data.query.search) {
-                            const relatedArticles = relatedResponse.data.query.search;
-                            for (let i = 1; i < relatedArticles.length; i++) { // Skip first one as we already got it
-                                try {
-                                    const title = relatedArticles[i].title;
-                                    const contentUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-                                    const contentResponse = await axios.get(contentUrl, { timeout: 15000 });
-                                    
-                                    if (contentResponse.data.extract) {
-                                        webData.push(`Related Wikipedia article on "${title}":\n${contentResponse.data.extract}`);
-                                    }
-                                } catch (relatedError) {
-                                    console.error(`Error fetching related article: ${relatedError.message}`);
-                                    continue;
-                                }
-                                
-                                // Short delay between API calls
-                                await new Promise(resolve => setTimeout(resolve, 500));
-                            }
+                // Only get related articles if we have a Wikipedia result
+                if (wikipediaResult) {
+                    try {
+                        const relatedArticles = await getRelatedWikipediaArticles(query, intensity);
+                        if (relatedArticles && relatedArticles.length > 0) {
+                            queryData.push(...relatedArticles);
                         }
+                    } catch (relatedError) {
+                        console.error(`Error getting related articles: ${relatedError.message}`);
                     }
-              
-                } catch (searchApiError) {
-                    console.error(`Search API error for "${query}":`, searchApiError.message);
-                    // Continue with other queries even if this API fails
                 }
                 
-                // Add a delay between queries to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Cache the results
+                cache.set(cacheKey, queryData, 3600); // Cache for 1 hour
                 
+                return queryData;
             } catch (queryError) {
                 console.error(`Error processing query "${query}":`, queryError.message);
-                continue; // Skip to next query on error
+                return []; // Return empty array on error
             }
-        }
+        }));
+        
+        // Flatten the results array and combine all data
+        webData = results.flat();
         
         // Return the compiled web data or a fallback message
         if (webData.length > 0) {
             return webData.join("\n\n");
-        } else if (urls.length > 0) {
-            return urls; // Backward compatibility
         } else {
             return "No search results found. Please try different search terms or check your internet connection.";
         }
@@ -180,27 +222,102 @@ async function searchWeb(task, userId = 'default', intensity){
     }
 }
 
+// Extracted related articles functionality to a separate function
+async function getRelatedWikipediaArticles(query, intensity) {
+    try {
+        const cacheKey = `related_wiki_${query}_${intensity}`;
+        const cachedResults = cache.get(cacheKey);
+        
+        if (cachedResults) {
+            return cachedResults;
+        }
+        
+        const relatedLimit = intensity ? Math.min(Math.max(1, intensity), 10) : 5;
+        const relatedArticlesUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=${relatedLimit}`;
+        const relatedResponse = await axios.get(relatedArticlesUrl, { timeout: 10000 });
+        
+        if (!relatedResponse.data.query || !relatedResponse.data.query.search) {
+            return [];
+        }
+        
+        const relatedArticles = relatedResponse.data.query.search;
+        const articlePromises = [];
+        
+        // Skip the first one as we already got it in the main wikipedia search
+        for (let i = 1; i < relatedArticles.length; i++) {
+            const title = relatedArticles[i].title;
+            articlePromises.push(getWikipediaArticleByTitle(title));
+        }
+        
+        // Get all related articles in parallel
+        const articles = await Promise.all(articlePromises);
+        const results = articles
+            .filter(article => article.content) // Filter out any null results
+            .map(article => `Related Wikipedia article on "${article.title}":\n${article.content}`);
+        
+        // Cache the results
+        cache.set(cacheKey, results, 3600);
+        
+        return results;
+    } catch (error) {
+        console.error(`Error fetching related Wikipedia articles: ${error.message}`);
+        return [];
+    }
+}
+
+async function getWikipediaArticleByTitle(title) {
+    try {
+        const cacheKey = `wiki_article_${title}`;
+        const cachedArticle = cache.get(cacheKey);
+        
+        if (cachedArticle) {
+            return cachedArticle;
+        }
+        
+        const contentUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+        const contentResponse = await axios.get(contentUrl, { timeout: 10000 });
+        
+        const result = {
+            title,
+            content: contentResponse.data.extract || null
+        };
+        
+        // Cache the result
+        cache.set(cacheKey, result, 3600); // Cache for 1 hour
+        
+        return result;
+    } catch (error) {
+        console.error(`Error fetching Wikipedia article by title: ${error.message}`);
+        return { title, content: null };
+    }
+}
+
 async function getDuckDuckGoResults(query, intensity = 5) {
     try {
+        const cacheKey = `ddg_${query}_${intensity}`;
+        const cachedResults = cache.get(cacheKey);
+        
+        if (cachedResults) {
+            return cachedResults;
+        }
+        
         // Determine number of results to fetch based on intensity
         const resultLimit = intensity ? Math.min(Math.max(3, intensity * 2), 15) : 10;
         
         // Use the DuckDuckGo HTML API
         const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
         const response = await axios.get(searchUrl, {
-            timeout: 15000,
+            timeout: 10000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
         });
         
         // Extract search results from HTML
-        // This is a simple approach - in production, use a proper HTML parser
         const html = response.data;
         const results = [];
         
-        // Extract results from the HTML response
-        // Simple regex pattern to extract snippets
+        // Extract results from the HTML response with regex
         const snippetRegex = /<a class="result__snippet"[^>]*>(.*?)<\/a>/g;
         let match;
         let count = 0;
@@ -221,7 +338,11 @@ async function getDuckDuckGoResults(query, intensity = 5) {
             }
         }
         
-        return results.join('\n\n');
+        const resultText = results.join('\n\n');
+        // Cache the results
+        cache.set(cacheKey, resultText, 3600); // Cache for 1 hour
+        
+        return resultText;
     } catch (error) {
         console.error("Error fetching DuckDuckGo results:", error.message);
         return null;
@@ -230,9 +351,16 @@ async function getDuckDuckGoResults(query, intensity = 5) {
 
 async function getWikipediaArticle(query) {
     try {
-        // Search for the query with timeout config
+        const cacheKey = `wiki_search_${query}`;
+        const cachedArticle = cache.get(cacheKey);
+        
+        if (cachedArticle) {
+            return cachedArticle;
+        }
+        
+        // Search for the query with reduced timeout
         const axiosConfig = {
-            timeout: 15000 // 15 second timeout
+            timeout: 10000 // 10 second timeout
         };
         
         const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json`;
@@ -249,7 +377,12 @@ async function getWikipediaArticle(query) {
         const contentUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
         const contentResponse = await axios.get(contentUrl, axiosConfig);
         
-        return contentResponse.data.extract || null;
+        const extract = contentResponse.data.extract || null;
+        
+        // Cache the result
+        cache.set(cacheKey, extract, 3600); // Cache for 1 hour
+        
+        return extract;
     } catch (error) {
         console.error("Error fetching Wikipedia article:", error.message);
         return null;
