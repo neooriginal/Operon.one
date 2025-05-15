@@ -7,13 +7,13 @@ const contextManager = require('../../utils/context');
 const getPlatform = require("../../utils/getPlatform");
 const crypto = require('crypto');
 
-// Enhanced security function to validate paths
+
 function validatePath(filePath, baseDirectory) {
-    // Normalize paths to handle any directory traversal attempts
+    
     const normalizedPath = path.normalize(filePath);
     const normalizedBaseDir = path.normalize(baseDirectory);
     
-    // Check if file path is within allowed directory
+    
     if (!normalizedPath.startsWith(normalizedBaseDir)) {
         throw new Error(`Security violation: Path "${filePath}" is outside the allowed directory "${baseDirectory}"`);
     }
@@ -26,15 +26,15 @@ function getBaseDirectory() {
     return path.join(applicationBaseDir, 'output');
 }
 
-// Enhanced function to get user-specific directory
+
 function getUserDirectory(userId = 'default') {
     const baseDir = getBaseDirectory();
-    // Sanitize userId to prevent directory traversal
+    
     const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
     return path.join(baseDir, sanitizedUserId);
 }
 
-// Ensure the base directory exists
+
 function ensureBaseDirectoryExists(userId = 'default') {
     try {
         const baseDir = getBaseDirectory();
@@ -42,7 +42,7 @@ function ensureBaseDirectoryExists(userId = 'default') {
             fs.mkdirSync(baseDir, { recursive: true });
         }
         
-        // Also ensure user directory exists
+        
         const userDir = getUserDirectory(userId);
         if (!fs.existsSync(userDir)) {
             fs.mkdirSync(userDir, { recursive: true });
@@ -54,17 +54,17 @@ function ensureBaseDirectoryExists(userId = 'default') {
     }
 }
 
-// Get validated path for python file
+
 function getPythonFilePath(userId = 'default', timestamp) {
     const userDir = getUserDirectory(userId);
     const pythonFileName = `python_script_${userId}_${timestamp}.py`;
     const pythonFilePath = path.join(userDir, pythonFileName);
     
-    // Validate that the path is within the user directory
+    
     return validatePath(pythonFilePath, userDir);
 }
 
-// Execute an operation in a Docker container with proper error handling
+
 async function safeExecute(operation, userId = 'default', retries = 3) {
     let containerName = null;
     let containerCreated = false;
@@ -72,17 +72,17 @@ async function safeExecute(operation, userId = 'default', retries = 3) {
     
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            // Create a new container for this operation
+            
             containerName = await docker.createContainer(userId);
             containerCreated = true;
             
-            // Execute the operation
+            
             return await operation(containerName);
         } catch (error) {
             lastError = error;
             console.warn(`Python operation failed (attempt ${attempt}/${retries}): ${error.message}`);
             
-            // If container was created, try to clean it up
+            
             if (containerCreated && containerName) {
                 try {
                     await docker.removeContainer(containerName);
@@ -94,7 +94,7 @@ async function safeExecute(operation, userId = 'default', retries = 3) {
             containerCreated = false;
             containerName = null;
             
-            // Wait before retrying (exponential backoff)
+            
             if (attempt < retries) {
                 const delay = Math.min(100 * Math.pow(2, attempt), 2000);
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -107,17 +107,17 @@ async function safeExecute(operation, userId = 'default', retries = 3) {
 
 async function runTask(task, otherAIData, callback, userId = 'default') {
     try {
-        // Initialize tool state
+        
         let toolState = contextManager.getToolState('pythonExecute', userId) || {
             history: [],
             executions: []
         };
         
-        // Reset history for new task
+        
         toolState.currentTask = task;
         contextManager.setToolState('pythonExecute', toolState, userId);
         
-        // Validate inputs
+        
         if (!task || typeof task !== 'string') {
             console.error("Python Execute: Invalid task provided");
             toolState.lastError = "Invalid task format";
@@ -127,10 +127,10 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
             return errorResult;
         }
         
-        // Format the task with other AI data
+        
         task = task + "\n\nOther AI Data: " + (otherAIData || "");
         
-        // Generate Python code
+        
         let codeResult;
         try {
             codeResult = await generateCode(task, userId);
@@ -154,24 +154,24 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
             return errorResult;
         }
         
-        // Execute the Python code in a Docker container
+        
         try {
             const scriptPath = `/app/script_${crypto.randomBytes(4).toString('hex')}.py`;
             
             const result = await safeExecute(async (containerName) => {
-                // Write the Python script to the container
+                
                 await docker.writeFile(containerName, scriptPath, codeResult.code);
                 
-                // Install dependencies if any
+                
                 if (codeResult["pip install"] && codeResult["pip install"].length > 0) {
                     const pipCommand = `pip install ${codeResult["pip install"].join(' ')}`;
                     await docker.executeCommand(containerName, pipCommand);
                 }
                 
-                // Execute the Python script
+                
                 const { stdout, stderr } = await docker.executePython(containerName, scriptPath);
                 
-                // Store execution result
+                
                 toolState.executions.push({
                     timestamp: Date.now(),
                     task: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
@@ -179,7 +179,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
                 });
                 contextManager.setToolState('pythonExecute', toolState, userId);
                 
-                // Evaluate output
+                
                 const summary = await evaluateOutput(task, stdout, userId);
                 return summary;
             }, userId);
@@ -192,7 +192,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
             if (callback) callback(errorResult);
             return errorResult;
         } finally {
-            // Ensure cleanup of all containers
+            
             try {
                 await docker.cleanupAllContainers();
             } catch (cleanupError) {
@@ -207,10 +207,10 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     }
 }
 
-// Generate Python safety code that prevents file operations outside user directory
+
 function generatePythonSafetyCode(userId = 'default') {
     const userDir = getUserDirectory(userId);
-    const escapedUserDir = userDir.replace(/\\/g, '\\\\'); // Escape backslashes for Python string
+    const escapedUserDir = userDir.replace(/\\/g, '\\\\'); 
     
     return `
 import os
@@ -271,15 +271,15 @@ print(f"SECURITY: Python execution restricted to directory: {ALLOWED_DIR}\\n")
 
 async function evaluateOutput(task, result, userId = 'default') {
     try {
-        // Get tool state
+        
         let toolState = contextManager.getToolState('pythonExecute', userId);
         
-        // Ensure result is converted to string for evaluation
+        
         const resultStr = typeof result === 'object' ? 
             JSON.stringify(result, null, 2) : String(result || '');
         
         const createdContainerFiles = [];
-        const outputLines = resultStr.split('\\n'); // Split by newline
+        const outputLines = resultStr.split('\\n'); 
         for (const line of outputLines) {
             if (line.startsWith('CREATED_FILE:')) {
                 const filePath = line.substring('CREATED_FILE:'.length).trim();
@@ -302,7 +302,7 @@ async function evaluateOutput(task, result, userId = 'default') {
         `;
         const summary = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
         
-        // Add evaluation to history
+        
         toolState.history.push({
             role: "user", 
             content: [
@@ -317,10 +317,10 @@ async function evaluateOutput(task, result, userId = 'default') {
             ]
         });
         
-        // Save updated history
+        
         contextManager.setToolState('pythonExecute', toolState, userId);
         
-        // Validate the summary
+        
         if (!summary || typeof summary !== 'object') {
             return { 
                 summary: "Failed to generate summary", 
@@ -329,14 +329,14 @@ async function evaluateOutput(task, result, userId = 'default') {
             };
         }
         
-        // Add raw output for reference
+        
         summary.rawOutput = resultStr.substring(0, 1000);
 
-        // --- Start Modification: Add created files to summary ---
+        
         if (createdContainerFiles.length > 0) {
             summary.createdContainerFiles = createdContainerFiles;
         }
-        // --- End Modification ---
+        
 
         return summary;
     } catch (error) {
@@ -353,7 +353,7 @@ async function evaluateOutput(task, result, userId = 'default') {
 
 async function generateCode(task, userId = 'default') {
     try {
-        // Get tool state
+        
         let toolState = contextManager.getToolState('pythonExecute', userId) || {
             history: [],
             executions: []
@@ -370,7 +370,7 @@ async function generateCode(task, userId = 'default') {
         respond in the following JSON format:
         {
         "code": \`CODE HERE\`,
-        "pip install": ["list", "of", "libraries"] // List libraries required, if any. Empty list if none.
+        "pip install": ["list", "of", "libraries"] 
         }
         `;
 
@@ -381,20 +381,20 @@ async function generateCode(task, userId = 'default') {
             return { error: "Failed to generate Python code", fallback: true };
         }
         
-        // Validate code object has required field
+        
         if (!code.code) {
             console.error("Generated code missing 'code' field");
             return { error: "Generated code missing required 'code' field", fallback: true };
         }
         
-        // --- Start Modification: Validate pip install format ---
-        // Ensure "pip install" is always an array, even if empty or null
+        
+        
         if (!Array.isArray(code["pip install"])) {
             code["pip install"] = [];
         }
-        // --- End Modification ---
         
-        // Add to history
+        
+        
         toolState.history.push({
             role: "user", 
             content: [
@@ -409,12 +409,12 @@ async function generateCode(task, userId = 'default') {
             ]
         });
         
-        // Limit history size
+        
         if (toolState.history.length > 10) {
             toolState.history = toolState.history.slice(-10);
         }
         
-        // Save updated history
+        
         contextManager.setToolState('pythonExecute', toolState, userId);
 
         return code;
@@ -424,13 +424,13 @@ async function generateCode(task, userId = 'default') {
     }
 }
 
-// Function to validate dependency installation security
+
 function validateDependencies(dependencies) {
     if (!dependencies || dependencies.trim() === "") {
         return true;
     }
     
-    // List of potentially dangerous packages
+    
     const dangerousPackages = [
         'ansible', 'paramiko', 'fabric', 'metasploit', 'scapy', 'nmap', 
         'pwntools', 'winreg', 'pywin32', 'os-sys', 'pyinstaller'
@@ -439,7 +439,7 @@ function validateDependencies(dependencies) {
     const dependencyList = dependencies.split(/\s+/);
     
     for (const dep of dependencyList) {
-        // Remove version specifications for checking
+        
         const packageName = dep.split(/[=<>~]/)[0].trim().toLowerCase();
         
         if (dangerousPackages.includes(packageName)) {
@@ -456,7 +456,7 @@ function installDependencies(dependencies){
     }
     
     try {
-        // Validate dependencies first
+        
         validateDependencies(dependencies);
         
         let platform = getPlatform.getPlatform();
@@ -471,12 +471,12 @@ function installDependencies(dependencies){
 
 function executeCode(pythonFilePath){
     try {
-        // Validate that the Python file path exists and is within the allowed directory
+        
         if (!fs.existsSync(pythonFilePath)) {
             throw new Error(`Python file does not exist: ${pythonFilePath}`);
         }
         
-        // Additional validation to ensure the file is inside a valid user directory
+        
         const baseDir = getBaseDirectory();
         if (!pythonFilePath.startsWith(baseDir)) {
             throw new Error(`Security violation: Attempted to execute Python file outside of allowed directory: ${pythonFilePath}`);
@@ -484,13 +484,13 @@ function executeCode(pythonFilePath){
         
         let platform = getPlatform.getPlatform();
         
-        // Use a secure execution method
+        
         let command = `python "${pythonFilePath}"`;
         let result = child_process.execSync(command, {
-            // Set a timeout to prevent long-running scripts
-            timeout: 30000, // 30 seconds
-            // Limit memory usage
-            maxBuffer: 1024 * 1024 // 1MB
+            
+            timeout: 30000, 
+            
+            maxBuffer: 1024 * 1024 
         });
         
         return result;

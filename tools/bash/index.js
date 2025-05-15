@@ -4,7 +4,7 @@ const docker = require("../docker");
 const contextManager = require("../../utils/context");
 const path = require('path');
 
-// Execute a bash command in a Docker container with proper error handling
+
 async function safeExecuteInContainer(command, userId = 'default', retries = 3) {
     let containerName = null;
     let containerCreated = false;
@@ -12,21 +12,21 @@ async function safeExecuteInContainer(command, userId = 'default', retries = 3) 
     
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            // Create a new container for this operation
+            
             containerName = await docker.createContainer(userId);
             containerCreated = true;
             
-            // Execute the command in container
+            
             const { stdout, stderr } = await docker.executeCommand(containerName, command);
             
-            // If there's stderr but not error thrown, we should include it in the result
+            
             const result = stderr ? `${stdout}\nSTDERR: ${stderr}` : stdout;
             return result;
         } catch (error) {
             lastError = error;
             console.warn(`Bash operation failed (attempt ${attempt}/${retries}): ${error.message}`);
             
-            // If container was created, try to clean it up
+            
             if (containerCreated && containerName) {
                 try {
                     await docker.removeContainer(containerName);
@@ -38,7 +38,7 @@ async function safeExecuteInContainer(command, userId = 'default', retries = 3) 
             containerCreated = false;
             containerName = null;
             
-            // Wait before retrying (exponential backoff)
+            
             if (attempt < retries) {
                 const delay = Math.min(100 * Math.pow(2, attempt), 2000);
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -51,26 +51,26 @@ async function safeExecuteInContainer(command, userId = 'default', retries = 3) 
 
 async function runTask(task, otherAIData, callback, userId = 'default') {
     try {
-        // Initialize tool state from context or create a new one
+        
         let toolState = contextManager.getToolState('bash', userId) || { history: [] };
         
         task = task + "\n\nOther AI Data: " + otherAIData;
         
-        // Generate bash code
+        
         let code = await generateBashCode(task, userId);
         
-        // Store the generated code in tool state
+        
         toolState.lastCode = code;
         contextManager.setToolState('bash', toolState, userId);
         
-        // Execute bash code in Docker container
+        
         let result = await executeBashCode(code, userId);
         
-        // Store result in tool state
+        
         toolState.lastResult = result;
         contextManager.setToolState('bash', toolState, userId);
         
-        // Evaluate output
+        
         let summary = await evaluateOutput(task, result, userId);
         
         if (callback) {
@@ -91,7 +91,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
         
         return errorResult;
     } finally {
-        // Ensure cleanup of all containers
+        
         try {
             await docker.cleanupAllContainers();
         } catch (cleanupError) {
@@ -102,7 +102,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
 
 async function executeBashCode(code, userId = 'default') {
     try {
-        // Execute the bash code in a Docker container
+        
         return await safeExecuteInContainer(code, userId);
     } catch (error) {
         console.error('Bash execution error:', error.message);
@@ -111,11 +111,11 @@ async function executeBashCode(code, userId = 'default') {
 }
 
 async function evaluateOutput(task, result, userId = 'default') {
-    // Get tool state
+    
     let toolState = contextManager.getToolState('bash', userId);
     
     const createdContainerFiles = [];
-    const resultStr = String(result || ''); // Ensure string
+    const resultStr = String(result || ''); 
     const outputLines = resultStr.split('\n');
     for (const line of outputLines) {
         if (line.startsWith('CREATED_FILE:')) {
@@ -131,9 +131,9 @@ async function evaluateOutput(task, result, userId = 'default') {
     The user will provide the task. Reply in the following JSON Format:
     {
     "summary": \"SUMMARY HERE\",
-    "success": true/false //task completed?
+    "success": true/false 
     }
-    Result: ${resultStr} // Use resultStr here
+    Result: ${resultStr} 
     `;
     let summary;
     try {
@@ -143,7 +143,7 @@ async function evaluateOutput(task, result, userId = 'default') {
       summary = { summary: `Evaluation failed due to AI error: ${aiError.message}`, success: false };
     }
     
-    // Update history in tool state
+    
     toolState.history.push({
         role: "user", 
         content: [
@@ -158,19 +158,19 @@ async function evaluateOutput(task, result, userId = 'default') {
         ]
     });
     
-    // Limit history size
+    
     if (toolState.history.length > 10) {
         toolState.history = toolState.history.slice(-10);
     }
     
-    // Save updated tool state
+    
     contextManager.setToolState('bash', toolState, userId);
 
-    // --- Start Modification: Add created files to summary ---
-    // Ensure summary is a valid object before adding property
+    
+    
     if (typeof summary !== 'object' || summary === null) {
         console.warn('Bash evaluateOutput received non-object summary, creating default.');
-        // If summary is not an object (e.g., string error from AI), wrap it
+        
         const originalSummaryContent = typeof summary === 'string' ? summary : 'Invalid content';
         summary = { 
             summary: `Evaluation failed or produced invalid format. Original output hint: ${originalSummaryContent.substring(0,100)}`, 
@@ -180,13 +180,13 @@ async function evaluateOutput(task, result, userId = 'default') {
     if (createdContainerFiles.length > 0) {
         summary.createdContainerFiles = createdContainerFiles;
     }
-    // --- End Modification ---
+    
 
     return summary;
 }
 
 async function generateBashCode(task, userId = 'default') {
-    // Get tool state
+    
     let toolState = contextManager.getToolState('bash', userId) || { history: [] };
     
     let prompt = `
@@ -206,7 +206,7 @@ async function generateBashCode(task, userId = 'default') {
     `;
     let code = await ai.callAI(prompt, task, toolState.history || [], undefined, true, 'auto', userId);
     
-    // Update history in tool state
+    
     toolState.history.push({
         role: "user", 
         content: [
@@ -221,12 +221,12 @@ async function generateBashCode(task, userId = 'default') {
         ]
     });
     
-    // Limit history size
+    
     if (toolState.history.length > 10) {
         toolState.history = toolState.history.slice(-10);
     }
     
-    // Save updated tool state
+    
     contextManager.setToolState('bash', toolState, userId);
     
     return code.code;

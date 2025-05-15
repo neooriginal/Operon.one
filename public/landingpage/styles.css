@@ -1,4 +1,3 @@
-/* Base Styles and Variables */
 :root {
     --primary-hue: 231;
     --secondary-hue: 326;
@@ -7,12 +6,9 @@
     --dark-hue: 222;
     --dark-saturation: 47%;
 
-    --primary: hsl(var(--primary-hue), 79%, var(--primary-lightness)); /* Indigo */
-    --secondary: hsl(var(--secondary-hue), 74%, var(--secondary-lightness)); /* Pink */
-    --accent-gradient: linear-gradient(90deg, var(--primary), var(--secondary));
+    --primary: hsl(var(--primary-hue), 79%, var(--primary-lightness));     --secondary: hsl(var(--secondary-hue), 74%, var(--secondary-lightness));     --accent-gradient: linear-gradient(90deg, var(--primary), var(--secondary));
 
-    --dark-bg: hsl(var(--dark-hue), var(--dark-saturation), 11%); /* Rich dark blue */
-    --dark-card: hsl(var(--dark-hue), var(--dark-saturation), 16%);
+    --dark-bg: hsl(var(--dark-hue), var(--dark-saturation), 11%);     --dark-card: hsl(var(--dark-hue), var(--dark-saturation), 16%);
     --dark-border: hsl(var(--dark-hue), var(--dark-saturation), 25%);
 
     --text-light: hsl(var(--dark-hue), 15%, 88%);
@@ -35,7 +31,6 @@
     --border-radius-full: 999px;
 }
 
-/* CSS Reset and Base Styles */
 *,
 *::before,
 *::after {
@@ -56,10 +51,8 @@ body {
     line-height: 1.7;
     overflow-x: hidden;
     position: relative;
-    padding-top: 90px; /* Add padding to the body to account for fixed header + banner */
-}
+    padding-top: 90px; }
 
-/* Improved Scrollbar */
 body::-webkit-scrollbar {
   width: 10px;
 }
@@ -132,12 +125,10 @@ p {
     padding: 0 1.5rem;
 }
 
-/* Section Styling */
 section {
     padding: 6rem 0;
     position: relative;
-    overflow: hidden; /* Contain animations */
-}
+    overflow: hidden; }
 
 section:nth-of-type(odd) {
     background-color: var(--dark-card);
@@ -164,7 +155,6 @@ section:nth-of-type(odd) {
     text-fill-color: transparent;
 }
 
-/* Button Styles */
 .btn {
     display: inline-block;
     padding: 0.8rem 1.8rem;
@@ -224,7 +214,6 @@ section:nth-of-type(odd) {
     font-size: 0.9em;
 }
 
-/* Beta Banner */
 .beta-banner {
     background: linear-gradient(90deg, hsl(var(--primary-hue), 70%, 50%), hsl(var(--secondary-hue), 70%, 55%));
     color: white;
@@ -232,31 +221,25 @@ section:nth-of-type(odd) {
     padding: 0.75rem 1rem;
     font-weight: 500;
     font-size: 0.9rem;
-    position: fixed; /* Change to fixed instead of relative */
-    width: 100%;
+    position: fixed;     width: 100%;
     top: 0;
     left: 0;
-    z-index: 999; /* Below header */
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    z-index: 999;     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .beta-banner i {
     margin-right: 0.5em;
 }
 
-/* Header */
 #main-header {
     position: fixed;
-    top: 44px; /* Account for beta banner height */
-    left: 0;
+    top: 44px;     left: 0;
     width: 100%;
     z-index: 1000;
-    padding: 0.5rem 0; /* Reduced padding */
-    background-color: hsla(var(--dark-hue), var(--dark-saturation), 11%, 0.8);
+    padding: 0.5rem 0;     background-color: hsla(var(--dark-hue), var(--dark-saturation), 11%, 0.8);
     backdrop-filter: blur(10px);
     transition: padding 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
-    border-bottom: 1px solid transparent; /* Add border for scrolled state */
-}
+    border-bottom: 1px solid transparent; }
 
 #main-header.scrolled {
     padding: 0.3rem 0;
@@ -320,8 +303,7 @@ section:nth-of-type(odd) {
 }
 
 .nav-links .btn {
-    padding: 0.5rem 1.2rem; /* Smaller button padding in nav */
-    font-size: 0.9rem;
+    padding: 0.5rem 1.2rem;     font-size: 0.9rem;
 }
 
 .menu-toggle {
@@ -333,13 +315,10 @@ section:nth-of-type(odd) {
     cursor: pointer;
 }
 
-/* Hero Section */
 .hero-section {
-    min-height: 90vh; /* Slightly less than full viewport */
-    display: flex;
+    min-height: 90vh;     display: flex;
     align-items: center;
-    padding-top: 10rem; /* Increased to account for banner + header */
-    padding-bottom: 4rem;
+    padding-top: 10rem;     padding-bottom: 4rem;
     position: relative;
     background: radial-gradient(ellipse at bottom, hsl(var(--dark-hue), var(--dark-saturation), 15%) 0%, var(--dark-bg) 70%);
 }
@@ -363,8 +342,7 @@ section:nth-of-type(odd) {
 }
 
 .hero-headline .line {
-    display: block; /* Each part on a new line */
-}
+    display: block; }
 
 .hero-subheadline {
     font-size: 1.15rem;
@@ -400,7 +378,6 @@ section:nth-of-type(odd) {
     align-items: center;
 }
 
-/* Abstract Animation */
 .animation-container {
     position: relative;
     width: 300px;
@@ -410,8 +387,7 @@ section:nth-of-type(odd) {
 .shape {
     position: absolute;
     border-radius: 50%;
-    mix-blend-mode: screen; /* Or lighten/hard-light */
-    opacity: 0.5;
+    mix-blend-mode: screen;     opacity: 0.5;
     filter: blur(30px);
 }
 
@@ -436,8 +412,7 @@ section:nth-of-type(odd) {
 .shape-3 {
     width: 180px;
     height: 180px;
-    background: hsl(180, 70%, 65%); /* Teal accent */
-    top: 50%;
+    background: hsl(180, 70%, 65%);     top: 50%;
     left: 20%;
     animation: float 11s ease-in-out infinite alternate -4s;
 }
@@ -447,7 +422,6 @@ section:nth-of-type(odd) {
     100% { transform: translate(20px, -30px) scale(1.1); }
 }
 
-/* How It Works Section */
 .how-it-works-section {
     background-color: var(--dark-card);
 }
@@ -506,11 +480,9 @@ section:nth-of-type(odd) {
     );
     margin: 0 -1rem;
     position: relative;
-    top: 40px; /* Align with icon center */
-    z-index: 1;
+    top: 40px;     z-index: 1;
 }
 
-/* Use Cases Section */
 .use-cases-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -559,7 +531,6 @@ section:nth-of-type(odd) {
     margin-bottom: 0;
 }
 
-/* Waitlist Section */
 .waitlist-section {
     background-color: var(--dark-card);
     padding: 5rem 0;
@@ -605,7 +576,6 @@ section:nth-of-type(odd) {
     margin-top: 0.5rem;
 }
 
-/* Footer */
 footer {
     background-color: var(--dark-bg);
     padding: 4rem 0 2rem 0;
@@ -687,7 +657,6 @@ footer {
     margin-right: 0;
 }
 
-/* Completely remove all initial animation states to ensure text is visible */
 .hero-headline .line,
 .hero-subheadline,
 .hero-cta,
@@ -697,12 +666,8 @@ footer {
 .step-card,
 .use-case-card,
 .waitlist-form {
-    opacity: 1 !important; /* Force visibility with !important */
-    transform: none !important; /* Force no transform with !important */
-    visibility: visible !important; /* Ensure visibility */
-}
+    opacity: 1 !important;     transform: none !important;     visibility: visible !important; }
 
-/* Fix any other potential animation issues */
 .section-hidden {
     opacity: 1 !important;
     transform: none !important;
@@ -714,19 +679,16 @@ footer {
     transform: none !important;
 }
 
-/* Additional fixes for GSAP animations */
 [data-gsap-animated] {
     opacity: 1 !important;
     transform: none !important;
 }
 
-/* Make sure all text is visible */
 body *, p, h1, h2, h3, h4, h5, a, span, div {
     opacity: 1 !important;
     visibility: visible !important;
 }
 
-/* Responsive Styles */
 @media (max-width: 992px) {
     h1 { font-size: clamp(2.5rem, 7vw, 3.5rem); }
     h2 { font-size: clamp(1.8rem, 5vw, 2.5rem); }
@@ -762,8 +724,7 @@ body *, p, h1, h2, h3, h4, h5, a, span, div {
     }
 
     .step-connector {
-        display: none; /* Hide connectors on vertical layout */
-    }
+        display: none;     }
 
     .step-card {
         width: 100%;
@@ -797,8 +758,7 @@ body *, p, h1, h2, h3, h4, h5, a, span, div {
     .nav-links {
         position: fixed;
         top: 0;
-        right: -100%; /* Start off-screen */
-        width: 70%;
+        right: -100%;         width: 70%;
         max-width: 300px;
         height: 100vh;
         background-color: var(--dark-card);
@@ -808,8 +768,7 @@ body *, p, h1, h2, h3, h4, h5, a, span, div {
         transition: right 0.4s ease-in-out;
         box-shadow: -5px 0 15px rgba(0,0,0,0.2);
         gap: 1rem;
-        z-index: 999; /* Below header but above content */
-    }
+        z-index: 999;     }
 
     .nav-links.active {
         right: 0;
@@ -828,8 +787,7 @@ body *, p, h1, h2, h3, h4, h5, a, span, div {
          border-radius: var(--border-radius-sm);
     }
      .nav-links a:not(.btn)::after {
-        display: none; /* Remove underline effect on mobile nav */
-     }
+        display: none;      }
 
     .nav-links .btn {
         width: 100%;
@@ -840,8 +798,7 @@ body *, p, h1, h2, h3, h4, h5, a, span, div {
 
     .menu-toggle {
         display: block;
-        z-index: 1001; /* Above nav links background */
-        position: relative;
+        z-index: 1001;         position: relative;
     }
 
     .hero-section {

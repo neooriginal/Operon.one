@@ -3,16 +3,16 @@ const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure the data directory exists
+
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Database file path
+
 const DB_PATH = path.join(DATA_DIR, 'operonone.db');
 
-// Create a new database instance
+
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
     console.error('Database connection error:', err.message);
@@ -22,9 +22,9 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   }
 });
 
-// Initialize database tables if they don't exist
+
 function initDatabase() {
-  // Users table
+  
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
@@ -41,7 +41,7 @@ function initDatabase() {
     }
   });
 
-  // Memories table
+  
   db.run(`CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
@@ -61,7 +61,7 @@ function initDatabase() {
     }
   });
 
-  // Chat history table
+  
   db.run(`CREATE TABLE IF NOT EXISTS chat_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
@@ -79,7 +79,7 @@ function initDatabase() {
     }
   });
   
-  // Chats table (for multiple conversations)
+  
   db.run(`CREATE TABLE IF NOT EXISTS chats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
@@ -95,7 +95,7 @@ function initDatabase() {
     }
   });
   
-  // Container files table (for tracking files created by container-based tools)
+  
   db.run(`CREATE TABLE IF NOT EXISTS container_files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
@@ -116,7 +116,7 @@ function initDatabase() {
     }
   });
   
-  // Host files table (for tracking files created on the host system)
+  
   db.run(`CREATE TABLE IF NOT EXISTS host_files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
@@ -137,7 +137,7 @@ function initDatabase() {
     }
   });
   
-  // Settings table (for user preferences and settings)
+  
   db.run(`CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT NOT NULL,
@@ -156,9 +156,9 @@ function initDatabase() {
   });
 }
 
-// User functions
+
 const userFunctions = {
-  // Register a new user
+  
   async registerUser(email, password) {
     const hashedPassword = await bcrypt.hash(password, 10);
     
@@ -177,7 +177,7 @@ const userFunctions = {
     });
   },
 
-  // Authenticate a user
+  
   async loginUser(email, password) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -191,12 +191,12 @@ const userFunctions = {
           } else {
             const match = await bcrypt.compare(password, user.password);
             if (match) {
-              // Update last login time
+              
               db.run(
                 'UPDATE users SET lastLogin = CURRENT_TIMESTAMP WHERE id = ?',
                 [user.id]
               );
-              // Return user data without password
+              
               const { password, ...userData } = user;
               resolve(userData);
             } else {
@@ -208,7 +208,7 @@ const userFunctions = {
     });
   },
 
-  // Get user by ID
+  
   getUserById(id) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -225,7 +225,7 @@ const userFunctions = {
     });
   },
 
-  // Update user credits
+  
   updateCredits(userId, credits) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -243,9 +243,9 @@ const userFunctions = {
   }
 };
 
-// Memory functions
+
 const memoryFunctions = {
-  // Store a memory
+  
   storeMemory(userId, memoryData) {
     const { type, content, keywords, metadata, importance, storageDuration } = memoryData;
     
@@ -272,7 +272,7 @@ const memoryFunctions = {
     });
   },
 
-  // Get memories for a user
+  
   getMemories(userId, limit = 100) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -282,7 +282,7 @@ const memoryFunctions = {
           if (err) {
             reject(err);
           } else {
-            // Parse JSON strings back to objects
+            
             const parsedMemories = memories.map(memory => ({
               ...memory,
               keywords: tryParseJSON(memory.keywords, []),
@@ -295,10 +295,10 @@ const memoryFunctions = {
     });
   },
 
-  // Search memories
+  
   searchMemories(userId, query) {
     return new Promise((resolve, reject) => {
-      // Basic search implementation - can be improved with full-text search
+      
       db.all(
         `SELECT * FROM memories 
          WHERE userId = ? AND (
@@ -325,9 +325,9 @@ const memoryFunctions = {
   }
 };
 
-// Chat history functions
+
 const chatFunctions = {
-  // Add a chat message
+  
   addChatMessage(userId, role, content, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -337,7 +337,7 @@ const chatFunctions = {
           if (err) {
             reject(err);
           } else {
-            // Update the chat's updatedAt timestamp
+            
             db.run('UPDATE chats SET updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND userId = ?', 
               [chatId, userId]);
             resolve({ id: this.lastID });
@@ -347,7 +347,7 @@ const chatFunctions = {
     });
   },
 
-  // Get chat history for a user and specific chat
+  
   getChatHistory(userId, chatId = 1, limit = 50) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -357,7 +357,7 @@ const chatFunctions = {
           if (err) {
             reject(err);
           } else {
-            // Parse JSON content if needed
+            
             const parsedMessages = messages.map(msg => ({
               ...msg,
               content: tryParseJSON(msg.content, msg.content)
@@ -369,7 +369,7 @@ const chatFunctions = {
     });
   },
 
-  // Clear chat history for a specific chat
+  
   clearChatHistory(userId, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -386,7 +386,7 @@ const chatFunctions = {
     });
   },
 
-  // Create a new chat
+  
   createChat(userId, title = 'New Chat') {
     return new Promise((resolve, reject) => {
       db.run(
@@ -403,7 +403,7 @@ const chatFunctions = {
     });
   },
 
-  // Get all chats for a user
+  
   getUserChats(userId) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -420,7 +420,7 @@ const chatFunctions = {
     });
   },
 
-  // Update chat title
+  
   updateChatTitle(userId, chatId, title) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -437,10 +437,10 @@ const chatFunctions = {
     });
   },
 
-  // Delete a chat and its history
+  
   deleteChat(userId, chatId) {
     return new Promise((resolve, reject) => {
-      // First delete chat history
+      
       db.run('DELETE FROM chat_history WHERE userId = ? AND chatId = ?', 
         [userId, chatId], 
         (err) => {
@@ -449,7 +449,7 @@ const chatFunctions = {
             return;
           }
 
-          // Then delete the chat
+          
           db.run('DELETE FROM chats WHERE id = ? AND userId = ?', 
             [chatId, userId], 
             function(err) {
@@ -466,21 +466,21 @@ const chatFunctions = {
   }
 };
 
-// File tracking functions
+
 const fileFunctions = {
-  // Track a container file
+  
   trackContainerFile(userId, containerPath, originalName = null, description = null, chatId = 1, fileContent = null, fileExtension = null) {
-    // console.log('Tracking container file with data:', { userId, containerPath, originalName, description, chatId, fileContentLength: fileContent ? fileContent.length : 0, fileExtension });
+    
     return new Promise((resolve, reject) => {
       db.run(
         'INSERT INTO container_files (userId, containerPath, originalName, description, chatId, fileContent, fileExtension) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [userId, containerPath, originalName, description, chatId, fileContent, fileExtension],
         function(err) {
           if (err) {
-            // console.error('Error tracking container file:', err);
+            
             reject(err);
           } else {
-            // console.log(`Successfully tracked container file with ID: ${this.lastID}`);
+            
             resolve({ id: this.lastID });
           }
         }
@@ -488,19 +488,19 @@ const fileFunctions = {
     });
   },
   
-  // Track a host file
+  
   trackHostFile(userId, filePath, originalName = null, description = null, chatId = 1, fileContent = null, fileExtension = null) {
-    // console.log('Tracking host file with data:', { userId, filePath, originalName, description, chatId, fileContentLength: fileContent ? fileContent.length : 0, fileExtension });
+    
     return new Promise((resolve, reject) => {
       db.run(
         'INSERT INTO host_files (userId, filePath, originalName, description, chatId, fileContent, fileExtension) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [userId, filePath, originalName, description, chatId, fileContent, fileExtension],
         function(err) {
           if (err) {
-            // console.error('Error tracking host file:', err);
+            
             reject(err);
           } else {
-            // console.log(`Successfully tracked host file with ID: ${this.lastID}`);
+            
             resolve({ id: this.lastID });
           }
         }
@@ -508,39 +508,39 @@ const fileFunctions = {
     });
   },
   
-  // Get tracked files for a user
+  
   getTrackedFiles(userId, chatId = 1) {
-    // console.log(`Getting tracked files for user: ${userId}, chat: ${chatId}`);
+    
     return new Promise((resolve, reject) => {
       const result = {
         containerFiles: [],
         hostFiles: []
       };
       
-      // Get container files - add fileContent to the SELECT
+      
       db.all(
         'SELECT id, userId, containerPath, originalName, description, fileExtension, createdAt, chatId, fileContent FROM container_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
         [userId, chatId],
         (err, containerFiles) => {
           if (err) {
-            // console.error('Error retrieving container files:', err);
+            
             return reject(err);
           }
           
-          // console.log('Retrieved container files:', JSON.stringify(containerFiles, null, 2));
+          
           result.containerFiles = containerFiles;
           
-          // Get host files - add fileContent to the SELECT
+          
           db.all(
             'SELECT id, userId, filePath, originalName, description, fileExtension, createdAt, chatId, fileContent FROM host_files WHERE userId = ? AND chatId = ? ORDER BY createdAt DESC',
             [userId, chatId],
             (err, hostFiles) => {
               if (err) {
-                // console.error('Error retrieving host files:', err);
+                
                 return reject(err);
               }
               
-              // console.log('Retrieved host files:', JSON.stringify(hostFiles, null, 2));
+              
               result.hostFiles = hostFiles;
               resolve(result);
             }
@@ -550,12 +550,12 @@ const fileFunctions = {
     });
   },
   
-  // Delete tracked files for a user
+  
   deleteTrackedFiles(userId, fileIds, fileType = 'all') {
     return new Promise((resolve, reject) => {
       let deletedCount = 0;
       
-      // Function to handle the deletion for a specific table
+      
       const deleteFromTable = (table, idsParam) => {
         return new Promise((resolveDelete, rejectDelete) => {
           if (!idsParam || idsParam.length === 0) {
@@ -579,7 +579,7 @@ const fileFunctions = {
         });
       };
       
-      // Process deletions based on fileType
+      
       const operations = [];
       
       if (fileType === 'all' || fileType === 'container') {
@@ -599,10 +599,10 @@ const fileFunctions = {
     });
   },
 
-  // Get a specific tracked file by ID for a user
+  
   getTrackedFileById(userId, fileId) {
     return new Promise((resolve, reject) => {
-      // Try finding in container_files first
+      
       db.get(
         'SELECT id, userId, containerPath AS path, originalName AS fileName, description, fileExtension, createdAt, fileContent, \'container\' AS type FROM container_files WHERE userId = ? AND id = ?',
         [userId, fileId],
@@ -614,7 +614,7 @@ const fileFunctions = {
             return resolve(containerFile);
           }
 
-          // If not found, try finding in host_files
+          
           db.get(
             'SELECT id, userId, filePath AS path, originalName AS fileName, description, fileExtension, createdAt, fileContent, \'host\' AS type FROM host_files WHERE userId = ? AND id = ?',
             [userId, fileId],
@@ -622,7 +622,7 @@ const fileFunctions = {
               if (err) {
                 return reject(err);
               }
-              resolve(hostFile); // Resolve with hostFile (or null if not found)
+              resolve(hostFile); 
             }
           );
         }
@@ -631,9 +631,9 @@ const fileFunctions = {
   }
 };
 
-// Settings functions
+
 const settingsFunctions = {
-  // Save a setting for a user
+  
   saveSetting(userId, key, value) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -653,7 +653,7 @@ const settingsFunctions = {
     });
   },
 
-  // Get a specific setting for a user
+  
   getSetting(userId, key) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -670,7 +670,7 @@ const settingsFunctions = {
     });
   },
 
-  // Get all settings for a user
+  
   getAllSettings(userId) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -680,7 +680,7 @@ const settingsFunctions = {
           if (err) {
             reject(err);
           } else {
-            // Convert array of {settingKey, settingValue} to object
+            
             const settingsObject = settings.reduce((obj, setting) => {
               obj[setting.settingKey] = setting.settingValue;
               return obj;
@@ -692,7 +692,7 @@ const settingsFunctions = {
     });
   },
 
-  // Delete a setting
+  
   deleteSetting(userId, key) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -710,40 +710,40 @@ const settingsFunctions = {
   }
 };
 
-// Helper function to safely parse JSON
+
 function tryParseJSON(str, defaultValue) {
   if (!str) return defaultValue;
   
-  // If it's already an object, just return it
+  
   if (typeof str === 'object') return str;
   
-  // Handle string JSON
+  
   if (typeof str === 'string') {
     try {
-      // First attempt - standard JSON parse
+      
       return JSON.parse(str);
     } catch (e) {
-      // Second attempt - try to fix common JSON issues
+      
       try {
-        // Clean up trailing commas that cause parse errors
+        
         const cleaned = str.replace(/,\s*([\]}])/g, '$1');
         return JSON.parse(cleaned);
       } catch (e2) {
-        // Third attempt - if it's a partial/truncated JSON, try to recover it
+        
         try {
-          // Add missing closing brackets/braces if needed
+          
           let fixedStr = str;
           const openBraces = (fixedStr.match(/\{/g) || []).length;
           const closeBraces = (fixedStr.match(/\}/g) || []).length;
           const openBrackets = (fixedStr.match(/\[/g) || []).length;
           const closeBrackets = (fixedStr.match(/\]/g) || []).length;
           
-          // Add missing closing braces
+          
           for (let i = 0; i < (openBraces - closeBraces); i++) {
             fixedStr += '}';
           }
           
-          // Add missing closing brackets
+          
           for (let i = 0; i < (openBrackets - closeBrackets); i++) {
             fixedStr += ']';
           }
@@ -756,18 +756,18 @@ function tryParseJSON(str, defaultValue) {
             original: str.substring(0, 100) + '...',
             fallback: true
           });
-          // Return the original string if defaultValue is not specified
+          
           return defaultValue !== undefined ? defaultValue : str;
         }
       }
     }
   }
   
-  // If all else fails, return the default value or the original string
+  
   return defaultValue !== undefined ? defaultValue : str;
 }
 
-// Close the database connection when the process exits
+
 process.on('exit', () => {
   db.close((err) => {
     if (err) {
@@ -778,7 +778,7 @@ process.on('exit', () => {
   });
 });
 
-// Add getDb function to export the database connection
+
 function getDb() {
   return db;
 }
@@ -790,5 +790,5 @@ module.exports = {
   chatFunctions,
   fileFunctions,
   settingsFunctions,
-  getDb  // Export the database connection
+  getDb  
 }; 

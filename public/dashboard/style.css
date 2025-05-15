@@ -1,4 +1,3 @@
-/* Root Variables for consistency with landing page */
 :root {
     --primary: #6366f1;
     --primary-dark: #4f46e5;
@@ -31,7 +30,6 @@ body {
     position: relative;
 }
 
-/* Noise Background Effect */
 body::before {
     content: "";
     position: fixed;
@@ -50,7 +48,6 @@ body::before {
     height: 100vh;
 }
 
-/* --- Sidebar Styling --- */
 .sidebar {
     width: 260px;
     background-color: var(--dark-light);
@@ -109,14 +106,12 @@ body::before {
     box-shadow: none;
 }
 
-/* --- Recent Chats Styling --- */
 .recent-chats-container {
     flex-grow: 1;
     overflow-y: auto;
     padding: 10px 0;
 }
 
-/* Custom scrollbar for recent chats */
 .recent-chats-container::-webkit-scrollbar {
     width: 6px;
 }
@@ -224,7 +219,6 @@ body::before {
     margin-right: 10px;
 }
 
-/* Icon buttons in footer */
 .icon-button, #settings-link {
     background: none;
     border: none;
@@ -241,7 +235,6 @@ body::before {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-/* --- Chat Container Anpassungen --- */
 .chat-container {
     width: 100%;
     height: 100vh;
@@ -272,7 +265,6 @@ body::before {
     color: var(--primary);
 }
 
-/* Styling für den Statusbereich */
 .status-display {
     padding: 10px 25px;
     background-color: var(--dark);
@@ -307,7 +299,6 @@ body::before {
     flex-direction: column;
 }
 
-/* Styling for Scrollbar */
 .chat-messages::-webkit-scrollbar {
     width: 8px;
 }
@@ -350,7 +341,6 @@ body::before {
     border-bottom-left-radius: 4px;
 }
 
-/* Verbessertes Styling für Aktions-Elemente */
 .action-element {
     background-color: #2a3341;
     border: 1px solid #384252;
@@ -442,7 +432,6 @@ body::before {
     background-color: var(--primary-dark);
 }
 
-/* Styling für Schritt-Gruppen (Hierarchie) */
 .step-group {
     background-color: var(--dark-light);
     border-radius: var(--border-radius);
@@ -554,7 +543,6 @@ body::before {
     font-size: 0.9em;
 }
 
-/* --- Markdown Styling für AI-Nachrichten --- */
 .message.ai p {
     margin-top: 0;
     margin-bottom: 0.5em;
@@ -637,9 +625,7 @@ body::before {
     text-decoration: underline;
 }
 
-/* --- Ende Markdown Styling --- */
 
-/* --- File Output Styling --- */
 .file-output {
     background-color: var(--dark-light);
     border-radius: var(--border-radius);
@@ -732,7 +718,6 @@ body::before {
     margin-right: 5px;
 }
 
-/* File content modal */
 .file-content-modal {
     position: fixed;
     top: 0;
@@ -800,7 +785,6 @@ body::before {
     color: var(--light);
 }
 
-/* --- Styling für Dateianzeige-Elemente --- */
 .file-display-element {
     background-color: var(--dark-light);
     border-radius: var(--border-radius);
@@ -838,7 +822,6 @@ body::before {
     text-overflow: ellipsis;
 }
 
-/* Styling für File-Display-Elemente INNERHALB einer Gruppe sicherstellen */
 .step-group-content .file-display-element {
     width: 100%;
     margin: 0;
@@ -848,7 +831,6 @@ body::before {
     box-sizing: border-box;
 }
 
-/* Gradient text effect */
 .gradient-text {
     background: linear-gradient(90deg, var(--primary), var(--secondary));
     -webkit-background-clip: text;
@@ -858,9 +840,7 @@ body::before {
     display: inline-block;
 }
 
-/* Style for the login/register/settings pages could go here or in separate files */
 
-/* Example: Basic styling for settings page elements if reusing this file */
 .settings-container {
     padding: 30px;
     max-width: 800px;
@@ -920,7 +900,6 @@ body::before {
     background-color: var(--primary-dark);
 }
 
-/* File Modal Styles */
 .modal {
     display: none;
     position: fixed;

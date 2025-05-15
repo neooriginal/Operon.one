@@ -1,13 +1,13 @@
 const elementNumberingScript = `
 (function() {
-    // Global storage for indexed elements
+    
     window.aiIndexedElements = window.aiIndexedElements || [];
     
-    // Clean up existing element numbering
+    
     const existingLabels = document.querySelectorAll('div[data-ai-element-number]');
     existingLabels.forEach(label => label.remove());
     
-    // Remove previous element highlighting
+    
     if (window.aiIndexedElements.length > 0) {
         window.aiIndexedElements.forEach(el => {
             if (el && el.style) {
@@ -16,12 +16,12 @@ const elementNumberingScript = `
         });
     }
     
-    // Find all interactive elements
+    
     let elements = document.querySelectorAll('button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"]), [onclick], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [role="tab"], [role="combobox"]');
     window.aiIndexedElements = [];
     
     elements = Array.from(elements).filter(el => {
-        // Check if element is visible
+        
         const rect = el.getBoundingClientRect();
         const computedStyle = window.getComputedStyle(el);
         
@@ -31,14 +31,14 @@ const elementNumberingScript = `
                computedStyle.visibility !== 'hidden' && 
                computedStyle.opacity !== '0' &&
                el.type !== 'hidden' &&
-               // Check if element is within viewport or close to it
+               
                rect.bottom >= -100 && 
                rect.right >= -100 && 
                rect.top <= (window.innerHeight + 100) && 
                rect.left <= (window.innerWidth + 100);
     });
     
-    // Helper function to get a short description of the element
+    
     const getElementDescription = (el) => {
         let desc = '';
         if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
@@ -61,9 +61,9 @@ const elementNumberingScript = `
         return desc;
     };
     
-    // Color coding based on element type
+    
     const getElementColor = (el) => {
-        // Different colors for different element types
+        
         if (el.tagName === 'INPUT') {
             switch(el.type) {
                 case 'text':
@@ -73,26 +73,26 @@ const elementNumberingScript = `
                 case 'tel':
                 case 'url':
                 case 'number':
-                    return '#4285F4'; // Blue for text inputs
+                    return '#4285F4'; 
                 case 'checkbox':
                 case 'radio':
-                    return '#0F9D58'; // Green for checkboxes/radio
+                    return '#0F9D58'; 
                 case 'submit':
                 case 'button':
-                    return '#DB4437'; // Red for buttons
+                    return '#DB4437'; 
                 default:
-                    return '#F4B400'; // Yellow for other inputs
+                    return '#F4B400'; 
             }
         } else if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
-            return '#DB4437'; // Red for buttons
+            return '#DB4437'; 
         } else if (el.tagName === 'A') {
-            return '#9C27B0'; // Purple for links
+            return '#9C27B0'; 
         } else if (el.tagName === 'SELECT' || el.getAttribute('role') === 'combobox') {
-            return '#FF9800'; // Orange for dropdowns
+            return '#FF9800'; 
         } else if (el.tagName === 'TEXTAREA') {
-            return '#4285F4'; // Blue for text areas
+            return '#4285F4'; 
         }
-        return '#757575'; // Gray for other elements
+        return '#757575'; 
     };
     
     elements.forEach((el, index) => {
@@ -104,20 +104,20 @@ const elementNumberingScript = `
         const elementWidth = rect.width;
         const elementHeight = rect.height;
         
-        // Log the element number and description to the console
+        
         console.log(\`Element \${number}: \${elementType} - \${getElementDescription(el)}\`);
         
-        // Create label element
+        
         let label = document.createElement('div');
         label.setAttribute('data-ai-element-number', number);
         label.textContent = number;
         label.style.position = 'absolute';
-        label.style.zIndex = '2147483647'; // Maximum z-index
+        label.style.zIndex = '2147483647'; 
         
-        // Get color based on element type
+        
         const backgroundColor = getElementColor(el);
         
-        // Style the label
+        
         label.style.background = backgroundColor;
         label.style.color = 'white';
         label.style.padding = '2px 4px';
@@ -132,24 +132,24 @@ const elementNumberingScript = `
         label.style.minWidth = '16px';
         label.style.lineHeight = '16px';
         
-        // Position label based on element size
+        
         if (elementWidth < 30 || elementHeight < 20) {
-            // Position above for small elements
+            
             label.style.left = \`\${window.scrollX + rect.left}px\`;
             label.style.top = \`\${window.scrollY + rect.top - 18}px\`;
         } else {
-            // For larger elements, position in top-right corner
+            
             label.style.left = \`\${window.scrollX + rect.right - 20}px\`;
             label.style.top = \`\${window.scrollY + rect.top}px\`;
         }
         
         document.body.appendChild(label);
         
-        // Highlight element with a border matching its label color but more subtle
+        
         el.style.outline = \`2px solid \${backgroundColor}88\`;
     });
     
-    // Enhanced click function with multiple approaches, visual feedback and error recovery
+    
     window.clickElement = function(number) {
         if (number < 1 || number > window.aiIndexedElements.length) {
             console.warn('No element found with number:', number);
@@ -330,7 +330,7 @@ const elementNumberingScript = `
         }
     };
     
-    // Function to handle iframes
+    
     function handleIframes() {
         try {
             const iframes = document.querySelectorAll('iframe');

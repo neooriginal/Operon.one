@@ -24,13 +24,13 @@ async function processStep(step, userId = 'default') {
   const currentStepIndex = context.currentStepIndex || 0;
   const question = context.question || '';
   
-  // Guard against missing context
+  
   if (!question || !plan || plan.length === 0) {
     console.error("Missing critical context in processStep");
-    return step; // Return original step if context is missing
+    return step; 
   }
   
-  // Create a reasoning prompt that asks the AI to think about this step
+  
   const prompt = `
 You are an autonomous AI agent using the ReAct (Reasoning + Acting) framework.
 
@@ -70,25 +70,25 @@ Return your reasoning in this JSON format:
 `;
 
   try {
-    // Get the AI reasoning
+    
     const reasoning = await ai.callAI(prompt, "", []);
     
-    // Validate that reasoning contains required fields
+    
     if (!reasoning || !reasoning.enhancedPrompt) {
       console.warn("Invalid reasoning response - missing enhancedPrompt");
       return {
         ...step,
-        step: step.step // Keep original if reasoning failed
+        step: step.step 
       };
     }
     
-    // Store in thought chain using context manager
+    
     contextManager.addToThoughtChain({
       step: currentStepIndex + 1,
       reasoning: reasoning
     }, userId);
     
-    // Enhance the step with reasoning
+    
     const enhancedStep = {
       ...step,
       reasoning: reasoning,
@@ -102,7 +102,7 @@ Return your reasoning in this JSON format:
     return enhancedStep;
   } catch (error) {
     console.error("Error during reasoning step:", error.message);
-    return step; // Return original step if reasoning fails
+    return step; 
   }
 }
 
@@ -121,7 +121,7 @@ async function reflectOnResult(step, result, userId = 'default') {
   const question = context.question;
   const thoughtChain = context.thoughtChain;
   
-  // Create a reflection prompt
+  
   const prompt = `
 You are an autonomous AI agent using the ReAct (Reasoning + Acting) framework.
 
@@ -155,10 +155,10 @@ Return your reflection in this JSON format:
 }
 `;
 
-  // Get the AI reflection
+  
   const reflection = await ai.callAI(prompt, "", []);
   
-  // Store in thought chain using context manager
+  
   const lastThoughtIndex = thoughtChain.length - 1;
   contextManager.updateThoughtChain(lastThoughtIndex, { reflection }, userId);
   
@@ -175,7 +175,7 @@ async function saveThoughtChain(fileSystem, userId = 'default') {
     const thoughtChain = contextManager.getThoughtChain(userId);
     const thoughtChainJSON = JSON.stringify(thoughtChain, null, 2);
     
-    // Use the runTask method of fileSystem
+    
     await fileSystem.runTask(
       `Save the ReAct thought chain to thought_chain.json. Expected output: thought_chain.json`,
       thoughtChainJSON,

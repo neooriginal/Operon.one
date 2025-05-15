@@ -2,17 +2,17 @@ const ai = require("../AI/ai");
 const contextManager = require('../../utils/context');
 
 async function runTask(task, otherAIData, callback, userId = 'default') {
-    // Initialize tool state
+    
     let toolState = contextManager.getToolState('math', userId) || {
         history: [],
         operations: []
     };
     
-    // Combine task with other AI data
+    
     task = task + "\n\nOther AI Data: " + otherAIData;
     
     try {
-        // Generate and execute mathematical operations
+        
         let result = await performMathOperation(task, userId);
         let summary = await evaluateOutput(task, result, userId);
         
@@ -24,7 +24,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     } catch (error) {
         console.error("Error in runTask:", error.message);
         
-        // Track error in tool state
+        
         toolState.lastError = {
             message: error.message,
             timestamp: Date.now()
@@ -45,7 +45,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
 }
 
 async function performMathOperation(task, userId = 'default') {
-    // Get tool state
+    
     let toolState = contextManager.getToolState('math', userId) || {
         history: [],
         operations: []
@@ -65,7 +65,7 @@ async function performMathOperation(task, userId = 'default') {
 
     let response = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
     
-    // Add to history
+    
     toolState.history.push({
         role: "user", 
         content: [
@@ -80,7 +80,7 @@ async function performMathOperation(task, userId = 'default') {
         ]
     });
     
-    // Track operation in tool state
+    
     toolState.operations.push({
         task: task,
         operation: response.operation,
@@ -88,7 +88,7 @@ async function performMathOperation(task, userId = 'default') {
         timestamp: Date.now()
     });
     
-    // Limit history size
+    
     if (toolState.history.length > 10) {
         toolState.history = toolState.history.slice(-10);
     }
@@ -96,14 +96,14 @@ async function performMathOperation(task, userId = 'default') {
         toolState.operations = toolState.operations.slice(-10);
     }
     
-    // Save updated tool state
+    
     contextManager.setToolState('math', toolState, userId);
 
     return response;
 }
 
 async function evaluateOutput(task, result, userId = 'default') {
-    // Get tool state
+    
     let toolState = contextManager.getToolState('math', userId);
     
     let prompt = `
@@ -120,14 +120,14 @@ async function evaluateOutput(task, result, userId = 'default') {
     
     let summary = await ai.callAI(prompt, task, toolState.history, undefined, true, "auto", userId);
     
-    // Add evaluation to tool state
+    
     toolState.lastEvaluation = {
         summary: summary.summary,
         success: summary.success,
         timestamp: Date.now()
     };
     
-    // Save updated tool state
+    
     contextManager.setToolState('math', toolState, userId);
     
     return summary;

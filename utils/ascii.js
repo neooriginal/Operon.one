@@ -1,8 +1,8 @@
 const figlet = require("figlet");
-// Use dynamic import for chalk (ESM module)
+
 let chalk;
 
-// Helper function to initialize chalk
+
 async function initChalk() {
     if (!chalk) {
         const chalkModule = await import('chalk');
@@ -12,10 +12,10 @@ async function initChalk() {
 }
 
 async function printWelcome() {
-    // Initialize chalk
+    
     await initChalk();
 
-    // Use promise-based approach for figlet
+    
     return new Promise((resolve, reject) => {
         figlet("Operon . one", { font: "Slant" }, (err, data) => {
             if (err) {

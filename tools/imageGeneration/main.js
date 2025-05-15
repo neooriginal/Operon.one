@@ -5,7 +5,7 @@ const path = require('path');
 const axios = require('axios');
 const crypto = require('crypto');
 
-// Helper function to download image from URL and save to disk
+
 async function downloadAndSaveImage(imageUrl, filePath) {
     try {
         const response = await axios({
@@ -28,7 +28,7 @@ async function downloadAndSaveImage(imageUrl, filePath) {
 }
 
 async function runTask(task, otherAiData, callback, userId = 'default'){
-    // Get or initialize user context
+    
     let userContext = contextManager.getContext(userId);
     if (!userContext.imageGeneration) {
         userContext.imageGeneration = {
@@ -38,10 +38,10 @@ async function runTask(task, otherAiData, callback, userId = 'default'){
     }
     
     try {
-        // Generate the image URL using the AI service
+        
         let imageUrl = await ai.generateImage(task+"\n\n"+otherAiData, userId);
         
-        // Create the images directory in the user's output folder
+        
         const outputDir = path.join(__dirname, '../../output', userId.replace(/[^a-zA-Z0-9_-]/g, '_'));
         const imagesDir = path.join(outputDir, 'images');
         
@@ -53,16 +53,16 @@ async function runTask(task, otherAiData, callback, userId = 'default'){
             fs.mkdirSync(imagesDir, { recursive: true });
         }
         
-        // Generate a unique filename based on timestamp and random hash
+        
         const timestamp = Date.now();
         const randomHash = crypto.randomBytes(4).toString('hex');
         const imageFileName = `image_${timestamp}_${randomHash}.png`;
         const imagePath = path.join(imagesDir, imageFileName);
         
-        // Download and save the image
+        
         const savedImagePath = await downloadAndSaveImage(imageUrl, imagePath);
         
-        // Create a summary with both the URL and the saved file path
+        
         const summary = {
             success: true,
             imageUrl: imageUrl,
@@ -70,7 +70,7 @@ async function runTask(task, otherAiData, callback, userId = 'default'){
             relativePath: `output/${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}/images/${imageFileName}`
         };
         
-        // Store generation history in context
+        
         userContext.imageGeneration.history.push({
             prompt: task,
             additionalData: otherAiData,
@@ -86,14 +86,14 @@ async function runTask(task, otherAiData, callback, userId = 'default'){
     } catch (error) {
         console.error("Image generation error:", error.message);
         
-        // Create error summary
+        
         const errorSummary = {
             success: false,
             error: error.message,
             details: error.toString()
         };
         
-        // Store failure in history
+        
         userContext.imageGeneration.history.push({
             prompt: task,
             additionalData: otherAiData,

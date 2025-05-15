@@ -12,8 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Welcome screen specific styles */
-        .welcome-container {
+                .welcome-container {
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -153,43 +152,43 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <script>
-        // Authentication check
+        
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if user is logged in
+            
             const userId = localStorage.getItem('userId');
             const userEmail = localStorage.getItem('userEmail');
             const authToken = localStorage.getItem('authToken');
             
             if (!userId || !authToken) {
-                // Redirect to login page if not authenticated
+                
                 window.location.href = 'login';
                 return;
             }
             
-            // Update user info in the sidebar
+            
             document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
             
-            // Set up logout button
+            
             document.getElementById('logout-button').addEventListener('click', function() {
-                // Clear authentication data
+                
                 localStorage.removeItem('userId');
                 localStorage.removeItem('userEmail');
                 localStorage.removeItem('authToken');
                 
-                // Redirect to login page
+                
                 window.location.href = 'login';
             });
             
-            // Load recent chats (reusing functionality from chat.js)
-            // This assumes you have a loadRecentChats function in script.js
+            
+            
             if (typeof loadRecentChats === 'function') {
                 loadRecentChats();
             } else {
-                // Fallback implementation for loading chats
+                
                 loadWelcomePageChats();
             }
             
-            // Function to load chats directly in the welcome page
+            
             function loadWelcomePageChats() {
                 fetch('/api/chats', {
                     headers: {
@@ -205,7 +204,7 @@
                 .then(data => {
                     const recentChatsList = document.getElementById('recent-chats-list');
                     
-                    // Clear the list
+                    
                     recentChatsList.innerHTML = '';
                     
                     if (!data.chats || data.chats.length === 0) {
@@ -213,21 +212,21 @@
                         return;
                     }
                     
-                    // Sort chats by updatedAt (most recent first)
+                    
                     data.chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
                     
-                    // Render each chat
+                    
                     data.chats.forEach(chat => {
                         const chatItem = document.createElement('div');
                         chatItem.className = 'recent-chat-item';
                         chatItem.dataset.chatId = chat.id;
                         
-                        // Format date
+                        
                         const chatDate = new Date(chat.updatedAt);
                         const today = new Date();
                         let timeDisplay;
                         
-                        // Format date: Today, Yesterday, or date
+                        
                         if (chatDate.toDateString() === today.toDateString()) {
                             timeDisplay = 'Today';
                         } else if (chatDate.toDateString() === new Date(today - 86400000).toDateString()) {
@@ -246,17 +245,17 @@
                             </button>
                         `;
                         
-                        // Add click handler to load this chat
+                        
                         chatItem.querySelector('.chat-content').addEventListener('click', () => {
-                            // Save chat ID to localStorage
+                            
                             localStorage.setItem('currentChatId', chat.id);
-                            // Redirect to chat page
+                            
                             window.location.href = 'chat';
                         });
                         
-                        // Add click handler to the delete button
+                        
                         chatItem.querySelector('.delete-chat-btn').addEventListener('click', async (e) => {
-                            e.stopPropagation(); // Prevent the chat click event from firing
+                            e.stopPropagation(); 
                             if (!confirm('Are you sure you want to delete this chat?')) {
                                 return;
                             }
@@ -273,7 +272,7 @@
                                     throw new Error('Failed to delete chat');
                                 }
                                 
-                                // Reload chats after deletion
+                                
                                 loadWelcomePageChats();
                                 
                             } catch (error) {
@@ -292,47 +291,47 @@
                 });
             }
             
-            // Set up start button
+            
             document.getElementById('start-button').addEventListener('click', function() {
                 const input = document.getElementById('welcome-input').value.trim();
                 if (input) {
-                    // Show loading indication if desired
+                    
                     document.getElementById('start-button').disabled = true;
                     document.getElementById('start-button').textContent = 'Starting...';
                     
-                    // Set 'new' as the chat ID to create a new chat
+                    
                     localStorage.setItem('currentChatId', 'new');
-                    // Store the initial query to use in chat
+                    
                     localStorage.setItem('initialQuery', input);
                     
-                    // Redirect to chat page
+                    
                     window.location.href = 'chat';
                 }
             });
             
-            // Allow pressing Enter to submit
+            
             document.getElementById('welcome-input').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     document.getElementById('start-button').click();
                 }
             });
             
-            // Set up browse button - customize this for your template browsing implementation
+            
             document.getElementById('browse-button').addEventListener('click', function() {
-                // This could redirect to a templates page or open a modal
+                
                 alert('Template browsing feature coming soon!');
             });
             
-            // Set up new task button (redirect to a blank chat)
+            
             document.getElementById('new-task-button').addEventListener('click', function() {
-                // Clear any existing query to ensure a fresh start
+                
                 localStorage.removeItem('initialQuery');
                 
-                // Reload the current page (dashboard)
+                
                 window.location.href = 'index';
             });
             
-            // Validate token with server (optional additional security)
+            
             fetch('/api/validate-token', {
                 method: 'GET',
                 headers: {
@@ -340,7 +339,7 @@
                 }
             }).catch(error => {
                 console.error('Token validation error:', error);
-                // If we can't reach the server, still allow the user to continue
+                
             });
         });
     </script>

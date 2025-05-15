@@ -85,13 +85,13 @@ async function runTask(prompt, inputData, callback, userId = 'default') {
         If no specific memories can be extracted, return an empty array [].
         `;
 
-        // Use AI to generate the structured memory JSON
+        
         const generatedMemories = await ai.callAI(memoryGenerationPrompt, "Extracting memories from text", [], undefined, true, "auto", userId);
 
         if (Array.isArray(generatedMemories) && generatedMemories.length > 0) {
-            // Store each generated memory
+            
             for (const memory of generatedMemories) {
-                // Basic validation
+                
                 if (memory.type && memory.content && memory.storageDuration) {
                     await storeMemory(userId, memory);
                     summary.storedMemories++;
@@ -108,7 +108,7 @@ async function runTask(prompt, inputData, callback, userId = 'default') {
         } else {
             console.error("[Memory Tool] AI did not return a valid array:", generatedMemories);
             summary.error = "AI failed to generate memories in the expected format.";
-            summary.details = generatedMemories; // Include the raw response for debugging
+            summary.details = generatedMemories; 
         }
 
     } catch (error) {
@@ -116,7 +116,7 @@ async function runTask(prompt, inputData, callback, userId = 'default') {
         summary.error = error.message;
     }
 
-    // Execute the callback
+    
     if (callback) {
         callback(summary);
     }
@@ -127,5 +127,5 @@ async function runTask(prompt, inputData, callback, userId = 'default') {
 module.exports = {
     runTask,
     storeMemory,
-    retrieveMemories // Exporting for potential direct use later
+    retrieveMemories 
 }; 

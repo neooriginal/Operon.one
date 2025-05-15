@@ -10,46 +10,46 @@ const { chatFunctions, fileFunctions } = require('./database');
 const mime = require('mime-types');
 const rateLimit = require('express-rate-limit');
 
-// Serve static files from the public directory
+
 const app = express();
 
-// Middleware
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Rate limiting for API requests
+
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
   standardHeaders: true,
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api', apiLimiter);
 
-// Authentication middleware for file endpoints
+
 const isAuthenticated = (req, res, next) => {
-  // Use the existing authenticateToken middleware for consistency
+  
   authenticateToken(req, res, (err) => {
     if (err) {
-        // If authenticateToken sends a response (like 401/403), it won't call next(err)
-        // If it calls next with an error, handle it here
+        
+        
         return res.status(401).send({ error: 'Authentication failed' });
     }
-    // If authentication is successful, req.user should be populated
+    
     if (req.user && req.user.id) {
-        req.userId = req.user.id; // Attach userId for consistency with previous placeholder
+        req.userId = req.user.id; 
         return next();
     } 
-    // Fallback if req.user is not populated correctly
+    
     res.status(401).send({ error: 'Unauthorized - User data missing after authentication' });
   });
 };
 
-// API routes
+
 app.use('/api', authRoutes);
 
-// Create HTTP server with Express app
+
 const httpServer = require("http").createServer(app);
 
 const io = socket(httpServer, {
@@ -60,20 +60,20 @@ const io = socket(httpServer, {
     }
 });
 
-// Socket middleware to authenticate user based on token
+
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     const userId = socket.handshake.auth.userId;
     
     if (!token || !userId) {
-        // Allow anonymous connections for landing page, etc.
-        // But set a flag for restricted operations
+        
+        
         socket.authenticated = false;
         return next();
     }
     
     try {
-        // Verify the token properly using JWT
+        
         const jwt = require('jsonwebtoken');
         const JWT_SECRET = process.env.JWT_SECRET;
         
@@ -83,22 +83,22 @@ io.use((socket, next) => {
                 return next(new Error('Invalid authentication token'));
             }
             
-            // Verify that the decoded user ID matches the claimed user ID
+            
             if (decoded.id != userId) {
                 socket.authenticated = false;
                 return next(new Error('User ID mismatch'));
             }
             
-            // Store user info in socket
+            
             socket.userId = userId;
             socket.authenticated = true;
             socket.user = decoded;
             
-            // Set up socket-specific rate limiting
+            
             socket.taskCount = 0;
             socket.taskLastReset = Date.now();
             
-            // Join a room specific to this user for targeted events
+            
             socket.join(`user:${userId}`);
             
             return next();
@@ -110,7 +110,7 @@ io.use((socket, next) => {
     }
 });
 
-// Serve public routes
+
 app.get("/dashboard", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
@@ -151,13 +151,13 @@ app.get("/legal/cookies", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "legal", "cookie-policy.html"));
 });
 
-// Restricted API routes (require authentication)
+
 app.get('/api/user/profile', authenticateToken, (req, res) => {
-    // Access user info from the token (added by authenticateToken middleware)
+    
     res.json({ user: req.user });
 });
 
-// Chat API routes
+
 app.get('/api/chats', authenticateToken, async (req, res) => {
     try {
         const chats = await chatFunctions.getUserChats(req.user.id);
@@ -213,17 +213,17 @@ app.delete('/api/chats/:chatId', authenticateToken, async (req, res) => {
     }
 });
 
-// Endpoint to get file details (authenticated)
+
 app.get('/api/files/:fileId', isAuthenticated, async (req, res) => {
   const { fileId } = req.params;
-  const userId = req.userId; // Get userId from auth middleware
+  const userId = req.userId; 
 
   try {
     const file = await fileFunctions.getTrackedFileById(userId, fileId);
     if (!file) {
       return res.status(404).send({ error: 'File not found or access denied' });
     }
-    // Send back file details (excluding content for this endpoint)
+    
     const { fileContent, ...fileDetails } = file;
     res.json(fileDetails);
   } catch (error) {
@@ -232,10 +232,10 @@ app.get('/api/files/:fileId', isAuthenticated, async (req, res) => {
   }
 });
 
-// Endpoint to download file content (authenticated)
+
 app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
   const { fileId } = req.params;
-  const userId = req.userId; // Get userId from auth middleware
+  const userId = req.userId; 
 
   try {
     const file = await fileFunctions.getTrackedFileById(userId, fileId);
@@ -246,23 +246,23 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
     const fileName = file.fileName || `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`;
     const contentType = mime.lookup(fileName) || 'application/octet-stream';
 
-    // Determine if the file should be treated as binary based on mime type or extension
+    
     const isBinary = contentType.indexOf('text/') !== 0 && 
                      contentType !== 'application/json' && 
                      contentType !== 'application/javascript';
 
-    // Properly handle both binary and text files
+    
     let fileBuffer;
     if (isBinary) {
-      // For binary files, assume base64 encoding
+      
       try {
         fileBuffer = Buffer.from(file.fileContent, 'base64');
       } catch (e) {
-        // Fallback to utf8 if base64 decoding fails
+        
         fileBuffer = Buffer.from(file.fileContent, 'utf8');
       }
     } else {
-      // For text files
+      
       fileBuffer = Buffer.from(file.fileContent, 'utf8');
     }
 
@@ -270,7 +270,7 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', fileBuffer.length);
     
-    // Send the buffer directly
+    
     res.end(fileBuffer);
 
   } catch (error) {
@@ -279,15 +279,15 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
   }
 });
 
-// Socket.IO Logik
+
 io.on('connection', (socketClient) => {
      console.log(`User connected: ${socketClient.id}, authenticated: ${socketClient.authenticated}`);
 
-     // Use actual userId from authentication if available, otherwise use socket ID
+     
      const userId = socketClient.authenticated ? socketClient.userId : socketClient.id;
      
      socketClient.on('submit_task', async (data) => {
-         // Enforce authentication for task submission
+         
          if (!socketClient.authenticated) {
              socketClient.emit('task_error', { 
                  error: 'Authentication required for task submission',
@@ -296,17 +296,17 @@ io.on('connection', (socketClient) => {
              return;
          }
          
-         // Rate limiting check
+         
          const MAX_TASKS_PER_MINUTE = 5;
          const now = Date.now();
          
-         // Reset counter if more than a minute has passed
+         
          if (now - socketClient.taskLastReset > 60000) {
              socketClient.taskCount = 0;
              socketClient.taskLastReset = now;
          }
          
-         // Check if rate limit exceeded
+         
          if (socketClient.taskCount >= MAX_TASKS_PER_MINUTE) {
              socketClient.emit('task_error', { 
                  error: 'Rate limit exceeded. Please try again later.',
@@ -315,12 +315,12 @@ io.on('connection', (socketClient) => {
              return;
          }
          
-         // Increment task counter
+         
          socketClient.taskCount++;
          
          const { task, chatId = 1 } = data;
          
-         // Security: Ensure chatId is a number and belongs to this user
+         
          const numericChatId = parseInt(chatId, 10);
          if (isNaN(numericChatId)) {
              socketClient.emit('task_error', { 
@@ -330,18 +330,18 @@ io.on('connection', (socketClient) => {
              return;
          }
          
-         // Use the authenticated userId - ignore any userId passed in the message
+         
          const taskUserId = socketClient.userId;
          
          console.log(`Task received from ${taskUserId} in chat ${numericChatId}: ${task}`);
          
-         // Store current chatId for this user in the socket
+         
          socketClient.chatId = numericChatId;
          
          try {
-             // Rufe den Orchestrator auf (angenommen, er ist hier verfügbar)
-             // await centralOrchestrator(task, taskUserId, numericChatId);
-             // Stelle sicher, dass centralOrchestrator ioServer verwendet, um Events zu senden
+             
+             
+             
          } catch (error) {
              console.error(`Error processing task for ${taskUserId}:`, error);
              socketClient.emit('task_error', { 
@@ -354,9 +354,9 @@ io.on('connection', (socketClient) => {
      socketClient.on('disconnect', () => {
          console.log(`User disconnected: ${socketClient.id}`);
          
-         // Clean up any resources for this user
+         
          try {
-             // Assume there's a cleanupUserResources function available
+             
              const { cleanupUserResources } = require('./index');
              if (typeof cleanupUserResources === 'function' && socketClient.authenticated) {
                  cleanupUserResources(socketClient.userId).catch(err => {

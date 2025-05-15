@@ -150,7 +150,7 @@
             const errorMessage = document.getElementById('error-message');
             const successMessage = document.getElementById('success-message');
             
-            // Basic form validation
+            
             if (password !== confirmPassword) {
                 errorMessage.style.display = 'block';
                 errorMessage.textContent = 'Passwords do not match';
@@ -169,14 +169,14 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Show success message
+                    
                     successMessage.style.display = 'block';
                     successMessage.textContent = 'Registration successful! Redirecting to login...';
                     
-                    // Clear form
+                    
                     document.getElementById('register-form').reset();
                     
-                    // Redirect to login page after short delay
+                    
                     setTimeout(() => {
                         window.location.href = 'login';
                     }, 2000);

@@ -2,10 +2,10 @@ const ai = require('../tools/AI/ai.js');
 const fs = require('fs');
 const path = require('path');
 
-// Enhanced file reading with smart detection
+
 function readTestFiles(dir) {
     try {
-        // Check if directory exists
+        
         if (!fs.existsSync(dir)) {
             console.error(`Directory not found: ${dir}`);
             fs.mkdirSync(dir, { recursive: true });
@@ -15,7 +15,7 @@ function readTestFiles(dir) {
     
     const files = fs.readdirSync(dir);
         
-        // Filter for test report files with smart detection
+        
         const validFileExtensions = ['.md', '.txt', '.json', '.log'];
         const validFiles = files.filter(file => {
             const ext = path.extname(file).toLowerCase();
@@ -28,7 +28,7 @@ function readTestFiles(dir) {
             return [];
         }
         
-        // Sort files by modification time (newest first)
+        
         const fileStats = validFiles.map(file => {
             const filePath = path.join(dir, file);
             return {
@@ -38,12 +38,12 @@ function readTestFiles(dir) {
             };
         }).sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs);
         
-        // Extract content with improved error handling
+        
         return fileStats.map(fileStat => {
             try {
                 const content = fs.readFileSync(fileStat.path, 'utf8');
                 
-                // Simple content validation to ensure it's a proper test report
+                
                 const isValidReport = 
                     (content.includes('Test') || content.includes('REPORT') || content.includes('Analysis')) &&
                     content.length > 100;
@@ -78,24 +78,24 @@ function readTestFiles(dir) {
     }
 }
 
-// Improved token counting with pattern-based heuristics
+
 async function countTokens(text) {
-    // Using a more sophisticated approximation algorithm
     
-    // Count common structural elements that typically correspond to token boundaries
+    
+    
     const patterns = [
-        /[.,!?;:]/g,  // Common punctuation
-        /[\n\r]/g,    // Line breaks
-        /\s+/g,       // Whitespace sequences
-        /[()[\]{}]/g, // Brackets and parentheses
-        /"([^"]*)"/g, // Quoted strings
-        /\d+/g,       // Numbers
-        /[A-Z][a-z]+/g, // Capitalized words (likely proper nouns)
+        /[.,!?;:]/g,  
+        /[\n\r]/g,    
+        /\s+/g,       
+        /[()[\]{}]/g, 
+        /"([^"]*)"/g, 
+        /\d+/g,       
+        /[A-Z][a-z]+/g, 
     ];
     
     let tokenEstimate = 0;
     
-    // Process each pattern and count matches
+    
     for (const pattern of patterns) {
         const matches = text.match(pattern);
         if (matches) {
@@ -103,84 +103,84 @@ async function countTokens(text) {
         }
     }
     
-    // Count words as a baseline
+    
     const words = text.split(/\s+/).filter(w => w.length > 0);
     tokenEstimate += words.length;
     
-    // Avoid double-counting
+    
     tokenEstimate = Math.round(tokenEstimate * 0.75);
     
-    // Ensure minimum sensible value
+    
     const minTokenEstimate = Math.ceil(text.length / 4);
     
     return Math.max(tokenEstimate, minTokenEstimate);
 }
 
-// Smart content splitting that preserves semantic units
+
 async function splitWithTokens(maxTokens = 10000, text) {
     try {
         const estimatedTokens = await countTokens(text);
         
         if (estimatedTokens <= maxTokens) {
-            return text; // No need to split
+            return text; 
         }
         
         console.log(`Text exceeds token limit (${estimatedTokens} vs ${maxTokens}), implementing smart truncation...`);
         
-        // Identify natural section boundaries
+        
         const sectionSeparators = [
-            /\n#{2,6}\s+[^\n]+\n/g,  // Markdown headers
-            /\n---+\n/g,              // Markdown horizontal rules
-            /\n\n/g,                  // Paragraph breaks
-            /\.\n/g                   // Sentence breaks at end of lines
+            /\n#{2,6}\s+[^\n]+\n/g,  
+            /\n---+\n/g,              
+            /\n\n/g,                  
+            /\.\n/g                   
         ];
         
         let sections = [text];
         
-        // Split by increasingly fine-grained separators until we have manageable chunks
+        
         for (const separator of sectionSeparators) {
             if (sections.some(s => countTokens(s) > maxTokens * 1.2)) {
-                // Further split any sections that are still too large
+                
                 sections = sections.flatMap(section => {
                     if (countTokens(section) > maxTokens * 1.2) {
-                        // Add separator at split points to preserve structure
+                        
                         return section.split(separator).map(s => s.trim());
                     }
                     return [section];
                 }).filter(s => s.length > 0);
             } else {
-                break; // Stop if all sections are manageable
+                break; 
             }
         }
         
-        // Prioritize most recent and most important content
-        sections = sections.filter(s => s.length > 50); // Remove tiny fragments
         
-        // Sort by relevance heuristic (presence of key terms indicates important sections)
+        sections = sections.filter(s => s.length > 50); 
+        
+        
         const keyTerms = ['score', 'fail', 'error', 'bug', 'issue', 'improvement', 'recommendation'];
         sections.sort((a, b) => {
             const aScore = keyTerms.filter(term => a.toLowerCase().includes(term)).length;
             const bScore = keyTerms.filter(term => b.toLowerCase().includes(term)).length;
-            return bScore - aScore; // Higher score first
+            return bScore - aScore; 
         });
         
-        // Build result staying under token limit
+        
         let result = "";
         let currentTokens = 0;
         
-        // Add sections until we hit the limit
+        
         for (const section of sections) {
             const sectionTokens = await countTokens(section);
             
             if (currentTokens + sectionTokens <= maxTokens) {
-                if (result) result += "\n\n---\n\n"; // Add separator between sections
+                if (result) result += "\n\n---\n\n"; 
                 result += section;
                 currentTokens += sectionTokens;
             } else if (currentTokens === 0) {
-                // If first section is already too large, truncate it intelligently
+                
                 const truncationRatio = maxTokens / sectionTokens;
                 
-                // Find a good break point near the desired length
+                
                 const targetLength = Math.floor(section.length * truncationRatio);
                 const breakPoint = findNaturalBreakPoint(section, targetLength);
                 
@@ -188,7 +188,7 @@ async function splitWithTokens(maxTokens = 10000, text) {
                 console.warn("Had to truncate an oversized section, preserving first portion");
                 break;
             } else {
-                // Stop adding sections if we've reached the limit
+                
                 break;
             }
         }
@@ -198,15 +198,15 @@ async function splitWithTokens(maxTokens = 10000, text) {
         console.error(`Error splitting text: ${error.message}`);
         console.error(error.stack);
         
-        // Fallback to simple truncation with warning
+        
         console.warn("Using fallback truncation method");
         return text.substring(0, maxTokens * 4) + "\n\n[Content truncated due to processing error]";
     }
 }
 
-// Helper function to find a natural break point in text
+
 function findNaturalBreakPoint(text, targetPosition) {
-    // Try to break at paragraph, then sentence, then word boundary
+    
     const paragraphBreak = text.lastIndexOf("\n\n", targetPosition);
     if (paragraphBreak !== -1 && paragraphBreak > targetPosition * 0.8) {
         return paragraphBreak;
@@ -214,7 +214,7 @@ function findNaturalBreakPoint(text, targetPosition) {
     
     const sentenceBreak = text.lastIndexOf(". ", targetPosition);
     if (sentenceBreak !== -1 && sentenceBreak > targetPosition * 0.8) {
-        return sentenceBreak + 1; // Include the period
+        return sentenceBreak + 1; 
     }
     
     const wordBreak = text.lastIndexOf(" ", targetPosition);
@@ -222,24 +222,24 @@ function findNaturalBreakPoint(text, targetPosition) {
         return wordBreak;
     }
     
-    // If no good break point found, just cut at target position
+    
     return targetPosition;
 }
 
-// Main function to analyze tests with improved robustness
+
 async function aiAnalyzeTest() {
     console.log('[ ] Analyzing tests...');
     
     try {
         const reportsDir = './tester/test_reports';
         
-        // Create reports directory if it doesn't exist
+        
         if (!fs.existsSync(reportsDir)) {
             fs.mkdirSync(reportsDir, { recursive: true });
             console.log(`Created directory: ${reportsDir}`);
         }
         
-        // Enhanced prompt for better analysis with explicit quality criteria
+        
     const prompt = `
 You are a critical AI system evaluator with expertise in assessing AI performance. Your task is to perform a detailed, rigorous assessment of an AI system's quality, correctness, and efficiency in response to user prompts. Be exceptionally thorough, critical, and specific in your evaluation.
 
@@ -382,16 +382,16 @@ FORMAT YOUR RESPONSE AS FOLLOWS:
 Be extremely critical! Do not be polite or gentle. Point out every flaw, inefficiency, and issue you can find. The goal is to identify all possible improvements. Be rigorous, detail-oriented, and uncompromising in your assessment.
 `;
         
-        // Read and process test files with improved filtering
+        
         let tests = readTestFiles(reportsDir);
         
-        // Filter out error files and invalid reports
+        
         const validTests = tests.filter(test => !test.error && test.isValidReport !== false);
         
         if (validTests.length === 0) {
             console.error("No valid test files found to analyze");
             
-            // Create a placeholder report if no valid tests found
+            
             const placeholderReport = `
 ## 🧠 AI SYSTEM EVALUATION REPORT — PLACEHOLDER
 🗓️ Date: ${new Date().toISOString().split('T')[0]}
@@ -407,7 +407,7 @@ No valid test reports were found to analyze. Please run tests first.
             return;
         }
         
-        // Join test contents with enhanced metadata and smart token limits
+        
         let testsToString = validTests.map(test => {
             const header = `
 # Test Report: ${test.name}
@@ -418,33 +418,33 @@ Size: ${test.size} bytes
             return header + test.content;
         }).join('\n\n---\n\n');
         
-        // Use improved token limiting that preserves important content
+        
         testsToString = await splitWithTokens(15000, testsToString);
         
         console.log(`Analyzing ${validTests.length} test files (${testsToString.length} characters)`);
         
-        // Call AI for analysis with improved retry mechanism and fallbacks
+        
         let response = null;
         let attempts = 0;
-        const maxAttempts = 4; // Increased max attempts
+        const maxAttempts = 4; 
         
         while (attempts < maxAttempts && !response) {
             try {
                 console.log(`Analysis attempt ${attempts + 1}/${maxAttempts}...`);
                 
-                // Progressive token reduction if needed
+                
                 const currentTokenLimit = 15000 - (attempts * 3000);
                 if (attempts > 0) {
                     console.log(`Reducing token limit to ${currentTokenLimit} for retry attempt`);
                     testsToString = await splitWithTokens(currentTokenLimit, testsToString);
                 }
                 
-                // Try with different temperature settings on successive attempts
-                const temperature = 0.1 + (attempts * 0.05); // Increase temperature slightly on retries
+                
+                const temperature = 0.1 + (attempts * 0.05); 
                 
                 response = await ai.callAI(prompt, testsToString, [], undefined, false);
                 
-                // Enhanced validation of response quality
+                
                 if (!response) {
                     console.warn(`Attempt ${attempts+1}: No response received`);
                     response = null;
@@ -459,7 +459,7 @@ Size: ${test.size} bytes
                     continue;
                 }
                 
-                // Check for required sections
+                
                 const requiredSections = [
                     'FINAL SYSTEM SCORE', 
                     'SUMMARY OF FINDINGS', 
@@ -482,13 +482,13 @@ Size: ${test.size} bytes
                 attempts++;
                 
                 if (attempts >= maxAttempts) {
-                    // Don't throw, try to generate a simplified report as fallback
+                    
                     console.warn("Max attempts reached, using fallback report generation");
                     response = generateFallbackReport(validTests);
                     break;
                 }
                 
-                // Enhanced wait before retrying with jitter
+                
                 const baseDelay = 2000 * Math.pow(1.5, attempts);
                 const jitter = Math.floor(Math.random() * 1000);
                 await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
@@ -500,10 +500,10 @@ Size: ${test.size} bytes
             response = generateFallbackReport(validTests);
         }
         
-        // Write results to file with backup
+        
         const outputPath = path.join(reportsDir, 'analysis.MD');
         
-        // Backup any existing analysis
+        
         if (fs.existsSync(outputPath)) {
             const backupPath = path.join(reportsDir, `analysis_backup_${Date.now()}.MD`);
             fs.copyFileSync(outputPath, backupPath);
@@ -513,7 +513,7 @@ Size: ${test.size} bytes
         fs.writeFileSync(outputPath, response);
         console.log(`[✓] Tests analyzed and saved to ${outputPath}`);
         
-        // Create comprehensive metadata
+        
         try {
             const score = extractScore(response);
             const analysisMetadata = {
@@ -533,7 +533,7 @@ Size: ${test.size} bytes
                 JSON.stringify(analysisMetadata, null, 2)
             );
             
-            // Generate a summary file for quick reference
+            
             const summary = `
 # Analysis Summary (${new Date().toISOString().split('T')[0]})
 
@@ -560,9 +560,9 @@ See full analysis in: analysis.MD
     }
 }
 
-// Generate a simple fallback report when AI analysis fails
+
 function generateFallbackReport(validTests) {
-    // Extract basic info from test files
+    
     const testResults = validTests.map(test => {
         const passMatch = test.content.match(/PASSED|FAILED|SUCCEEDED|SUCCESS|FAIL/i);
         const scoreMatch = test.content.match(/Score:?\s*(\d+)/i);
@@ -575,7 +575,7 @@ function generateFallbackReport(validTests) {
         };
     });
     
-    // Calculate basic stats
+    
     const passCount = testResults.filter(t => t.result.includes('PASS') || t.result.includes('SUCCESS')).length;
     const failCount = testResults.filter(t => t.result.includes('FAIL')).length;
     const unknownCount = testResults.length - passCount - failCount;
@@ -585,7 +585,7 @@ function generateFallbackReport(validTests) {
         .reduce((sum, t) => sum + t.score, 0) / 
         testResults.filter(t => t.score !== null).length || 0;
     
-    // Generate simple report
+    
     return `
 ## 🧠 AI SYSTEM EVALUATION REPORT — FALLBACK (AUTO-GENERATED)
 🗓️ Date: ${new Date().toISOString().split('T')[0]}
@@ -639,10 +639,10 @@ Note: This is a fallback report generated due to AI analysis failure. Please ret
 `;
 }
 
-// Helper function to extract the score from analysis
+
 function extractScore(analysis) {
     try {
-        // Try multiple formats for robustness
+        
         const patterns = [
             /FINAL (?:SYSTEM )?SCORE:?\s*(\d+)\s*\/\s*100/i,
             /SCORE:?\s*(\d+)\s*\/\s*100/i,
@@ -663,7 +663,7 @@ function extractScore(analysis) {
     }
 }
 
-// Helper to extract priority level
+
 function extractPriority(analysis) {
     try {
         const priorityMatch = analysis.match(/PRIORITY:?\s*([A-Za-z\-]+)/i);
@@ -673,7 +673,7 @@ function extractPriority(analysis) {
     }
 }
 
-// Helper to extract status
+
 function extractStatus(analysis) {
     try {
         const statusMatch = analysis.match(/STATUS:?\s*([^]*?)(?:\n|🧠)/i);
@@ -683,7 +683,7 @@ function extractStatus(analysis) {
     }
 }
 
-// Helper to extract next steps
+
 function extractNextStep(analysis) {
     try {
         const nextStepMatch = analysis.match(/NEXT STEP:?\s*([^]*?)(?:\n|$)/i);
@@ -693,7 +693,7 @@ function extractNextStep(analysis) {
     }
 }
 
-// Count todo items in the report
+
 function countTodoItems(analysis) {
     try {
         const todoMatches = analysis.match(/- \[ \]/g);
@@ -703,14 +703,14 @@ function countTodoItems(analysis) {
     }
 }
 
-// Run the analysis if this file is executed directly
+
 if (require.main === module) {
     aiAnalyzeTest().catch(err => {
         console.error("Fatal error in analysis:", err);
         process.exit(1);
     });
 } else {
-    // Export functions for use in other modules
+    
     module.exports = {
         aiAnalyzeTest,
         readTestFiles,

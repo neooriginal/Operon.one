@@ -5,22 +5,8 @@ require('dotenv').config();
 
 const router = express.Router();
 
-// JWT secret key - should be in environment variables for security
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Email whitelist - should be in environment variables for security
-// Format: comma-separated list of allowed emails
-const EMAIL_WHITELIST = process.env.EMAIL_WHITELIST ? process.env.EMAIL_WHITELIST.split(',').map(email => email.trim().toLowerCase()) : [];
-
-// Helper function to check if an email is in the whitelist
-function isEmailWhitelisted(email) {
-  if (!EMAIL_WHITELIST.length) {
-    return false; // If whitelist is empty, no emails are allowed
-  }
-  return EMAIL_WHITELIST.includes(email.toLowerCase());
-}
-
-// Register a new user
 router.post('/register', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -29,25 +15,17 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
     
-    // Check email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
     
-    // Check if email is in the whitelist
-    if (!isEmailWhitelisted(email)) {
-      return res.status(403).json({ error: 'Access restricted. This platform is currently invite-only.' });
-    }
-    
-    // Check password strength
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters long' });
     }
     
     const user = await userFunctions.registerUser(email, password);
     
-    // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email },
       JWT_SECRET,
@@ -62,7 +40,6 @@ router.post('/register', async (req, res) => {
   } catch (error) {
     console.error('Registration error:', error);
     
-    // Check for duplicate email error
     if (error.message.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ error: 'Email already in use' });
     }
@@ -71,7 +48,6 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login user
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -82,7 +58,6 @@ router.post('/login', async (req, res) => {
     
     const user = await userFunctions.loginUser(email, password);
     
-    // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email },
       JWT_SECRET,
@@ -105,13 +80,10 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Validate token
 router.get('/validate-token', authenticateToken, (req, res) => {
-  // If middleware passes, token is valid
   res.status(200).json({ valid: true, user: req.user });
 });
 
-// Get user settings
 router.get('/settings', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -123,7 +95,6 @@ router.get('/settings', authenticateToken, async (req, res) => {
   }
 });
 
-// Get specific setting
 router.get('/settings/:key', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -141,7 +112,6 @@ router.get('/settings/:key', authenticateToken, async (req, res) => {
   }
 });
 
-// Save setting
 router.post('/settings/:key', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -152,7 +122,6 @@ router.post('/settings/:key', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Setting value is required' });
     }
     
-    // Convert any object/array to JSON string
     const storedValue = typeof value === 'object' ? JSON.stringify(value) : value;
     
     await settingsFunctions.saveSetting(userId, key, storedValue);
@@ -163,7 +132,6 @@ router.post('/settings/:key', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete setting
 router.delete('/settings/:key', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -182,10 +150,9 @@ router.delete('/settings/:key', authenticateToken, async (req, res) => {
   }
 });
 
-// Middleware to authenticate JWT token
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1]; 
   
   if (!token) {
     return res.status(401).json({ error: 'Authentication token required' });
@@ -203,5 +170,5 @@ function authenticateToken(req, res, next) {
 
 module.exports = {
   router,
-  authenticateToken // Export middleware for use in other routes
+  authenticateToken 
 }; 

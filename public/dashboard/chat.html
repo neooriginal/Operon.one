@@ -61,34 +61,34 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <script>
-        // Authentication check
+        
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if user is logged in
+            
             const userId = localStorage.getItem('userId');
             const userEmail = localStorage.getItem('userEmail');
             const authToken = localStorage.getItem('authToken');
             
             if (!userId || !authToken) {
-                // Redirect to login page if not authenticated
+                
                 window.location.href = 'login';
                 return;
             }
             
-            // Update user info in the sidebar
+            
             document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
             
-            // Set up logout button
+            
             document.getElementById('logout-button').addEventListener('click', function() {
-                // Clear authentication data
+                
                 localStorage.removeItem('userId');
                 localStorage.removeItem('userEmail');
                 localStorage.removeItem('authToken');
                 
-                // Redirect to login page
+                
                 window.location.href = 'login';
             });
             
-            // Validate token with server (optional additional security)
+            
             fetch('/api/validate-token', {
                 method: 'GET',
                 headers: {
@@ -96,8 +96,8 @@
                 }
             }).catch(error => {
                 console.error('Token validation error:', error);
-                // If we can't reach the server, still allow the user to continue
-                // You might want to change this behavior depending on your security requirements
+                
+                
             });
         });
     </script>

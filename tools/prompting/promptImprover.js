@@ -2,7 +2,7 @@ const ai = require("../AI/ai");
 const contextManager = require("../../utils/context");
 
 async function improvePrompt(question, userId = 'default'){
-    // Get or initialize user context
+    
     let userContext = contextManager.getContext(userId);
     if (!userContext.promptImprover) {
         userContext.promptImprover = {
@@ -57,13 +57,13 @@ async function improvePrompt(question, userId = 'default'){
     try {
         let improvedPrompt = await ai.callAI(prompt, question, undefined, undefined, false);
         
-        // Simple validation to detect empty or very short responses
+        
         if (!improvedPrompt || improvedPrompt.length < 10) {
             console.warn("Prompt improvement returned invalid result, using original prompt");
             improvedPrompt = question;
         }
         
-        // Store in user context
+        
         userContext.promptImprover.history.push({
             original: question,
             improved: improvedPrompt,
@@ -74,7 +74,7 @@ async function improvePrompt(question, userId = 'default'){
         return improvedPrompt;
     } catch (error) {
         console.error("Error improving prompt:", error.message);
-        return question; // Return original prompt if there's an error
+        return question; 
     }
 }
 

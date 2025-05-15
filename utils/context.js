@@ -33,7 +33,7 @@ class Context {
         chatId: chatId
       });
       
-      // Load chat history from database (asynchronously)
+      
       this.loadHistoryFromDb(userId, chatId).catch(err => {
         console.error('Error loading history from database:', err.message);
       });
@@ -79,12 +79,12 @@ class Context {
    */
   async loadHistoryFromDb(userId = 'default', chatId = 1) {
     try {
-      if (!userId || userId === 'default') return; // Skip for anonymous/default users
+      if (!userId || userId === 'default') return; 
       
       const messages = await chatFunctions.getChatHistory(userId, chatId);
       const context = this.getContext(userId, chatId);
       
-      // Transform DB format to context format
+      
       context.history = messages.map(msg => ({
         role: msg.role,
         content: msg.content
@@ -97,12 +97,12 @@ class Context {
     }
   }
 
-  // History management
+  
   async addToHistory(message, userId = 'default', chatId = 1) {
     const context = this.getContext(userId, chatId);
     context.history.push(message);
     
-    // Persist to database if it's a valid user
+    
     if (userId && userId !== 'default') {
       try {
         await chatFunctions.addChatMessage(
@@ -135,7 +135,7 @@ class Context {
   async clearHistory(userId = 'default', chatId = 1) {
     this.getContext(userId, chatId).history = [];
     
-    // Clear history in database if it's a valid user
+    
     if (userId && userId !== 'default') {
       try {
         await chatFunctions.clearChatHistory(userId, chatId);
@@ -145,23 +145,23 @@ class Context {
     }
   }
 
-  // Step output management
+  
   addStepOutput(stepParam, actionParam, outputParam, userId = 'default') {
     const context = this.getContext(userId);
     let stepOutput;
     
-    // Handle both old format (separate parameters) and new object format
+    
     if (typeof stepParam === 'object' && stepParam !== null) {
-      // New format: passed an object with all properties
+      
       stepOutput = {
         step: stepParam.step,
         action: stepParam.action,
         output: stepParam.output,
-        success: stepParam.success !== false, // Default to true if not specified
+        success: stepParam.success !== false, 
         error: stepParam.error || null
       };
     } else {
-      // Old format: separate parameters
+      
       stepOutput = { 
         step: stepParam, 
         action: actionParam, 
@@ -193,7 +193,7 @@ class Context {
     );
   }
 
-  // Plan management
+  
   setPlan(plan, userId = 'default') {
     this.getContext(userId).plan = plan;
   }
@@ -207,7 +207,7 @@ class Context {
     return newPlan;
   }
 
-  // Step index management
+  
   getCurrentStepIndex(userId = 'default') {
     return this.getContext(userId).currentStepIndex;
   }
@@ -224,7 +224,7 @@ class Context {
     return context.currentStepIndex;
   }
 
-  // Question management
+  
   setQuestion(question, userId = 'default') {
     this.getContext(userId).question = question;
     return question;
@@ -234,7 +234,7 @@ class Context {
     return this.getContext(userId).question;
   }
 
-  // Thought chain for ReAct
+  
   addToThoughtChain(thought, userId = 'default') {
     const context = this.getContext(userId);
     context.thoughtChain.push(thought);
@@ -253,7 +253,7 @@ class Context {
     return context.thoughtChain;
   }
 
-  // Tool state management
+  
   setToolState(toolName, state, userId = 'default') {
     const context = this.getContext(userId);
     context.toolStates.set(toolName, state);
@@ -265,7 +265,7 @@ class Context {
     return context.toolStates.get(toolName);
   }
 
-  // Variable storage - for passing data between steps
+  
   setVariable(key, value, userId = 'default') {
     const context = this.getContext(userId);
     context.variables.set(key, value);
@@ -282,7 +282,7 @@ class Context {
     return Object.fromEntries(context.variables);
   }
 
-  // Get complete state (useful for debugging)
+  
   getState(userId = 'default') {
     const context = this.getContext(userId);
     return {
@@ -298,7 +298,7 @@ class Context {
     };
   }
 
-  // Time tracking
+  
   getStartTime(userId = 'default') {
     return this.getContext(userId).startTime;
   }
@@ -314,6 +314,6 @@ class Context {
   }
 }
 
-// Export a singleton instance
+
 const contextManager = new Context();
 module.exports = contextManager; 

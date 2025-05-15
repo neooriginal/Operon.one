@@ -147,12 +147,12 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Save user data to localStorage
+                    
                     localStorage.setItem('userId', data.id);
                     localStorage.setItem('userEmail', data.email);
                     localStorage.setItem('authToken', data.token);
                     
-                    // Redirect to chat page
+                    
                     window.location.href = 'chat';
                 } else {
                     errorMessage.style.display = 'block';

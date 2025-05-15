@@ -3,13 +3,13 @@ const elementNumberingScript = require('./scriptInjector');
 const ai = require('../AI/ai');
 const contextManager = require('../../utils/context');
 
-// Token optimization settings
-const MAX_WEBSITE_TEXT_LENGTH = 500; // Reduced from 1000
-const MAX_ELEMENT_COUNT = 15; // Limit number of elements
-const SCREENSHOT_QUALITY = 50; // Reduced from 80
-const MAX_HISTORY_LENGTH = 3; // Keep only recent interactions
 
-// Initialize browser instance map to support multiple users
+const MAX_WEBSITE_TEXT_LENGTH = 500; 
+const MAX_ELEMENT_COUNT = 15; 
+const SCREENSHOT_QUALITY = 50; 
+const MAX_HISTORY_LENGTH = 3; 
+
+
 const browserInstances = new Map();
 const pageInstances = new Map();
 
@@ -23,10 +23,10 @@ async function initialize(userId = 'default'){
         defaultViewport: null,
     });
     
-    // Store in the browser map
+    
     browserInstances.set(userId, browser);
     
-    // Initialize tool state for this user
+    
     let toolState = contextManager.getToolState('browser', userId) || {
         history: [],
         lastActions: [],
@@ -34,7 +34,7 @@ async function initialize(userId = 'default'){
         activeSession: null
     };
     
-    // Create a new session
+    
     const session = {
         id: Date.now(),
         startTime: new Date().toISOString(),
@@ -44,17 +44,17 @@ async function initialize(userId = 'default'){
     toolState.sessions.push(session);
     toolState.activeSession = session.id;
     
-    // Save to context
+    
     contextManager.setToolState('browser', toolState, userId);
     
     return browser;
 }
 
 async function taskFunction(task, data, image, websiteTextContent, userId = 'default'){
-    // Get tool state
+    
     let toolState = contextManager.getToolState('browser', userId);
     
-    // Truncate data to reduce tokens
+    
     const elementData = limitElements(data);
     const truncatedWebsiteContent = websiteTextContent.substring(0, MAX_WEBSITE_TEXT_LENGTH);
     
@@ -69,21 +69,21 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     },
     {
         "action": "click",
-        "element": "element to click" //number of the element. either from image provided or from the data provided by the user,
+        "element": "element to click" 
     },
     {
         "action": "input",
-        "text": "text to input", //input needs to be selected from the page
-        "element": "element to input text into" //number of the element. either from image provided or from the data provided by the user,
+        "text": "text to input", 
+        "element": "element to input text into" 
     },
     {
         "action": "scroll",
-        "direction": "up" //up or down
+        "direction": "up" 
     },
     {
         "action": "close",
         "summary": \`summary of the tasks results in detail\` 
-        //do when you are done with the task
+        
     }
 
     Try not to repeat actions and actually check that an action might have already been completed even though there is no big ui feedback.
@@ -94,7 +94,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     Once you have enough information to confidently complete the task, respond with the "close" action. Look at previous messages for the information collected earlier and use it to summarize and finish the task.
     `
 
-    // Manage history - add user's most recent input 
+    
     toolState.history.push({
         role: "user", 
         content: [
@@ -102,10 +102,10 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         ]
     });
     
-    // Keep history limited to prevent token growth
+    
     limitHistory(toolState);
     
-    // Save updated state
+    
     contextManager.setToolState('browser', toolState, userId);
 
     let result = await ai.callAI(prompt, data, toolState.history, image, true, "browser", userId);
@@ -114,7 +114,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         return taskFunction(task, data, image, websiteTextContent, userId);
     }
     
-    // Add AI response to history
+    
     toolState.history.push({
         role: "assistant", 
         content: [
@@ -122,7 +122,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         ]
     });
     
-    // Keep history limited again after adding response
+    
     limitHistory(toolState);
 
     toolState.lastActions.push(JSON.stringify(result));
@@ -130,7 +130,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         toolState.lastActions = toolState.lastActions.slice(-5);
     }
     
-    // Save action in active session
+    
     if (toolState.activeSession) {
         const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
         if (sessionIndex >= 0) {
@@ -143,7 +143,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         }
     }
     
-    // Save state before action execution
+    
     contextManager.setToolState('browser', toolState, userId);
     
     if(result.action === "goToPage"){
@@ -157,7 +157,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     }else if(result.action === "close"){
         console.log(result.summary);
         
-        // Update session with completion
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -167,14 +167,14 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
             }
         }
         
-        // Store final state
+        
         contextManager.setToolState('browser', toolState, userId);
         
-        // Get callback from state
+        
         const summaryCallback = toolState.summaryCallback;
         if (summaryCallback) {
-            // We can't store the actual callback function in the state,
-            // so retrieve it from a temporary map
+            
+            
             const callbackMap = toolState.callbackMap || new Map();
             const actualCallback = callbackMap.get(summaryCallback);
             if (actualCallback) {
@@ -190,25 +190,25 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     return taskFunction(task, content.elements, content.screenshot, content.websiteTextContent, userId);
 }
 
-// Helper function to limit history length
+
 function limitHistory(toolState) {
-    if (toolState.history.length > MAX_HISTORY_LENGTH * 2) { // *2 to account for pairs of user/assistant messages
-        // Keep only the most recent interactions
+    if (toolState.history.length > MAX_HISTORY_LENGTH * 2) { 
+        
         toolState.history = toolState.history.slice(-MAX_HISTORY_LENGTH * 2);
     }
 }
 
-// Helper function to limit elements data
+
 function limitElements(elementData) {
     if (!elementData) return "";
     
-    // Split by elements and take only top elements
+    
     const elements = elementData.split(',').slice(0, MAX_ELEMENT_COUNT);
     return elements.join(',');
 }
 
 async function initialAI(task, userId = 'default'){
-    // Initialize tool state
+    
     let toolState = contextManager.getToolState('browser', userId) || {
         history: [],
         lastActions: [],
@@ -227,7 +227,7 @@ async function initialAI(task, userId = 'default'){
         `
     let result = await ai.callAI(prompt, task, toolState.history, undefined, true, "browser", userId);
     
-    // Track this interaction
+    
     toolState.history.push({
         role: "user", 
         content: [
@@ -242,7 +242,7 @@ async function initialAI(task, userId = 'default'){
         ]
     });
     
-    // Save state
+    
     contextManager.setToolState('browser', toolState, userId);
     
     if(result.action === "goToPage"){
@@ -256,9 +256,9 @@ async function initialAI(task, userId = 'default'){
     return taskFunction(task, content.elements, content.screenshot, content.websiteTextContent, userId);
 }
 
-// Add function to run task from external files
+
 async function runTask(task, otherAIData, callback, userId = 'default') {
-    // Initialize or reset tool state for this user
+    
     let toolState = contextManager.getToolState('browser', userId) || {
         history: [],
         lastActions: [],
@@ -266,7 +266,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
         activeSession: null
     };
     
-    // Create a new session for this task
+    
     const session = {
         id: Date.now(),
         startTime: new Date().toISOString(),
@@ -277,11 +277,11 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     toolState.sessions.push(session);
     toolState.activeSession = session.id;
     
-    // Reset history and actions for new task
+    
     toolState.history = [];
     toolState.lastActions = [];
     
-    // Only add other AI data if it exists and isn't too large
+    
     if (otherAIData) {
         const truncatedData = otherAIData.substring(0, MAX_WEBSITE_TEXT_LENGTH);
         toolState.history.push({
@@ -292,16 +292,16 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
         });
     }
     
-    // Use a temporary callbackId to reference the actual callback function
-    // (we can't store functions in the context)
+    
+    
     const callbackId = Date.now();
     toolState.summaryCallback = callbackId;
     
-    // Create or get callback map and store the reference
+    
     toolState.callbackMap = toolState.callbackMap || new Map();
     toolState.callbackMap.set(callbackId, callback);
     
-    // Save initial state
+    
     contextManager.setToolState('browser', toolState, userId);
     
     try {
@@ -310,7 +310,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     } catch (error) {
         console.error("Error in browser task:", error);
         
-        // Update session with error
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -319,7 +319,7 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
             }
         }
         
-        // Save error state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         const errorResult = {
@@ -338,32 +338,32 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
 async function goToPage(url, userId = 'default'){
     const browser = await initialize(userId);
     
-    // Close existing page if present
+    
     if(pageInstances.has(userId)){
         await pageInstances.get(userId).close().catch(e => console.log("Error closing page:", e));
     }
     
-    // Create new page
+    
     const page = await browser.newPage();
     pageInstances.set(userId, page);
     
-    // Get tool state
+    
     let toolState = contextManager.getToolState('browser', userId);
     
     try {
-        // Increase timeout and modify navigation settings for better reliability
-        await page.setDefaultNavigationTimeout(90000); // Increase timeout from default
         
-        // Set up a more flexible navigation strategy
+        await page.setDefaultNavigationTimeout(90000); 
+        
+        
         await page.goto(url, { 
             timeout: 60000, 
-            waitUntil: ['load', 'domcontentloaded'] // Changed from networkidle0 to more reliable options
+            waitUntil: ['load', 'domcontentloaded'] 
         });
         
-        // Give the page extra time to settle 
+        
         await sleep(2000);
         
-        // Record page in active session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -375,7 +375,7 @@ async function goToPage(url, userId = 'default'){
             }
         }
         
-        // Save updated state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         await sleep(1000);
@@ -383,7 +383,7 @@ async function goToPage(url, userId = 'default'){
     } catch (error) {
         console.error("Error navigating to page:", error);
         
-        // Record error in session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -397,7 +397,7 @@ async function goToPage(url, userId = 'default'){
             }
         }
         
-        // Save error state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         return {success: false, error: error.message};
@@ -423,10 +423,10 @@ async function scroll(direction, userId = 'default'){
             await page.evaluate(`window.scrollTo(0, 1000);`);
         }
         
-        // Get tool state and record action
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Record in active session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -438,7 +438,7 @@ async function scroll(direction, userId = 'default'){
             }
         }
         
-        // Save updated state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         return {success: true};
@@ -464,10 +464,10 @@ async function click(element, userId = 'default'){
     });
     
     try {
-        // Set up a promise that will resolve if navigation occurs
+        
         const navigationPromise = page.waitForNavigation({ timeout: 5000 }).catch(() => {});
         
-        // Execute the click
+        
         await page.evaluate(`
             try{
                 window.clickElement(${JSON.stringify(element)});
@@ -476,16 +476,16 @@ async function click(element, userId = 'default'){
             }
         `);
         
-        // Wait for navigation to complete if it was triggered by the click
+        
         await navigationPromise;
         
         page.off('console', listener);
         if(!result) result="success";
         
-        // Get tool state and record action
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Record in active session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -498,7 +498,7 @@ async function click(element, userId = 'default'){
             }
         }
         
-        // Save updated state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         return {result: result};
@@ -506,10 +506,10 @@ async function click(element, userId = 'default'){
         page.off('console', listener);
         console.log("Error during click operation:", error);
         
-        // Get tool state and record error
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Record error in session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -523,7 +523,7 @@ async function click(element, userId = 'default'){
             }
         }
         
-        // Save error state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         return {result: "Error: " + error.message};
@@ -538,14 +538,14 @@ async function input(element, text, userId = 'default'){
     
     const page = pageInstances.get(userId);
     
-    // Check if element is properly defined
+    
     if (!element) {
         console.log("Error: No element specified for input");
         return {result: "Error: No element specified"};
     }
     
     try {
-        // Changed from string-based evaluate to function-based evaluate
+        
         const success = await page.evaluate((elementId, inputText) => {
             try {
                 const el = window.numberedElements[elementId];
@@ -561,10 +561,10 @@ async function input(element, text, userId = 'default'){
             }
         }, element, text);
         
-        // Get tool state and record action
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Record in active session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -578,7 +578,7 @@ async function input(element, text, userId = 'default'){
             }
         }
         
-        // Save updated state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         if (success) {
@@ -589,10 +589,10 @@ async function input(element, text, userId = 'default'){
     } catch (error) {
         console.log("Error during input operation:", error);
         
-        // Get tool state and record error
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Record error in session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -607,7 +607,7 @@ async function input(element, text, userId = 'default'){
             }
         }
         
-        // Save error state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         return {result: "Error: " + error.message};
@@ -627,30 +627,30 @@ async function getContent(userId = 'default') {
     const page = pageInstances.get(userId);
     
     try {
-        // Add a small wait for the page to potentially stabilize after navigation
+        
         await sleep(500);
 
-        // Inject our custom element numbering script
+        
         await page.evaluate(elementNumberingScript);
 
-        // Combine element gathering and text content extraction into a single evaluate call
+        
         const pageData = await page.evaluate(() => {
             let elementsString = '';
-            // Check if numberedElements exists and is an object before processing
+            
             if (window.numberedElements && typeof window.numberedElements === 'object') {
                 elementsString = Object.keys(window.numberedElements).map(key => {
                     const el = window.numberedElements[key];
-                    // Ensure el exists before accessing properties
+                    
                     if (el) {
                       return `${key}: ${el.tagName}${el.id ? ' id=' + el.id : ''}${el.className ? ' class=' + el.className : ''}`;
                     }
-                    return `${key}: Element not found`; // Handle case where element might be missing
+                    return `${key}: Element not found`; 
                 }).join(', ');
             } else {
-                 elementsString = ''; // Return empty string if numberedElements is not ready
+                 elementsString = ''; 
             }
 
-            const textContent = document.body.innerText.substring(0, 1000); // Limit text extraction
+            const textContent = document.body.innerText.substring(0, 1000); 
 
             return {
                 elements: elementsString,
@@ -658,17 +658,17 @@ async function getContent(userId = 'default') {
             };
         });
         
-        // Take screenshot with lower quality
+        
         const screenshot = await page.screenshot({ 
             encoding: 'base64',
             quality: SCREENSHOT_QUALITY,
             type: 'jpeg'
         });
         
-        // Get tool state and record page content snapshot
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Record content snapshot in active session
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -682,7 +682,7 @@ async function getContent(userId = 'default') {
             }
         }
         
-        // Save updated state
+        
         contextManager.setToolState('browser', toolState, userId);
         
         return {
@@ -702,10 +702,10 @@ async function getContent(userId = 'default') {
 
 async function close(userId = 'default'){
     try {
-        // Get tool state
+        
         let toolState = contextManager.getToolState('browser', userId);
         
-        // Mark as closed in tool state
+        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -714,19 +714,19 @@ async function close(userId = 'default'){
             }
         }
         
-        // Reset active session
+        
         toolState.activeSession = null;
         
-        // Save updated state
+        
         contextManager.setToolState('browser', toolState, userId);
         
-        // Close page if it exists
+        
         if (pageInstances.has(userId)) {
             await pageInstances.get(userId).close().catch(e => console.log("Error closing page:", e));
             pageInstances.delete(userId);
         }
         
-        // Don't close browser to allow reuse
+        
         return {success: true};
     } catch (error) {
         console.error("Error closing browser:", error);
@@ -741,14 +741,14 @@ async function close(userId = 'default'){
  */
 async function takeScreenshot(userId = 'default') {
     try {
-        // Check if page exists for this user
+        
         if (!pageInstances.has(userId)) {
             return null;
         }
         
         const page = pageInstances.get(userId);
         
-        // Take screenshot at lower quality for faster transfer
+        
         const screenshot = await page.screenshot({ 
             type: 'jpeg', 
             quality: SCREENSHOT_QUALITY,
@@ -769,14 +769,14 @@ async function takeScreenshot(userId = 'default') {
  */
 async function cleanupResources(userId = 'default') {
   try {
-    // Close the browser instance if it exists
+    
     if (browserInstances.has(userId)) {
       const browser = browserInstances.get(userId);
       await browser.close().catch(e => console.error(`Error closing browser for user ${userId}:`, e));
       browserInstances.delete(userId);
     }
     
-    // Clear page reference as well
+    
     if (pageInstances.has(userId)) {
       pageInstances.delete(userId);
     }

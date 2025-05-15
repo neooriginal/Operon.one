@@ -2,36 +2,22 @@ const fs = require('fs');
 const path = require('path');
 const ascii = require('./utils/ascii');
 const contextManager = require('./utils/context');
-// Import socket.io
+
 const io = require('./socket');
 const sanitize = require('sanitize-filename');
 require('dotenv').config();
 
-// Check if email whitelist is configured
-const EMAIL_WHITELIST = process.env.EMAIL_WHITELIST ? process.env.EMAIL_WHITELIST.split(',').map(email => email.trim().toLowerCase()) : [];
-if (EMAIL_WHITELIST.length > 0) {
-  console.log(`Email whitelist enabled with ${EMAIL_WHITELIST.length} allowed addresses`);
-} else {
-  console.warn('WARNING: Email whitelist is empty. No new users will be able to register.');
-}
-
-// Screenshot interval in milliseconds
 const SCREENSHOT_INTERVAL = 5000;
 
-// Path sanitization utility
 function sanitizePath(unsafePath) {
   if (!unsafePath) return '';
   
-  // Handle absolute paths safely
   const isAbsolute = path.isAbsolute(unsafePath);
   
-  // Split path into segments and sanitize each one
   const pathSegments = unsafePath.split(/[\/\\]/g).map(segment => sanitize(segment));
   
-  // Rebuild path with proper separators
   let safePath = pathSegments.join(path.sep);
   
-  // Restore absolute path indicator if needed
   if (isAbsolute && !path.isAbsolute(safePath)) {
     safePath = path.resolve('/', safePath);
   }
@@ -39,24 +25,23 @@ function sanitizePath(unsafePath) {
   return safePath;
 }
 
-// Function to sanitize file paths
 function sanitizeFilePath(unsafePath, userId) {
-  // First apply general path sanitization
+  
   let safePath = sanitizePath(unsafePath);
   
-  // Create user-specific directory if needed
+  
   if (userId && userId !== 'default') {
-    // If the path is not already in the user's directory, place it there
+    
     const userDir = path.join('output', userId);
     
-    // Ensure the user directory exists
+    
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
     }
     
-    // If this isn't already a path inside the user's directory, place it there
+    
     if (!safePath.startsWith(userDir)) {
-      // For absolute paths, move just the filename to the user directory
+      
       const filename = path.basename(safePath);
       safePath = path.join(userDir, filename);
     }
@@ -65,12 +50,10 @@ function sanitizeFilePath(unsafePath, userId) {
   return safePath;
 }
 
-// Dynamically load tools based on their tool.json files
 const toolsDirectory = path.join(__dirname, 'tools');
 const tools = {};
 const toolDescriptions = [];
 
-// Function to load tools dynamically
 function loadTools() {
   const toolFolders = fs.readdirSync(toolsDirectory).filter(folder => {
     const stat = fs.statSync(path.join(toolsDirectory, folder));
@@ -98,7 +81,7 @@ function loadTools() {
           const toolModule = require(path.join(toolsDirectory, folder, mainFile));
           tools[toolConfig.title] = toolModule;
           
-          // Add to tool descriptions for the prompt
+          
           toolDescriptions.push({
             title: toolConfig.title,
             description: toolConfig.description,
@@ -118,12 +101,10 @@ function loadTools() {
 
 ascii.printWelcome();
 
-// Load all tools at startup
 loadTools();
 
-// Generate global prompt dynamically based on loaded tools
 function generateGlobalPrompt() {
-  // Sort tools by title for consistent ordering
+  
   const sortedTools = toolDescriptions.sort((a, b) => a.title.localeCompare(b.title));
   
   const toolsList = sortedTools.map(tool => `> - ${tool.title}: ${tool.description}`).join('\n');
@@ -268,33 +249,33 @@ For simple questions or chit-chat, return:
 
 async function centralOrchestrator(question, userId = 'default', chatId = 1, isFollowUp = false){
   try {
-    // Validate inputs to prevent injection attacks
+    
     if (!question || typeof question !== 'string') {
       throw new Error('Invalid question format');
     }
     
-    // Ensure userId is properly validated
+    
     if (!userId || userId === 'default') {
       throw new Error('Authentication required: valid user ID is mandatory for production use');
     }
     
-    // Ensure chatId is a number
+    
     chatId = parseInt(chatId, 10);
     if (isNaN(chatId) || chatId < 1) {
-      chatId = 1; // Default to 1 if invalid
+      chatId = 1; 
     }
     
-    // Initialize context for this user and chat
+    
     if (!isFollowUp) {
       contextManager.resetContext(userId, chatId);
     }
     
-    // Emit task received event
+    
     io.to(`user:${userId}`).emit('task_received', { userId, chatId, task: question, isFollowUp });
     
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Improving prompt' });
 
-    // Store question in context
+    
     contextManager.setQuestion(question, userId, chatId);
 
     let prompt = `
@@ -311,22 +292,22 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     `;
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
-    // Get existing history for this chat
+    
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
-    // Use the history instead of empty array
+    
     let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "auto", userId, chatId);
     
-    // Check if this is a direct answer request
+    
     if (planObject.directAnswer === true && planObject.answer) {
       io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Direct answer provided' });
       
-      // Ensure the answer is properly formatted as a string
+      
       const directAnswer = typeof planObject.answer === 'string' 
         ? planObject.answer 
         : JSON.stringify(planObject.answer);
       
-      // Store the response in context
+      
       contextManager.addToHistory({
         role: "user", 
         content: [
@@ -334,7 +315,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         ]
       }, userId, chatId);
       
-      // Store final answer in a clear, non-JSON format
+      
       contextManager.addToHistory({
         role: "assistant", 
         content: [
@@ -342,7 +323,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         ]
       }, userId, chatId);
       
-      // Emit task completion event with the same format as regular tasks
+      
       io.to(`user:${userId}`).emit('task_completed', { 
         userId, 
         chatId,
@@ -362,19 +343,19 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         }
       });
       
-      // Clean up resources
+      
       await cleanupUserResources(userId);
       
       return directAnswer;
     }
     
-    // Convert the plan object into an array for regular task execution
+    
     const plan = Object.values(planObject).filter(item => item && typeof item === 'object');
     
-    // Store plan in context
+    
     contextManager.setPlan(plan, userId, chatId);
     
-    // Add to history
+    
     contextManager.addToHistory({
       role: "user", 
       content: [
@@ -393,7 +374,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     
     io.to(`user:${userId}`).emit('steps', { userId, chatId, plan });
    
-    // Start screenshot interval if browser is used in the plan
+    
     let screenshotInterval = null;
     if (plan.some(step => step.action === "webBrowser") && tools.webBrowser) {
       screenshotInterval = setInterval(async () => {
@@ -408,7 +389,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       }, SCREENSHOT_INTERVAL);
     }
     
-    // Continue executing steps until we've completed all steps in the plan
+    
     while (contextManager.getCurrentStepIndex(userId, chatId) < plan.length) {
       const currentStepIndex = contextManager.getCurrentStepIndex(userId, chatId);
       const step = plan[currentStepIndex];
@@ -418,14 +399,14 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
 
       io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
       
-      // Get filtered steps output from context
+      
       const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId, chatId);
       
       const inputData = enhancedStep.usingData === "none" ? "" : filteredStepsOutput.map(item => `${item.action}: ${item.output}`).join("; ");
       
       let summary;
       
-      // Get the appropriate tool for this action
+      
       const tool = tools[enhancedStep.action];
       
       if (!tool) {
@@ -435,9 +416,9 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           success: false 
         };
       } else {
-        // Different tools have different methods for execution
+        
         if (enhancedStep.action === "chatCompletion") {
-          // Get updated history for each chatCompletion call
+          
           const updatedHistory = contextManager.getHistoryWithChatId(userId, chatId);
           summary = await tool.callAI(enhancedStep.step, inputData, updatedHistory, undefined, true, "auto", userId, chatId);
           contextManager.addToHistory({
@@ -447,7 +428,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
             ]
           }, userId, chatId);
         } else if (["deepResearch", "webSearch"].includes(enhancedStep.action)) {
-          // Handle tools that use intensity parameter
+          
           const intensity = enhancedStep.intensity || undefined;
           summary = await tool.runTask(enhancedStep.step, inputData, (summary) => {
             io.to(`user:${userId}`).emit('step_completed', { 
@@ -473,7 +454,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
             chatId
           );
           
-          // Validate writer output and handle errors
+          
           if (summary && summary.error) {
             console.error(`Writer error: ${summary.error}`, summary.details || '');
             summary = { 
@@ -483,7 +464,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
             };
           }
         } else {
-          // General case for most tools
+          
           summary = await tool.runTask(
             `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
             inputData, 
@@ -503,7 +484,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
                 }
               });
               
-              // If this is the fileSystem tool and a file was created/updated, emit file event
+              
               if (enhancedStep.action === "fileSystem" && summary && summary.filePath) {
                 io.to(`user:${userId}`).emit('file_updated', { 
                   userId, 
@@ -517,7 +498,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
             chatId
           );
           
-          // Handle container files for execute and bash tools
+          
           if (["execute", "bash"].includes(enhancedStep.action) && 
               summary && Array.isArray(summary.createdContainerFiles) && 
               tools.fileSystem) {
@@ -547,21 +528,21 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         }
       });
       
-      // Store the output of the step
+      
       contextManager.addStepOutput({
         step: enhancedStep.step,
         action: enhancedStep.action,
-        output: summary // Store the actual result
+        output: summary 
       }, userId, chatId);
       
-      // ReAct: Reflect on the result after execution
+      
       io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
       const reflection = await tools.react.reflectOnResult(enhancedStep, summary, userId, chatId);
       
-      // Check progress and potentially update plan
+      
       const currentPlan = contextManager.getPlan(userId, chatId);
       
-      // Check if reflection suggests a plan change
+      
       if (reflection && reflection.changePlan === true) {
         try {
           const updatedPlan = await checkProgress(question, currentPlan, contextManager.getStepsOutput(userId, chatId), contextManager.getCurrentStepIndex(userId, chatId), userId, chatId);
@@ -571,34 +552,34 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           }
         } catch (error) {
           console.error("Error updating plan based on reflection:", error.message);
-          // Continue with original plan on error
+          
         }
       }
       
-      // Increment step index in context
+      
       contextManager.incrementStepIndex(userId, chatId);
       
-      // Save the thought chain periodically
+      
       if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {
         await tools.react.saveThoughtChain(tools.fileSystem, userId, chatId);
       }
     }
     
-    // Clear screenshot interval if it was set
+    
     if (screenshotInterval) {
       clearInterval(screenshotInterval);
     }
     
-    // After the loop completes, finalize the task
+    
     let finalOutput;
     try {
-      // Use updated history for the final task
+      
       const finalHistory = contextManager.getHistoryWithChatId(userId, chatId);
       finalOutput = await finalizeTask(question, contextManager.getStepsOutput(userId, chatId), userId, chatId);
 
     
-      // Replace the previous "Processing your task..." message with the final answer
-      // First, find and remove the processing message
+      
+      
       const context = contextManager.getContext(userId, chatId);
       const processedHistory = context.history.filter(msg => 
         !(msg.role === "assistant" && msg.content && 
@@ -606,10 +587,10 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
           msg.content[0].text === "Processing your task...")
       );
       
-      // Replace history with the cleaned version
+      
       context.history = processedHistory;
       
-      // Add the final answer to history in plain text format
+      
       contextManager.addToHistory({
         role: "assistant", 
         content: [
@@ -617,31 +598,31 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
         ]
       }, userId, chatId);
       
-      // Get task duration using the context manager
+      
       const duration = contextManager.getTaskDuration(userId, chatId);
       
-      // Get output files from the file system tool's tracked list
+      
       const fileData = await tools.fileSystem.getWrittenFiles(userId, chatId);
       
-      // Map host files correctly using properties from getWrittenFiles
+      
       const hostFiles = fileData.hostFiles.map(file => ({
         id: file.id,
-        fileName: file.fileName, // Use the fileName property from getWrittenFiles
-        path: file.path,        // Use the path property from getWrittenFiles
-        content: file.content   // Include the content
+        fileName: file.fileName, 
+        path: file.path,        
+        content: file.content   
       })) || [];
       
-      // Map container files correctly using properties from getWrittenFiles
+      
       const containerFiles = fileData.containerFiles.map(file => {
         return {
           id: file.id,
-          fileName: file.fileName, // Use the fileName property from getWrittenFiles
-          path: file.path,        // Use the path property from getWrittenFiles
-          content: file.content   // Include the content
+          fileName: file.fileName, 
+          path: file.path,        
+          content: file.content   
         };
       }) || [];
       
-      // Emit task completion event with enhanced data
+      
       io.to(`user:${userId}`).emit('task_completed', { 
         userId, 
         chatId,
@@ -669,17 +650,17 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
     }
     
-    // Cleanup resources for this user
+    
     await cleanupUserResources(userId);
     
     return finalOutput;
   } catch (error) {
     console.error("Critical error in orchestration:", error.message);
     
-    // Emit error event
+    
     io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
     
-    // Ensure cleanup even on error
+    
     try {
       await cleanupUserResources(userId);
     } catch (cleanupError) {
@@ -690,11 +671,10 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
   }
 }
 
-// Add timeout handling for API calls at the end of the file before module.exports
 async function withTimeout(promise, timeoutMs = 60000) {
   let timeoutId;
   
-  // Create a promise that rejects after timeoutMs
+  
   const timeoutPromise = new Promise((_, reject) => {
     timeoutId = setTimeout(() => {
       reject(new Error(`Operation timed out after ${timeoutMs}ms`));
@@ -702,27 +682,27 @@ async function withTimeout(promise, timeoutMs = 60000) {
   });
   
   try {
-    // Race the original promise against the timeout
+    
     return await Promise.race([promise, timeoutPromise]);
   } finally {
-    // Clear the timeout to prevent memory leaks
+    
     clearTimeout(timeoutId);
   }
 }
 
 async function checkProgress(question, plan, stepsOutput, currentStepIndex, userId = 'default', chatId = 1) {
   try {
-    // Skip progress checks if we're too early in the process
+    
     if (currentStepIndex < 2 || plan.length <= 2) {
       return plan;
     }
     
-    // Only check progress periodically to avoid excessive AI calls
+    
     if (currentStepIndex % 3 !== 0) {
       return plan;
     }
     
-    // Format the steps output for better analysis
+    
     const formattedStepsOutput = stepsOutput.map(output => {
       return {
         step: output.step,
@@ -747,19 +727,19 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     Remaining steps in the plan: ${JSON.stringify(plan.slice(currentStepIndex), null, 2)}
     `;
     
-    // Get updated conversation history for context
+    
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
       tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "auto", userId, chatId),
-      30000 // 30-second timeout
+      30000 
     );
     
     if (!response || response.error || response === "NO_CHANGES_NEEDED") {
       return plan;
     }
   
-    // Validate the updated plan structure
+    
     const updatedPlan = Array.isArray(response) ? response : Object.values(response);
     
     if (!Array.isArray(updatedPlan) || updatedPlan.length === 0) {
@@ -770,13 +750,13 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     return updatedPlan;
   } catch (error) {
     console.error("Error checking progress:", error.message);
-    return plan; // On error, continue with original plan
+    return plan; 
   }
 }
 
 async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 1) {
   try {
-    // Format step outputs to prevent serialization issues
+    
     const formattedStepsOutput = stepsOutput.map(output => {
       return {
         step: output.step,
@@ -805,12 +785,12 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     Completed steps and outputs: ${JSON.stringify(formattedStepsOutput, null, 2)}
     `;
     
-    // Get conversation history for context
+    
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
       tools.chatCompletion.callAI(prompt, "Generate final response", history, undefined, false, "auto", userId, chatId),
-      60000 // 60-second timeout
+      60000 
     );
     
     if (!response) {
@@ -818,14 +798,14 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
       return "Task completed but final summary could not be generated.";
     }
     
-    // Process the response to ensure it's not in JSON format
+    
     let finalResponse = response;
     
-    // Check if it's a JSON string and extract readable content if it is
+    
     try {
       const parsedResponse = JSON.parse(response);
       
-      // If it contains obvious text fields, use those instead
+      
       if (parsedResponse.answer) {
         finalResponse = parsedResponse.answer;
       } else if (parsedResponse.explanation) {
@@ -839,9 +819,9 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
       } else if (parsedResponse.output) {
         finalResponse = parsedResponse.output;
       }
-      // If none of these fields exist, keep the original response
+      
     } catch (e) {
-      // Not JSON, which is actually what we want
+      
       finalResponse = response;
     }
     
@@ -857,7 +837,7 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
  * @param {string} userId - User identifier
  */
 async function cleanupUserResources(userId) {
-  // Close any browser instances if the browser tool exists
+  
   if (tools.webBrowser) {
     try {
       await tools.webBrowser.cleanupResources(userId);
@@ -867,16 +847,16 @@ async function cleanupUserResources(userId) {
   }
 }
 
-// Add utility function to clean JSON responses
+
 function cleanJsonResponses(text) {
   if (!text || typeof text !== 'string') return text;
   
-  // Check if it looks like JSON
+  
   if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
     try {
       const parsed = JSON.parse(text);
       
-      // Extract specific fields in priority order
+      
       if (parsed.directAnswer === true && parsed.answer) {
         return parsed.answer;
       } else if (parsed.explanation) {
@@ -893,33 +873,33 @@ function cleanJsonResponses(text) {
         return parsed.text;
       }
       
-      // If no recognizable fields, return the original text
+      
       return text;
     } catch (e) {
-      // Not valid JSON
+      
       return text;
     }
   }
   
-  // Not JSON-like, return as is
+  
   return text;
 }
 
-// Export the centralOrchestrator function for use in test-server.js
+
 module.exports = {
   centralOrchestrator,
   cleanupUserResources,
   sanitizeFilePath
 };
 
-// Run the orchestrator if this file is executed directly
+
 if (require.main === module) {
-  // Set up socket event listener for receiving tasks
+  
   io.on('connection', (socket) => {
     socket.on('submit_task', async (data) => {
       const { task, userId = `socket_${Date.now()}`, chatId = 1, isFollowUp = false } = data;
       
-      // Execute the task
+      
       centralOrchestrator(task, userId, chatId, isFollowUp);
     });
     
@@ -927,24 +907,24 @@ if (require.main === module) {
       const { userId = `socket_${Date.now()}`, chatId = 1 } = data;
       
       try {
-        // Get history from context manager using the specific chat ID
+        
         const history = contextManager.getHistoryWithChatId(userId, chatId);
         const context = contextManager.getContext(userId, chatId);
         
         if (history && history.length) {
-          // Find the last assistant message with the final answer
+          
           let finalAnswer = "";
           let foundFinalAnswer = false;
           
-          // Search from the end to find the most recent final answer
+          
           for (let i = history.length - 1; i >= 0; i--) {
             const message = history[i];
             if (message.role === "assistant" && message.content && message.content.length > 0) {
               const content = message.content[0].text;
               
-              // Filter out processing messages and JSON responses
+              
               if (!content.includes("Processing your task")) {
-                // Clean any JSON in the content
+                
                 finalAnswer = cleanJsonResponses(content);
                 foundFinalAnswer = true;
                 break;
@@ -953,12 +933,12 @@ if (require.main === module) {
           }
           
           if (!foundFinalAnswer) {
-            // Fallback to the original user query as context
+            
             const userQuestion = context.question || "Previous conversation";
             finalAnswer = `I processed your request about "${userQuestion}" but couldn't find the final answer in the history.`;
           }
           
-          // Get any written files from the history
+          
           const filesData = { host: [], container: [] };
           try {
             if (tools.fileSystem) {
@@ -972,7 +952,7 @@ if (require.main === module) {
             console.error('Error getting files from history:', fileError);
           }
           
-          // Emit the same format as task_completed for consistency
+          
           socket.emit('task_completed', {
             userId,
             chatId,

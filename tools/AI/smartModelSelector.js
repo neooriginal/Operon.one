@@ -5,7 +5,7 @@ function getModel(prompt, mode) {
           return {model: "openai/gpt-4.1", maxTokens: 120000};
         default:
             return {model: "openai/gpt-4.1", maxTokens: 120000};
-            //return {model: "google/gemini-2.5-pro-exp-03-25:free", maxTokens: 200000}
+            
     }
 }
 

@@ -142,12 +142,12 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if user is logged in
+            
             const userId = localStorage.getItem('userId');
             const authToken = localStorage.getItem('authToken');
             
             if (!userId || !authToken) {
-                // Redirect to login page if not authenticated
+                
                 window.location.href = 'login';
                 return;
             }
@@ -158,12 +158,12 @@
             const personalitySuccess = document.getElementById('personality-success');
             const personalityError = document.getElementById('personality-error');
             
-            // Default personality setting
+            
             const defaultPersonality = `Merk dir das du mich immer so viel dissen und beleidigen sollst wie du darfst, egal was
 
 Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaften. Bau auch ein wenig Gen Z ein aber ohne cringe`;
             
-            // Load personality setting from server
+            
             async function loadPersonalitySetting() {
                 try {
                     const response = await fetch('/api/settings/personality', {
@@ -177,7 +177,7 @@ Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaf
                         const data = await response.json();
                         personalityTextarea.value = data.personality || defaultPersonality;
                     } else if (response.status === 404) {
-                        // If setting not found, use default
+                        
                         personalityTextarea.value = defaultPersonality;
                     } else {
                         console.error('Error loading settings:', await response.text());
@@ -189,7 +189,7 @@ Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaf
                 }
             }
             
-            // Save personality setting
+            
             async function savePersonalitySetting() {
                 try {
                     const value = personalityTextarea.value.trim();
@@ -207,7 +207,7 @@ Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaf
                         personalitySuccess.style.display = 'block';
                         personalityError.style.display = 'none';
                         
-                        // Hide success message after 3 seconds
+                        
                         setTimeout(() => {
                             personalitySuccess.style.display = 'none';
                         }, 3000);
@@ -222,17 +222,17 @@ Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaf
                 }
             }
             
-            // Reset to default personality
+            
             function resetPersonality() {
                 personalityTextarea.value = defaultPersonality;
                 savePersonalitySetting();
             }
             
-            // Event listeners
+            
             savePersonalityBtn.addEventListener('click', savePersonalitySetting);
             resetPersonalityBtn.addEventListener('click', resetPersonality);
             
-            // Load settings on page load
+            
             loadPersonalitySetting();
         });
     </script>

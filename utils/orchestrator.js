@@ -10,17 +10,17 @@ const io = require('../socket');
  */
 async function processTask(task, userId, chatId = 1) {
     try {
-        // Add user's message to history
+        
         await contextManager.addToHistory({
             role: "user",
             content: task
         }, userId, chatId);
         
-        // Process the task using the central orchestrator
+        
         const response = await centralOrchestrator(task, userId, chatId);
         
-        // Send response to the client directly (now handled in AI tool)
-        // io.emit('ai_message', { userId, text: response });
+        
+        
         
         return response;
     } catch (error) {
