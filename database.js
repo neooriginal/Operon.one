@@ -1,18 +1,31 @@
+/**
+ * Database module for Operon.one
+ * @module database
+ */
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
 
-
+/**
+ * Directory for storing data files
+ * @type {string}
+ */
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-
+/**
+ * Path to the SQLite database file
+ * @type {string}
+ */
 const DB_PATH = path.join(DATA_DIR, 'operonone.db');
 
-
+/**
+ * SQLite database instance
+ * @type {sqlite3.Database}
+ */
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
     console.error('Database connection error:', err.message);
@@ -22,7 +35,9 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   }
 });
 
-
+/**
+ * Initialize database tables if they don't exist
+ */
 function initDatabase() {
   
   db.run(`CREATE TABLE IF NOT EXISTS users (
@@ -156,9 +171,18 @@ function initDatabase() {
   });
 }
 
-
+/**
+ * User-related database functions
+ * @namespace userFunctions
+ */
 const userFunctions = {
-  
+  /**
+   * Register a new user
+   * @async
+   * @param {string} email - User's email address
+   * @param {string} password - User's password (will be hashed)
+   * @returns {Promise<Object>} User object with id and email
+   */
   async registerUser(email, password) {
     const hashedPassword = await bcrypt.hash(password, 10);
     
@@ -177,7 +201,13 @@ const userFunctions = {
     });
   },
 
-  
+  /**
+   * Authenticate a user
+   * @async
+   * @param {string} email - User's email address
+   * @param {string} password - User's password
+   * @returns {Promise<Object>} User data (excluding password)
+   */
   async loginUser(email, password) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -208,7 +238,11 @@ const userFunctions = {
     });
   },
 
-  
+  /**
+   * Get user by ID
+   * @param {number|string} id - User ID
+   * @returns {Promise<Object>} User data (excluding password)
+   */
   getUserById(id) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -225,7 +259,12 @@ const userFunctions = {
     });
   },
 
-  
+  /**
+   * Update user's credits
+   * @param {number|string} userId - User ID
+   * @param {number} credits - Number of credits to add (can be negative)
+   * @returns {Promise<Object>} Result with changes count
+   */
   updateCredits(userId, credits) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -243,9 +282,23 @@ const userFunctions = {
   }
 };
 
-
+/**
+ * Memory-related database functions
+ * @namespace memoryFunctions
+ */
 const memoryFunctions = {
-  
+  /**
+   * Store a memory for a user
+   * @param {number|string} userId - User ID
+   * @param {Object} memoryData - Memory data to store
+   * @param {string} memoryData.type - Type of memory
+   * @param {string} memoryData.content - Content of memory
+   * @param {string|Array} memoryData.keywords - Keywords associated with memory
+   * @param {string|Object} memoryData.metadata - Additional metadata
+   * @param {number} memoryData.importance - Importance level
+   * @param {string} memoryData.storageDuration - How long to store the memory
+   * @returns {Promise<Object>} Result with ID of new memory
+   */
   storeMemory(userId, memoryData) {
     const { type, content, keywords, metadata, importance, storageDuration } = memoryData;
     
@@ -272,7 +325,12 @@ const memoryFunctions = {
     });
   },
 
-  
+  /**
+   * Get memories for a user
+   * @param {number|string} userId - User ID
+   * @param {number} [limit=100] - Maximum number of memories to retrieve
+   * @returns {Promise<Array>} Array of memory objects
+   */
   getMemories(userId, limit = 100) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -295,7 +353,12 @@ const memoryFunctions = {
     });
   },
 
-  
+  /**
+   * Search memories for a user
+   * @param {number|string} userId - User ID
+   * @param {string} query - Search query
+   * @returns {Promise<Array>} Array of matching memory objects
+   */
   searchMemories(userId, query) {
     return new Promise((resolve, reject) => {
       
@@ -325,9 +388,19 @@ const memoryFunctions = {
   }
 };
 
-
+/**
+ * Chat-related database functions
+ * @namespace chatFunctions
+ */
 const chatFunctions = {
-  
+  /**
+   * Add a message to chat history
+   * @param {number|string} userId - User ID
+   * @param {string} role - Message role (user, assistant, etc.)
+   * @param {string|Object} content - Message content
+   * @param {number} [chatId=1] - Chat ID
+   * @returns {Promise<Object>} Result with ID of new message
+   */
   addChatMessage(userId, role, content, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -347,7 +420,13 @@ const chatFunctions = {
     });
   },
 
-  
+  /**
+   * Get chat history for a user
+   * @param {number|string} userId - User ID
+   * @param {number} [chatId=1] - Chat ID
+   * @param {number} [limit=50] - Maximum number of messages to retrieve
+   * @returns {Promise<Array>} Array of chat message objects
+   */
   getChatHistory(userId, chatId = 1, limit = 50) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -369,7 +448,12 @@ const chatFunctions = {
     });
   },
 
-  
+  /**
+   * Clear chat history for a user
+   * @param {number|string} userId - User ID
+   * @param {number} [chatId=1] - Chat ID
+   * @returns {Promise<Object>} Result with count of deleted messages
+   */
   clearChatHistory(userId, chatId = 1) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -386,7 +470,12 @@ const chatFunctions = {
     });
   },
 
-  
+  /**
+   * Create a new chat
+   * @param {number|string} userId - User ID
+   * @param {string} [title='New Chat'] - Chat title
+   * @returns {Promise<Object>} New chat object with id and title
+   */
   createChat(userId, title = 'New Chat') {
     return new Promise((resolve, reject) => {
       db.run(
@@ -403,7 +492,11 @@ const chatFunctions = {
     });
   },
 
-  
+  /**
+   * Get all chats for a user
+   * @param {number|string} userId - User ID
+   * @returns {Promise<Array>} Array of chat objects
+   */
   getUserChats(userId) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -420,7 +513,13 @@ const chatFunctions = {
     });
   },
 
-  
+  /**
+   * Update a chat's title
+   * @param {number|string} userId - User ID
+   * @param {number} chatId - Chat ID
+   * @param {string} title - New title
+   * @returns {Promise<Object>} Result with count of changes
+   */
   updateChatTitle(userId, chatId, title) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -437,7 +536,12 @@ const chatFunctions = {
     });
   },
 
-  
+  /**
+   * Delete a chat and its history
+   * @param {number|string} userId - User ID
+   * @param {number} chatId - Chat ID
+   * @returns {Promise<Object>} Result with count of deleted records
+   */
   deleteChat(userId, chatId) {
     return new Promise((resolve, reject) => {
       
@@ -466,9 +570,22 @@ const chatFunctions = {
   }
 };
 
-
+/**
+ * File-related database functions
+ * @namespace fileFunctions
+ */
 const fileFunctions = {
-  
+  /**
+   * Track a container file
+   * @param {number|string} userId - User ID
+   * @param {string} containerPath - Path to file in container
+   * @param {string} [originalName=null] - Original file name
+   * @param {string} [description=null] - File description
+   * @param {number} [chatId=1] - Chat ID
+   * @param {string} [fileContent=null] - File content
+   * @param {string} [fileExtension=null] - File extension
+   * @returns {Promise<Object>} Result with ID of tracked file
+   */
   trackContainerFile(userId, containerPath, originalName = null, description = null, chatId = 1, fileContent = null, fileExtension = null) {
     
     return new Promise((resolve, reject) => {
@@ -488,7 +605,17 @@ const fileFunctions = {
     });
   },
   
-  
+  /**
+   * Track a host file
+   * @param {number|string} userId - User ID
+   * @param {string} filePath - Path to file on host
+   * @param {string} [originalName=null] - Original file name
+   * @param {string} [description=null] - File description
+   * @param {number} [chatId=1] - Chat ID
+   * @param {string} [fileContent=null] - File content
+   * @param {string} [fileExtension=null] - File extension
+   * @returns {Promise<Object>} Result with ID of tracked file
+   */
   trackHostFile(userId, filePath, originalName = null, description = null, chatId = 1, fileContent = null, fileExtension = null) {
     
     return new Promise((resolve, reject) => {
@@ -508,7 +635,12 @@ const fileFunctions = {
     });
   },
   
-  
+  /**
+   * Get tracked files for a user
+   * @param {number|string} userId - User ID
+   * @param {number} [chatId=1] - Chat ID
+   * @returns {Promise<Object>} Object with containerFiles and hostFiles arrays
+   */
   getTrackedFiles(userId, chatId = 1) {
     
     return new Promise((resolve, reject) => {
@@ -550,7 +682,13 @@ const fileFunctions = {
     });
   },
   
-  
+  /**
+   * Delete tracked files
+   * @param {number|string} userId - User ID
+   * @param {Array<number>} fileIds - Array of file IDs to delete
+   * @param {string} [fileType='all'] - Type of files to delete ('all', 'container', or 'host')
+   * @returns {Promise<Object>} Result with count of deleted files
+   */
   deleteTrackedFiles(userId, fileIds, fileType = 'all') {
     return new Promise((resolve, reject) => {
       let deletedCount = 0;
@@ -599,7 +737,12 @@ const fileFunctions = {
     });
   },
 
-  
+  /**
+   * Get a tracked file by ID
+   * @param {number|string} userId - User ID
+   * @param {number} fileId - File ID
+   * @returns {Promise<Object|null>} File object or null if not found
+   */
   getTrackedFileById(userId, fileId) {
     return new Promise((resolve, reject) => {
       
@@ -631,9 +774,18 @@ const fileFunctions = {
   }
 };
 
-
+/**
+ * Settings-related database functions
+ * @namespace settingsFunctions
+ */
 const settingsFunctions = {
-  
+  /**
+   * Save or update a user setting
+   * @param {number|string} userId - User ID
+   * @param {string} key - Setting key
+   * @param {string} value - Setting value
+   * @returns {Promise<Object>} Result with ID, key, and value
+   */
   saveSetting(userId, key, value) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -653,7 +805,12 @@ const settingsFunctions = {
     });
   },
 
-  
+  /**
+   * Get a user setting by key
+   * @param {number|string} userId - User ID
+   * @param {string} key - Setting key
+   * @returns {Promise<string|null>} Setting value or null if not found
+   */
   getSetting(userId, key) {
     return new Promise((resolve, reject) => {
       db.get(
@@ -670,7 +827,11 @@ const settingsFunctions = {
     });
   },
 
-  
+  /**
+   * Get all settings for a user
+   * @param {number|string} userId - User ID
+   * @returns {Promise<Object>} Object with settings as key-value pairs
+   */
   getAllSettings(userId) {
     return new Promise((resolve, reject) => {
       db.all(
@@ -692,7 +853,12 @@ const settingsFunctions = {
     });
   },
 
-  
+  /**
+   * Delete a user setting
+   * @param {number|string} userId - User ID
+   * @param {string} key - Setting key
+   * @returns {Promise<Object>} Result indicating if setting was deleted
+   */
   deleteSetting(userId, key) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -710,7 +876,12 @@ const settingsFunctions = {
   }
 };
 
-
+/**
+ * Try to parse a JSON string with fallback mechanisms
+ * @param {string|Object} str - String to parse or object to return as-is
+ * @param {*} defaultValue - Default value to return if parsing fails
+ * @returns {*} Parsed object or default value
+ */
 function tryParseJSON(str, defaultValue) {
   if (!str) return defaultValue;
   
@@ -778,7 +949,10 @@ process.on('exit', () => {
   });
 });
 
-
+/**
+ * Get the database instance
+ * @returns {sqlite3.Database} Database instance
+ */
 function getDb() {
   return db;
 }
