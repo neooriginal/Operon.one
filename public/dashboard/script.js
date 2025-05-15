@@ -1,4 +1,3 @@
-
 window.downloadFile = function(fileId, fileName) {
     
     const event = new CustomEvent('downloadFileRequest', {
@@ -925,17 +924,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let listHtml = `<h3>${title}</h3><ul>`;
             fileList.forEach(file => {
-                const fileExtension = file.extension || file.fileName?.split('.').pop() || '';
+                const fileName = file.fileName || (file.path ? file.path.split('/').pop() : `file_${file.id}`);
+                const fileExtension = file.extension || fileName.split('.').pop() || '';
                 const isTextBased = ['txt', 'log', 'csv', 'json', 'xml', 'html', 'css', 'js', 'py', 'java', 'c', 'cpp', 'md'].includes(fileExtension.toLowerCase());
                 
-                
-                const safeFileName = file.fileName ? 
-                    file.fileName.replace(/'/g, "\\'").replace(/"/g, "&quot;") : 
-                    `download_${file.id}`;
+                const safeFileName = fileName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 
                 listHtml += `
                     <li>
-                        <span class="file-name">${file.fileName || 'Unnamed File'}</span>
+                        <span class="file-name">${fileName}</span>
                         <span class="file-path">(${file.path || 'N/A'})</span>
                         <div class="file-actions">
                             <button class="file-action-btn download-btn" onclick="window.downloadFile(${file.id}, '${safeFileName}')">Download</button>

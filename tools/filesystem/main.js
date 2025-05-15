@@ -59,7 +59,9 @@ async function trackContainerFile(userId, containerPath, chatId = 1) {
         } catch (readError) {
             console.error(`Error reading container file for tracking: ${readError.message}`);
             
-            await fileFunctions.trackContainerFile(userId, containerPath, null, null, chatId);
+            const fileName = path.basename(containerPath);
+            const fileExtension = path.extname(containerPath).replace('.', '');
+            await fileFunctions.trackContainerFile(userId, containerPath, fileName, null, chatId, null, fileExtension);
             return false;
         } finally {
             

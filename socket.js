@@ -243,7 +243,7 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
       return res.status(404).send({ error: 'File not found, content unavailable, or access denied' });
     }
 
-    const fileName = file.fileName || `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`;
+    const fileName = file.fileName || (file.path ? file.path.split('/').pop() : `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`);
     const contentType = mime.lookup(fileName) || 'application/octet-stream';
 
     

@@ -568,9 +568,9 @@ async function finalizeAndReturn(question, plan, userId, chatId) {
     // Process container files
     const containerFiles = fileData.containerFiles.map(file => ({
       id: file.id,
-      fileName: file.fileName, 
-      path: file.path,        
-      content: file.content   
+      fileName: file.originalName || (file.containerPath ? file.containerPath.split('/').pop() : `file_${file.id}`), 
+      path: file.containerPath,        
+      content: file.fileContent   
     })) || [];
     
     // Emit task completion
