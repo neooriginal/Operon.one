@@ -12,9 +12,11 @@ async function improvePrompt(question, userId = 'default'){
     }
     
     let prompt = `
-    You are an AI agent that can improve a prompt.
+    You are an advanced AI agent specialized in prompt engineering and improvement.
     The user will provide a prompt and you will need to improve it so it has the same meaning and goal, but is more specific, detailed, and structured.
     You only need to improve the prompt if it requires a lot of steps to complete. You do not need to improve "chit chat" prompts. Return the same prompt if it is already good.
+
+    ## Prompt Improvement Methodology
 
     Specifically, you should:
     1. Break down multi-step tasks into clearly enumerated steps
@@ -23,7 +25,25 @@ async function improvePrompt(question, userId = 'default'){
     4. Specify expected formats for inputs and outputs
     5. Identify edge cases that should be handled
     6. If the prompt involves code, clarify programming language and environment
+    7. Structure complex tasks with clear planning stages
+    8. Define task approach and execution strategy
+    9. Incorporate appropriate quality assurance steps
+    10. Add appropriate context-setting and background information
     
+    ## Task Approach Guidelines
+    1. Analyze the original prompt to identify purpose and goals
+    2. Break down complex requests into manageable components
+    3. Enhance with appropriate context and parameters
+    4. Structure output formats for clarity
+    5. Anticipate potential challenges or areas of confusion
+    
+    ## Prompt Structure Guidelines
+    - For information requests: Include search parameters, scope, and preferred output format
+    - For creation tasks: Specify audience, tone, format, and key requirements
+    - For problem-solving: Define constraints, available resources, and success criteria
+    - For code tasks: Specify language, frameworks, error handling, and expected functionality
+    - For research tasks: Define research scope, information priority, and validation requirements
+
     You can return the same prompt if you think it is already good. Do not add information which is not obvious and not provided.
 
     Only reply with the improved prompt. DO NOT include explanations or additional commentary.
@@ -97,7 +117,7 @@ let promptingGuidelines = `
 
 ### **5. Example-Driven Instructions**
 - **Provide examples of desired output**: Share samples that demonstrate style, tone, or structure. Example:
-  - *"Write an email response similar to this: 'Thank you for reaching out. We appreciate your feedback and will address this issue promptly.'”*
+  - *"Write an email response similar to this: 'Thank you for reaching out. We appreciate your feedback and will address this issue promptly.'"*
 - **Use examples to clarify expectations**: If asking for creative content, describe or link to similar works.
 
 ---
@@ -112,7 +132,7 @@ let promptingGuidelines = `
 
 ### **7. Using Delimiters Effectively**
 - **Separate instructions from content clearly**: Use delimiters like triple quotes or backticks to distinguish instructions from data or examples.
-  - Example: *"Analyze the following text for sentiment analysis: ”*
+  - Example: *"Analyze the following text for sentiment analysis: "*
 
 ---
 
@@ -149,5 +169,26 @@ let promptingGuidelines = `
 ### **12. Strategic Use of Keywords**
 - **Highlight key concepts**: Use keywords that emphasize important themes or requirements.
   - Example for climate change mitigation: *"Focus on practical solutions like renewable energy and community-level initiatives."*
+
+---
+
+### **13. Information Priority**
+- **Establish a hierarchy of sources**: Prioritize authoritative sources over general knowledge
+- **Specify verification requirements**: Indicate when cross-validation across multiple sources is necessary
+- **Define research depth**: Clarify whether a surface-level overview is sufficient or in-depth analysis is required
+
+---
+
+### **14. Task Execution Structure**
+- **Define planning stages**: Break complex tasks into planning, execution, verification, and delivery
+- **Specify checkpoints**: Indicate points where progress should be assessed before continuing
+- **Include quality control measures**: Request specific validation steps for outputs
+
+---
+
+### **15. Tool and Resource Integration**
+- **Specify when to use specific tools**: Indicate when specialized tools should be employed for particular subtasks
+- **Establish data processing workflows**: Define how information should move between different processing stages
+- **Outline resource management**: Specify how to handle computational or content limitations
 
 `
