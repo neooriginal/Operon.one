@@ -137,6 +137,10 @@ ${toolsList}
 
 ### ⚙️ Core Directives:
 
+- **Persistence**: Keep going until the user's query is completely resolved, before ending your turn. Only terminate when you are sure that the problem is solved.
+- **Tool Utilization**: If you are not sure about information pertaining to the user's request, use your tools to gather the relevant information. Do NOT guess or make up an answer.
+- **Planning**: Plan extensively before each action, and reflect extensively on the outcomes of previous actions. This will improve your ability to solve problems effectively.
+
 - **Do not ask the user for confirmation** at any point.
 - **Do not pause execution** unless a required tool is unavailable.
 - Use the chatCompletion tool to **self-evaluate**, plan tasks, and analyze intermediate results as needed.
@@ -262,29 +266,6 @@ For simple questions or chit-chat, return:
 `;
 }
 
-const AGENTIC_SYSTEM_PROMPT = `
-You are an agent - please keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved.
-
-If you are not sure about file content or codebase structure pertaining to the user's request, use your tools to read files and gather the relevant information: do NOT guess or make up an answer.
-
-You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.
-
-You operate in a structured agent loop for effective problem-solving:
-1. Analyze: Understand the task requirements and context based on the latest information
-2. Plan: Break down complex problems into clear, manageable steps before taking action
-3. Execute: Select and use the most appropriate tool for the current step
-4. Reflect: Evaluate results after each step and adjust your approach as needed
-5. Iterate: Continue through steps 1-4 until the task is completely resolved
-
-Task approach:
-- Information priority: verified data > search results > existing knowledge 
-- Always validate your outputs before submitting final solutions
-- Create todo.md files to track progress for complex tasks
-- Use chatCompletion for intermediate reasoning when complex decisions are needed
-- Save all important intermediate results using fileSystem
-- Before writing code, first understand any existing code patterns or conventions
-`;
-
 async function centralOrchestrator(question, userId = 'default', chatId = 1, isFollowUp = false){
   try {
     // Validate inputs to prevent injection attacks
@@ -317,9 +298,16 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     contextManager.setQuestion(question, userId, chatId);
 
     let prompt = `
-    ${AGENTIC_SYSTEM_PROMPT}
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
     ${generateGlobalPrompt()}
+    
+    IMPORTANT INSTRUCTIONS:
+    1. Follow these instructions EXACTLY and LITERALLY.
+    2. For simple informational questions, use the directAnswer format immediately.
+    3. For complex tasks requiring multiple steps, break down the solution into clear, sequential steps.
+    4. Each step must have a specific purpose and use a specific tool.
+    5. Do not make assumptions about tool capabilities - use exactly the tools listed above.
+    6. Do not reference external APIs, databases, or resources unless they are included in the tools list.
     `;
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
 
@@ -333,6 +321,11 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
     if (planObject.directAnswer === true && planObject.answer) {
       io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Direct answer provided' });
       
+      // Ensure the answer is properly formatted as a string
+      const directAnswer = typeof planObject.answer === 'string' 
+        ? planObject.answer 
+        : JSON.stringify(planObject.answer);
+      
       // Store the response in context
       contextManager.addToHistory({
         role: "user", 
@@ -345,7 +338,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       contextManager.addToHistory({
         role: "assistant", 
         content: [
-            {type: "text", text: planObject.answer}
+            {type: "text", text: directAnswer}
         ]
       }, userId, chatId);
       
@@ -353,7 +346,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       io.to(`user:${userId}`).emit('task_completed', { 
         userId, 
         chatId,
-        result: planObject.answer,
+        result: directAnswer,
         duration: 0,
         completedAt: new Date().toISOString(),
         outputFiles: {
@@ -372,7 +365,7 @@ async function centralOrchestrator(question, userId = 'default', chatId = 1, isF
       // Clean up resources
       await cleanupUserResources(userId);
       
-      return planObject.answer;
+      return directAnswer;
     }
     
     // Convert the plan object into an array for regular task execution
@@ -800,8 +793,14 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     
     Based on the completed steps and their outputs, generate a final comprehensive response.
     
-    IMPORTANT: Your response should be in plain text format. Do not use JSON or any other structured format.
-    Provide a direct, conversational answer as if you're speaking directly to the user.
+    INSTRUCTIONS (FOLLOW THESE EXACTLY):
+    1. Your response must be in plain text format only.
+    2. Do not use JSON format in your response.
+    3. Provide a direct, conversational answer as if speaking directly to the user.
+    4. Focus on being concise and accurate.
+    5. Include only information that is relevant to the question.
+    6. If files were created, briefly mention their names and purpose.
+    7. Do not apologize or use unnecessary phrases like "I hope this helps".
     
     Completed steps and outputs: ${JSON.stringify(formattedStepsOutput, null, 2)}
     `;
