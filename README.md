@@ -36,10 +36,6 @@ cp .env.example .env
 npm start
 ```
 
-## 🔓 Open Access
-
-Operon.one features open registration, allowing anyone to sign up and use the platform without restrictions.
-
 ## 🚧 Work in Progress
 
 **Note:** Operon.one is currently under active development. Core features are functional, but we're constantly improving and adding new capabilities. Expect frequent updates and occasional breaking changes as we work toward a stable release.
@@ -51,6 +47,7 @@ Operon.one features open registration, allowing anyone to sign up and use the pl
 - Extended plugin ecosystem
 - Cloud deployment options
 - General performance improvements and better handling
+- MCP support
 
 ## 📜 License
 
