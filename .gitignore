@@ -8,3 +8,4 @@ data/operonone.db
 .DS_Store
 .DS_Store
 /.cursor
+.vscode/extensions.json
