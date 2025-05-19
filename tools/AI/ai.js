@@ -166,8 +166,12 @@ Consider the entire context and all requirements before generating a response.
         if(!response?.choices?.[0]?.message?.content){
             console.log("No response from AI");
             console.log(response);
-            console.log(response.choices[0]);
             
+            if (response?.choices?.[0]?.message?.refusal) {
+                console.log("AI refusal:", response.choices[0].message.refusal);
+            } else if (response?.choices?.[0]?.message?.reasoning) {
+                console.log("AI reasoning:", response.choices[0].message.reasoning);
+            }
             
             toolState.lastError = "No response from AI";
             contextManager.setToolState('ai', toolState, userId, chatId);
