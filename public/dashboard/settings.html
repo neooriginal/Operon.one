@@ -66,33 +66,11 @@
             color: #fff;
             font-size: 1rem;
             cursor: pointer;
-            transition: transform 0.3s, background 0.3s;
-            position: relative;
-            z-index: 5;
+            transition: transform 0.3s;
         }
         
         button:hover {
             transform: translateY(-2px);
-        }
-        
-        button:active {
-            transform: translateY(0);
-            background: linear-gradient(135deg, #0ea5e9, #6366f1);
-        }
-        
-        button.secondary-button {
-            background: transparent;
-            color: var(--gray-light);
-            border: 1px solid var(--gray-dark);
-        }
-        
-        button.secondary-button:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: white;
-        }
-        
-        button.secondary-button:active {
-            background: rgba(255, 255, 255, 0.1);
         }
         
         .button-group {
@@ -232,7 +210,7 @@
                 <div class="loading-message">Loading MCP servers...</div>
             </div>
             
-            <button id="add-mcp-server" class="mcp-add-btn">
+            <button id="add-mcp-server" class="mcp-add-btn" type="button">
                 <i class="fas fa-plus"></i> Add New MCP Server
             </button>
             
@@ -255,8 +233,8 @@
                 </div>
                 
                 <div class="button-group">
-                    <button id="save-mcp-server">Save Server</button>
-                    <button id="cancel-mcp-server" class="secondary-button">Cancel</button>
+                    <button id="save-mcp-server" type="button">Save Server</button>
+                    <button id="cancel-mcp-server" class="secondary-button" type="button">Cancel</button>
                 </div>
             </div>
             
@@ -264,8 +242,8 @@
             <div id="error-message" class="error-message"></div>
 
             <div class="button-group" style="margin-top: 2rem;">
-                <button id="save">Save Changes</button>
-                <button id="reset">Reset to Default</button>
+                <button id="save" type="button">Save Changes</button>
+                <button id="reset" type="button">Reset to Default</button>
             </div>
             
         </div>
@@ -290,10 +268,6 @@
             const successMessage = document.getElementById('success-message');
             const errorMessage = document.getElementById('error-message');
             
-            // Get the main Save and Reset buttons
-            const saveButton = document.getElementById('save');
-            const resetButton = document.getElementById('reset');
-            
             let editMode = false;
             let currentEditName = '';
             let mcpServers = {};
@@ -317,9 +291,58 @@
             
             saveMcpServerBtn.addEventListener('click', saveServer);
             
-            // Add event listeners for the main Save and Reset buttons
-            saveButton.addEventListener('click', saveAllSettings);
-            resetButton.addEventListener('click', resetToDefault);
+            // Add event listeners for the main save and reset buttons
+            document.getElementById('save').addEventListener('click', () => {
+                // Save all changes (currently just saves MCP servers)
+                fetch('/api/settings/mcpServers', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value: mcpServers })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to save settings');
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    showSuccess('All settings saved successfully');
+                })
+                .catch(error => {
+                    console.error('Error saving settings:', error);
+                    showError('Failed to save settings: ' + error.message);
+                });
+            });
+            
+            document.getElementById('reset').addEventListener('click', () => {
+                if (confirm('Are you sure you want to reset all settings to default? This will remove all MCP servers.')) {
+                    mcpServers = {};
+                    renderServerList();
+                    
+                    fetch('/api/settings/mcpServers', {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok && response.status !== 404) {
+                            throw new Error('Failed to reset settings');
+                        }
+                        return response.status === 404 ? { success: true } : response.json();
+                    })
+                    .then(() => {
+                        showSuccess('Settings reset to default');
+                    })
+                    .catch(error => {
+                        console.error('Error resetting settings:', error);
+                        showError('Failed to reset settings: ' + error.message);
+                    });
+                }
+            });
             
             // Functions
             function loadMcpServers() {
@@ -508,9 +531,6 @@
                 successMessage.style.display = 'block';
                 errorMessage.style.display = 'none';
                 
-                // Scroll to the message to ensure it's visible
-                successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                
                 setTimeout(() => {
                     successMessage.style.display = 'none';
                 }, 3000);
@@ -520,65 +540,6 @@
                 errorMessage.textContent = message;
                 errorMessage.style.display = 'block';
                 successMessage.style.display = 'none';
-                
-                // Scroll to the message to ensure it's visible
-                errorMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-            
-            function saveAllSettings() {
-                // Save all current settings to the server
-                fetch('/api/settings/mcpServers', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ value: mcpServers })
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to save settings');
-                    }
-                    return response.json();
-                })
-                .then(() => {
-                    showSuccess('All settings saved successfully');
-                })
-                .catch(error => {
-                    console.error('Error saving settings:', error);
-                    showError('Failed to save settings: ' + error.message);
-                });
-            }
-            
-            function resetToDefault() {
-                if (confirm('Are you sure you want to reset all settings to default? This cannot be undone.')) {
-                    // Reset MCP servers to empty object
-                    mcpServers = {};
-                    
-                    // Save the reset settings
-                    fetch('/api/settings/mcpServers', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${authToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ value: mcpServers })
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Failed to reset settings');
-                        }
-                        return response.json();
-                    })
-                    .then(() => {
-                        renderServerList();
-                        showSuccess('Settings reset to default');
-                    })
-                    .catch(error => {
-                        console.error('Error resetting settings:', error);
-                        showError('Failed to reset settings: ' + error.message);
-                    });
-                }
             }
             
             // Fix scrolling issues
@@ -597,24 +558,6 @@
                         }
                     }
                 }, { passive: false });
-            });
-            
-            // Add visual feedback when buttons are clicked
-            document.querySelectorAll('button').forEach(button => {
-                button.addEventListener('mousedown', () => {
-                    button.style.transform = 'translateY(1px)';
-                    button.style.opacity = '0.9';
-                });
-                
-                button.addEventListener('mouseup', () => {
-                    button.style.transform = '';
-                    button.style.opacity = '';
-                });
-                
-                button.addEventListener('mouseleave', () => {
-                    button.style.transform = '';
-                    button.style.opacity = '';
-                });
             });
         });
     </script>
