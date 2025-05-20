@@ -1,0 +1,7 @@
+{
+  "title": "mcpClient",
+  "description": "Interacts with Model Context Protocol servers to access external data and tools",
+  "example": "mcpClient: Get weather data for New York City from the weather-api server",
+  "enabled": true,
+  "main": "index.js"
+} 
