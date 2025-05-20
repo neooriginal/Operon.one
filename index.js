@@ -129,14 +129,14 @@ loadTools();
  * @param {boolean} isFollowUp - Whether this is a follow-up request (default: false).
  * @returns {string} The final response to the user.
  */
-async function centralOrchestrator(question, userId = 'default', chatId = 1, isFollowUp = false) {
+async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = false) {
   try {
     // Validate inputs
     if (!question || typeof question !== 'string') {
       throw new Error('Invalid question format');
     }
     
-    if (!userId || userId === 'default') {
+    if (!userId) {
       throw new Error('Authentication required: valid user ID is mandatory for production use');
     }
     
