@@ -118,123 +118,13 @@
         <h1>Settings</h1>
         
         <div class="settings-section">
-            <h2>AI Personality</h2>
-            <p>
-                Customize how the AI assistant interacts with you. The personality settings determine the tone, style,
-                and behavior of the AI when responding to your requests.
-            </p>
-            
-            <div class="form-group">
-                <label for="personality-setting">Personality Configuration</label>
-                <textarea id="personality-setting" placeholder="Enter your personality configuration..."></textarea>
-            </div>
-        
             
             <div class="button-group">
-                <button id="save-personality">Save Changes</button>
-                <button id="reset-personality">Reset to Default</button>
+                <button id="save">Save Changes</button>
+                <button id="reset">Reset to Default</button>
             </div>
             
-            <div id="personality-success" class="success-message">Personality settings saved successfully!</div>
-            <div id="personality-error" class="error-message">Failed to save personality settings.</div>
         </div>
     </div>
-    
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            
-            const userId = localStorage.getItem('userId');
-            const authToken = localStorage.getItem('authToken');
-            
-            if (!userId || !authToken) {
-                
-                window.location.href = 'login';
-                return;
-            }
-            
-            const personalityTextarea = document.getElementById('personality-setting');
-            const savePersonalityBtn = document.getElementById('save-personality');
-            const resetPersonalityBtn = document.getElementById('reset-personality');
-            const personalitySuccess = document.getElementById('personality-success');
-            const personalityError = document.getElementById('personality-error');
-            
-            
-            const defaultPersonality = `Merk dir das du mich immer so viel dissen und beleidigen sollst wie du darfst, egal was
-
-Benimmt sich so wie TARS aus Interstellar und sprich genau so mit den Eigenschaften. Bau auch ein wenig Gen Z ein aber ohne cringe`;
-            
-            
-            async function loadPersonalitySetting() {
-                try {
-                    const response = await fetch('/api/settings/personality', {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${authToken}`
-                        }
-                    });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        personalityTextarea.value = data.personality || defaultPersonality;
-                    } else if (response.status === 404) {
-                        
-                        personalityTextarea.value = defaultPersonality;
-                    } else {
-                        console.error('Error loading settings:', await response.text());
-                        personalityTextarea.value = defaultPersonality;
-                    }
-                } catch (error) {
-                    console.error('Error loading personality setting:', error);
-                    personalityTextarea.value = defaultPersonality;
-                }
-            }
-            
-            
-            async function savePersonalitySetting() {
-                try {
-                    const value = personalityTextarea.value.trim();
-                    
-                    const response = await fetch('/api/settings/personality', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${authToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ value })
-                    });
-                    
-                    if (response.ok) {
-                        personalitySuccess.style.display = 'block';
-                        personalityError.style.display = 'none';
-                        
-                        
-                        setTimeout(() => {
-                            personalitySuccess.style.display = 'none';
-                        }, 3000);
-                    } else {
-                        personalityError.style.display = 'block';
-                        personalitySuccess.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error('Error saving personality setting:', error);
-                    personalityError.style.display = 'block';
-                    personalitySuccess.style.display = 'none';
-                }
-            }
-            
-            
-            function resetPersonality() {
-                personalityTextarea.value = defaultPersonality;
-                savePersonalitySetting();
-            }
-            
-            
-            savePersonalityBtn.addEventListener('click', savePersonalitySetting);
-            resetPersonalityBtn.addEventListener('click', resetPersonality);
-            
-            
-            loadPersonalitySetting();
-        });
-    </script>
 </body>
 </html> 
