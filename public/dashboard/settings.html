@@ -16,6 +16,8 @@
             padding: 2rem;
             max-width: 800px;
             margin: 0 auto;
+            max-height: 100vh;
+            overflow-y: auto;
         }
         
         .settings-section {
@@ -64,11 +66,33 @@
             color: #fff;
             font-size: 1rem;
             cursor: pointer;
-            transition: transform 0.3s;
+            transition: transform 0.3s, background 0.3s;
+            position: relative;
+            z-index: 5;
         }
         
         button:hover {
             transform: translateY(-2px);
+        }
+        
+        button:active {
+            transform: translateY(0);
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
+        }
+        
+        button.secondary-button {
+            background: transparent;
+            color: var(--gray-light);
+            border: 1px solid var(--gray-dark);
+        }
+        
+        button.secondary-button:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+        
+        button.secondary-button:active {
+            background: rgba(255, 255, 255, 0.1);
         }
         
         .button-group {
@@ -109,6 +133,88 @@
         .back-link i {
             margin-right: 0.5rem;
         }
+        
+        .mcp-server-item {
+            background-color: rgba(30, 41, 59, 0.5);
+            border-radius: 5px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+        
+        .mcp-server-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .mcp-server-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #e2e8f0;
+        }
+        
+        .mcp-server-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .mcp-server-content {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        
+        .mcp-add-btn {
+            margin-top: 1rem;
+        }
+        
+        .mcp-server-edit-form {
+            display: none;
+            margin-top: 1rem;
+        }
+        
+        .mcp-server-list {
+            max-height: 400px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Add scrollbar styling for Webkit browsers */
+        .mcp-server-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .mcp-server-list::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+        
+        .mcp-server-list::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+        
+        /* Ensure input fields display properly */
+        #mcp-name {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 5px;
+            border: 1px solid #1e293b;
+            background-color: #0f172a;
+            color: #fff;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            margin-bottom: 1rem;
+        }
+        
+        /* Fix any potential z-index issues */
+        #mcp-server-form {
+            position: relative;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -118,13 +224,399 @@
         <h1>Settings</h1>
         
         <div class="settings-section">
+            <h2>MCP Servers</h2>
+            <p>Configure model-context-protocol (MCP) servers to extend Operon.one capabilities. Each server should have a unique name and configuration.</p>
             
-            <div class="button-group">
+            <div id="mcp-server-list" class="mcp-server-list">
+                <!-- Server items will be dynamically added here -->
+                <div class="loading-message">Loading MCP servers...</div>
+            </div>
+            
+            <button id="add-mcp-server" class="mcp-add-btn">
+                <i class="fas fa-plus"></i> Add New MCP Server
+            </button>
+            
+            <div id="mcp-server-form" class="mcp-server-edit-form">
+                <div class="form-group">
+                    <label for="mcp-name">Server Name</label>
+                    <input type="text" id="mcp-name" class="welcome-input" placeholder="Enter a unique name for the server">
+                </div>
+                
+                <div class="form-group">
+                    <label for="mcp-config">Server Configuration (JSON format)</label>
+                    <textarea id="mcp-config" placeholder='{
+    "command": "npx",
+    "args": ["-y", "@package/mcp-server"],
+    "env": {
+        "ACCESS_TOKEN": "your-token",
+        "BASE_URL": "https://your-server-url.com"
+    }
+}'></textarea>
+                </div>
+                
+                <div class="button-group">
+                    <button id="save-mcp-server">Save Server</button>
+                    <button id="cancel-mcp-server" class="secondary-button">Cancel</button>
+                </div>
+            </div>
+            
+            <div id="success-message" class="success-message"></div>
+            <div id="error-message" class="error-message"></div>
+
+            <div class="button-group" style="margin-top: 2rem;">
                 <button id="save">Save Changes</button>
                 <button id="reset">Reset to Default</button>
             </div>
             
         </div>
     </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const authToken = localStorage.getItem('authToken');
+            if (!authToken) {
+                window.location.href = 'login';
+                return;
+            }
+            
+            // DOM Elements
+            const mcpServerList = document.getElementById('mcp-server-list');
+            const addMcpServerBtn = document.getElementById('add-mcp-server');
+            const mcpServerForm = document.getElementById('mcp-server-form');
+            const mcpNameInput = document.getElementById('mcp-name');
+            const mcpConfigInput = document.getElementById('mcp-config');
+            const saveMcpServerBtn = document.getElementById('save-mcp-server');
+            const cancelMcpServerBtn = document.getElementById('cancel-mcp-server');
+            const successMessage = document.getElementById('success-message');
+            const errorMessage = document.getElementById('error-message');
+            
+            // Get the main Save and Reset buttons
+            const saveButton = document.getElementById('save');
+            const resetButton = document.getElementById('reset');
+            
+            let editMode = false;
+            let currentEditName = '';
+            let mcpServers = {};
+            
+            // Load MCP servers
+            loadMcpServers();
+            
+            // Event Listeners
+            addMcpServerBtn.addEventListener('click', () => {
+                editMode = false;
+                currentEditName = '';
+                mcpNameInput.value = '';
+                mcpConfigInput.value = '';
+                mcpServerForm.style.display = 'block';
+                mcpNameInput.focus();
+            });
+            
+            cancelMcpServerBtn.addEventListener('click', () => {
+                mcpServerForm.style.display = 'none';
+            });
+            
+            saveMcpServerBtn.addEventListener('click', saveServer);
+            
+            // Add event listeners for the main Save and Reset buttons
+            saveButton.addEventListener('click', saveAllSettings);
+            resetButton.addEventListener('click', resetToDefault);
+            
+            // Functions
+            function loadMcpServers() {
+                fetch('/api/settings/mcpServers', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load MCP servers');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    try {
+                        mcpServers = data.mcpServers ? JSON.parse(data.mcpServers) : {};
+                    } catch (e) {
+                        mcpServers = {};
+                    }
+                    renderServerList();
+                })
+                .catch(error => {
+                    console.error('Error loading MCP servers:', error);
+                    mcpServers = {};
+                    renderServerList();
+                });
+            }
+            
+            function renderServerList() {
+                mcpServerList.innerHTML = '';
+                
+                if (Object.keys(mcpServers).length === 0) {
+                    mcpServerList.innerHTML = '<p style="color: var(--gray);">No MCP servers configured</p>';
+                    return;
+                }
+                
+                for (const [name, config] of Object.entries(mcpServers)) {
+                    const serverItem = document.createElement('div');
+                    serverItem.className = 'mcp-server-item';
+                    
+                    serverItem.innerHTML = `
+                        <div class="mcp-server-header">
+                            <div class="mcp-server-name">${name}</div>
+                            <div class="mcp-server-actions">
+                                <button class="edit-server-btn" data-name="${name}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="delete-server-btn" data-name="${name}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mcp-server-content">
+                            <div><strong>Command:</strong> ${config.command}</div>
+                            <div><strong>Args:</strong> ${JSON.stringify(config.args || [])}</div>
+                            <div><strong>Env Variables:</strong> ${Object.keys(config.env || {}).join(', ')}</div>
+                        </div>
+                    `;
+                    
+                    mcpServerList.appendChild(serverItem);
+                }
+                
+                // Add event listeners for edit and delete buttons
+                document.querySelectorAll('.edit-server-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const name = this.getAttribute('data-name');
+                        editServer(name);
+                    });
+                });
+                
+                document.querySelectorAll('.delete-server-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const name = this.getAttribute('data-name');
+                        deleteServer(name);
+                    });
+                });
+            }
+            
+            function saveServer() {
+                const name = mcpNameInput.value.trim();
+                const configText = mcpConfigInput.value.trim();
+                
+                if (!name) {
+                    showError('Server name is required');
+                    return;
+                }
+                
+                if (!configText) {
+                    showError('Server configuration is required');
+                    return;
+                }
+                
+                let config;
+                try {
+                    config = JSON.parse(configText);
+                } catch (e) {
+                    showError('Invalid JSON configuration');
+                    return;
+                }
+                
+                if (!config.command) {
+                    showError('Server configuration must include a "command" property');
+                    return;
+                }
+                
+                // In edit mode, if the name changed, delete the old entry
+                if (editMode && currentEditName !== name) {
+                    delete mcpServers[currentEditName];
+                }
+                
+                // Add/update the server
+                mcpServers[name] = config;
+                
+                // Save to server
+                fetch('/api/settings/mcpServers', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value: mcpServers })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to save MCP server');
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    showSuccess(editMode ? 'Server updated successfully' : 'Server added successfully');
+                    mcpServerForm.style.display = 'none';
+                    renderServerList();
+                })
+                .catch(error => {
+                    console.error('Error saving MCP server:', error);
+                    showError('Failed to save server: ' + error.message);
+                });
+            }
+            
+            function editServer(name) {
+                const config = mcpServers[name];
+                if (!config) return;
+                
+                editMode = true;
+                currentEditName = name;
+                mcpNameInput.value = name;
+                mcpConfigInput.value = JSON.stringify(config, null, 2);
+                mcpServerForm.style.display = 'block';
+            }
+            
+            function deleteServer(name) {
+                if (!confirm(`Are you sure you want to delete the MCP server "${name}"?`)) {
+                    return;
+                }
+                
+                delete mcpServers[name];
+                
+                // Save to server
+                fetch('/api/settings/mcpServers', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value: mcpServers })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to delete MCP server');
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    showSuccess('Server deleted successfully');
+                    renderServerList();
+                })
+                .catch(error => {
+                    console.error('Error deleting MCP server:', error);
+                    showError('Failed to delete server: ' + error.message);
+                });
+            }
+            
+            function showSuccess(message) {
+                successMessage.textContent = message;
+                successMessage.style.display = 'block';
+                errorMessage.style.display = 'none';
+                
+                // Scroll to the message to ensure it's visible
+                successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                
+                setTimeout(() => {
+                    successMessage.style.display = 'none';
+                }, 3000);
+            }
+            
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                successMessage.style.display = 'none';
+                
+                // Scroll to the message to ensure it's visible
+                errorMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            
+            function saveAllSettings() {
+                // Save all current settings to the server
+                fetch('/api/settings/mcpServers', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value: mcpServers })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to save settings');
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    showSuccess('All settings saved successfully');
+                })
+                .catch(error => {
+                    console.error('Error saving settings:', error);
+                    showError('Failed to save settings: ' + error.message);
+                });
+            }
+            
+            function resetToDefault() {
+                if (confirm('Are you sure you want to reset all settings to default? This cannot be undone.')) {
+                    // Reset MCP servers to empty object
+                    mcpServers = {};
+                    
+                    // Save the reset settings
+                    fetch('/api/settings/mcpServers', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ value: mcpServers })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Failed to reset settings');
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        renderServerList();
+                        showSuccess('Settings reset to default');
+                    })
+                    .catch(error => {
+                        console.error('Error resetting settings:', error);
+                        showError('Failed to reset settings: ' + error.message);
+                    });
+                }
+            }
+            
+            // Fix scrolling issues
+            const scrollableElements = document.querySelectorAll('.mcp-server-list, .settings-container');
+            scrollableElements.forEach(el => {
+                el.addEventListener('wheel', (e) => {
+                    // Check if scrolling is needed
+                    const isScrollNeeded = el.scrollHeight > el.clientHeight;
+                    if (isScrollNeeded) {
+                        const isAtTop = el.scrollTop === 0;
+                        const isAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight;
+                        
+                        // Only prevent default if we're not at the boundary in the scroll direction
+                        if ((e.deltaY < 0 && !isAtTop) || (e.deltaY > 0 && !isAtBottom)) {
+                            e.stopPropagation();
+                        }
+                    }
+                }, { passive: false });
+            });
+            
+            // Add visual feedback when buttons are clicked
+            document.querySelectorAll('button').forEach(button => {
+                button.addEventListener('mousedown', () => {
+                    button.style.transform = 'translateY(1px)';
+                    button.style.opacity = '0.9';
+                });
+                
+                button.addEventListener('mouseup', () => {
+                    button.style.transform = '';
+                    button.style.opacity = '';
+                });
+                
+                button.addEventListener('mouseleave', () => {
+                    button.style.transform = '';
+                    button.style.opacity = '';
+                });
+            });
+        });
+    </script>
 </body>
 </html> 

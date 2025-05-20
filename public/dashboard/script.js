@@ -1193,4 +1193,47 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
     }
+
+    /**
+     * Retrieves the MCP servers configured for the current user
+     * @returns {Promise<Object>} Object containing MCP server configurations
+     */
+    async function getMcpServers() {
+        const authToken = localStorage.getItem('authToken');
+        if (!authToken) {
+            throw new Error('Authentication required');
+        }
+
+        try {
+            const response = await fetch('/api/settings/mcpServers', {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to retrieve MCP servers');
+            }
+
+            const data = await response.json();
+            return data.mcpServers ? JSON.parse(data.mcpServers) : {};
+        } catch (error) {
+            console.error('Error retrieving MCP servers:', error);
+            return {};
+        }
+    }
+
+    /**
+     * Gets details for a specific MCP server by name
+     * @param {string} serverName - Name of the server to retrieve
+     * @returns {Promise<Object|null>} Server configuration or null if not found
+     */
+    async function getMcpServerByName(serverName) {
+        const servers = await getMcpServers();
+        return servers[serverName] || null;
+    }
+
+    // Make functions available in the global scope
+    window.getMcpServers = getMcpServers;
+    window.getMcpServerByName = getMcpServerByName;
 }); 
