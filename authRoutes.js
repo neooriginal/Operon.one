@@ -220,6 +220,99 @@ router.delete('/settings/:key', authenticateToken, async (req, res) => {
 });
 
 /**
+ * Get MCP servers configuration for the user
+ * @route GET /settings/mcpServers
+ * @param {string} req.headers.authorization - Bearer token
+ * @returns {Object} 200 - MCP servers configuration
+ * @returns {Object} 404 - No MCP servers configured
+ * @returns {Object} 500 - Server error
+ */
+router.get('/settings/mcpServers', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mcpServersJson = await settingsFunctions.getSetting(userId, 'mcpServers');
+    
+    if (mcpServersJson === null) {
+      return res.status(200).json({ mcpServers: '{}' });
+    }
+    
+    res.status(200).json({ mcpServers: mcpServersJson });
+  } catch (error) {
+    console.error('Error getting MCP servers:', error);
+    res.status(500).json({ error: 'Failed to retrieve MCP servers' });
+  }
+});
+
+/**
+ * Save MCP servers configuration for the user
+ * @route POST /settings/mcpServers
+ * @param {string} req.headers.authorization - Bearer token
+ * @param {Object} req.body.value - MCP servers configuration object
+ * @returns {Object} 200 - Success confirmation with saved data
+ * @returns {Object} 400 - Invalid configuration format
+ * @returns {Object} 500 - Server error
+ */
+router.post('/settings/mcpServers', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { value } = req.body;
+    
+    if (!value || typeof value !== 'object') {
+      return res.status(400).json({ error: 'Invalid MCP servers configuration format' });
+    }
+    
+    // Validate each server configuration
+    for (const [serverName, config] of Object.entries(value)) {
+      if (!config.command || !Array.isArray(config.args)) {
+        return res.status(400).json({ 
+          error: `Invalid configuration for server '${serverName}': command and args are required` 
+        });
+      }
+      
+      // Validate environment variables if provided
+      if (config.env && typeof config.env !== 'object') {
+        return res.status(400).json({ 
+          error: `Invalid environment variables for server '${serverName}'` 
+        });
+      }
+    }
+    
+    const mcpServersJson = JSON.stringify(value);
+    await settingsFunctions.saveSetting(userId, 'mcpServers', mcpServersJson);
+    
+    res.status(200).json({ success: true, mcpServers: value });
+  } catch (error) {
+    console.error('Error saving MCP servers:', error);
+    res.status(500).json({ error: 'Failed to save MCP servers configuration' });
+  }
+});
+
+/**
+ * Delete MCP servers configuration for the user
+ * @route DELETE /settings/mcpServers
+ * @param {string} req.headers.authorization - Bearer token
+ * @returns {Object} 200 - Success confirmation
+ * @returns {Object} 404 - No MCP servers configured
+ * @returns {Object} 500 - Server error
+ */
+router.delete('/settings/mcpServers', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const existingValue = await settingsFunctions.getSetting(userId, 'mcpServers');
+    if (existingValue === null) {
+      return res.status(404).json({ error: 'No MCP servers configuration found' });
+    }
+    
+    await settingsFunctions.deleteSetting(userId, 'mcpServers');
+    res.status(200).json({ success: true, message: 'MCP servers configuration deleted' });
+  } catch (error) {
+    console.error('Error deleting MCP servers:', error);
+    res.status(500).json({ error: 'Failed to delete MCP servers configuration' });
+  }
+});
+
+/**
  * Middleware to authenticate JWT token
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
