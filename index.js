@@ -354,8 +354,7 @@ async function executeSteps(plan, question, userId, chatId) {
       output: summary 
     };
     
-    console.log(`[Orchestrator] Storing step output:`, JSON.stringify(stepOutput, null, 2));
-    
+
     contextManager.addStepOutput(stepOutput, userId, chatId);
     
     // Reflect on result
