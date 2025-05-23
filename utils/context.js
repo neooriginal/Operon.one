@@ -146,12 +146,21 @@ class Context {
   }
 
   
-  addStepOutput(stepParam, actionParam, outputParam, userId = 'default') {
-    const context = this.getContext(userId);
+  addStepOutput(stepParam, actionParam, outputParam, userId = 'default', chatId = 1) {
     let stepOutput;
+    let actualUserId = userId;
+    let actualChatId = chatId;
     
     
     if (typeof stepParam === 'object' && stepParam !== null) {
+      // When called with object as first param: addStepOutput(stepObject, userId, chatId)
+      // The second and third params are actually userId and chatId
+      if (typeof actionParam === 'string') {
+        actualUserId = actionParam;
+      }
+      if (typeof outputParam === 'number') {
+        actualChatId = outputParam;
+      }
       
       stepOutput = {
         step: stepParam.step,
@@ -161,7 +170,7 @@ class Context {
         error: stepParam.error || null
       };
     } else {
-      
+      // When called with individual params: addStepOutput(step, action, output, userId, chatId)
       stepOutput = { 
         step: stepParam, 
         action: actionParam, 
@@ -171,16 +180,17 @@ class Context {
       };
     }
     
+    const context = this.getContext(actualUserId, actualChatId);
     context.stepsOutput.push(stepOutput);
     return stepOutput;
   }
 
-  getStepsOutput(userId = 'default') {
-    return this.getContext(userId).stepsOutput;
+  getStepsOutput(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).stepsOutput;
   }
 
-  getFilteredStepsOutput(filter, userId = 'default') {
-    const context = this.getContext(userId);
+  getFilteredStepsOutput(filter, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     if (!filter || filter === 'none') return [];
     
     const requestedTools = filter.split(',').map(tool => tool.trim());
@@ -194,44 +204,44 @@ class Context {
   }
 
   
-  setPlan(plan, userId = 'default') {
-    this.getContext(userId).plan = plan;
+  setPlan(plan, userId = 'default', chatId = 1) {
+    this.getContext(userId, chatId).plan = plan;
   }
 
-  getPlan(userId = 'default') {
-    return this.getContext(userId).plan;
+  getPlan(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).plan;
   }
 
-  updatePlan(newPlan, userId = 'default') {
-    this.getContext(userId).plan = newPlan;
+  updatePlan(newPlan, userId = 'default', chatId = 1) {
+    this.getContext(userId, chatId).plan = newPlan;
     return newPlan;
   }
 
   
-  getCurrentStepIndex(userId = 'default') {
-    return this.getContext(userId).currentStepIndex;
+  getCurrentStepIndex(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).currentStepIndex;
   }
 
-  incrementStepIndex(userId = 'default') {
-    const context = this.getContext(userId);
+  incrementStepIndex(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     context.currentStepIndex++;
     return context.currentStepIndex;
   }
 
-  setCurrentStepIndex(index, userId = 'default') {
-    const context = this.getContext(userId);
+  setCurrentStepIndex(index, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     context.currentStepIndex = index;
     return context.currentStepIndex;
   }
 
   
-  setQuestion(question, userId = 'default') {
-    this.getContext(userId).question = question;
+  setQuestion(question, userId = 'default', chatId = 1) {
+    this.getContext(userId, chatId).question = question;
     return question;
   }
 
-  getQuestion(userId = 'default') {
-    return this.getContext(userId).question;
+  getQuestion(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).question;
   }
 
   

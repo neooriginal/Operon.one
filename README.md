@@ -47,7 +47,6 @@ npm start
 - Extended plugin ecosystem
 - Cloud deployment options
 - General performance improvements and better handling
-- MCP support
 
 ## 📜 License
 

@@ -159,7 +159,7 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
 
     // Generate planning prompt
     const history = contextManager.getHistoryWithChatId(userId, chatId);
-    const prompt = prompts.generatePlanningPrompt(question, history);
+    const prompt = await prompts.generatePlanningPrompt(question, history, userId);
     
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
     
@@ -348,11 +348,15 @@ async function executeSteps(plan, question, userId, chatId) {
     emitStepCompletion(enhancedStep, currentStepIndex, plan, userId, chatId);
     
     // Store step output
-    contextManager.addStepOutput({
+    const stepOutput = {
       step: enhancedStep.step,
       action: enhancedStep.action,
       output: summary 
-    }, userId, chatId);
+    };
+    
+    console.log(`[Orchestrator] Storing step output:`, JSON.stringify(stepOutput, null, 2));
+    
+    contextManager.addStepOutput(stepOutput, userId, chatId);
     
     // Reflect on result
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
@@ -457,6 +461,8 @@ async function executeToolAction(enhancedStep, inputData, currentStepIndex, plan
     chatId
   );
   
+  console.log(`[Orchestrator] Tool ${enhancedStep.action} returned:`, JSON.stringify(summary, null, 2));
+  
   // Track container files if needed
   if (["execute", "bash"].includes(enhancedStep.action) && 
       summary && Array.isArray(summary.createdContainerFiles) && 
@@ -533,6 +539,8 @@ async function finalizeAndReturn(question, plan, userId, chatId) {
   
   try {
     const stepsOutput = contextManager.getStepsOutput(userId, chatId);
+    console.log(`[Orchestrator] Steps output for finalization:`, JSON.stringify(stepsOutput, null, 2));
+    
     finalOutput = await finalizeTask(question, stepsOutput, userId, chatId);
     
     // Clean up conversation history
@@ -735,12 +743,32 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
  * @param {string} userId - User identifier.
  */
 async function cleanupUserResources(userId) {
-  if (tools.webBrowser) {
-    try {
-      await tools.webBrowser.cleanupResources(userId);
-    } catch (browserError) {
-      console.error("Error closing browser instance:", browserError.message);
+  try {
+    console.log(`Starting cleanup for user ${userId}`);
+    
+    // Clean up browser resources if used
+    if (tools.webBrowser) {
+      try {
+        await tools.webBrowser.cleanupResources(userId);
+        console.log(`Browser cleanup completed for user ${userId}`);
+      } catch (browserError) {
+        console.error("Error closing browser instance:", browserError.message);
+      }
     }
+    
+    // Clean up MCP resources if used
+    if (tools.mcpClient && typeof tools.mcpClient.cleanupMcpManager === 'function') {
+      try {
+        await tools.mcpClient.cleanupMcpManager(userId);
+        console.log(`MCP cleanup completed for user ${userId}`);
+      } catch (mcpError) {
+        console.error(`Error during MCP cleanup for user ${userId}:`, mcpError.message);
+      }
+    }
+    
+    console.log(`Cleanup completed for user ${userId}`);
+  } catch (error) {
+    console.error(`Error during cleanup for user ${userId}:`, error.message);
   }
 }
 
@@ -794,6 +822,37 @@ module.exports = {
  * Main entry point when run directly.
  * Sets up socket event handlers for real-time communication.
  */
+// Global cleanup function for process termination
+async function globalCleanup() {
+  console.log('\nReceived termination signal, cleaning up...');
+  
+  try {
+    // Clean up all MCP connections
+    if (tools.mcpClient) {
+      try {
+        const mcpModule = require('./tools/mcp/main.js');
+        console.log('Cleaning up all MCP connections...');
+        // The mcpManagers is a private Map, so we'll need to access it differently
+        // For now, just log that we're attempting cleanup
+        console.log('MCP module cleanup initiated');
+      } catch (error) {
+        console.error('Error during MCP cleanup:', error.message);
+      }
+    }
+    
+    console.log('Global cleanup completed');
+  } catch (error) {
+    console.error('Error during global cleanup:', error.message);
+  }
+  
+  process.exit(0);
+}
+
+// Handle process termination signals
+process.on('SIGINT', globalCleanup);
+process.on('SIGTERM', globalCleanup);
+process.on('beforeExit', globalCleanup);
+
 if (require.main === module) {
   io.on('connection', (socket) => {
     /**

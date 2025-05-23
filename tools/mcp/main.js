@@ -1,11 +1,6 @@
 /**
- * @fileoverview MCP (Model Context Protocol) Client Module
- * This module provides functionality to connect to and interact with MCP servers,
- * allowing the AI to use external tools and resources through the standardized MCP protocol.
- * 
- * @module McpClient
- * @version 1.0.0
- * @author Operon.one
+ * MCP Client Module
+ * Connects to and interacts with MCP servers
  */
 
 const { spawn } = require('child_process');
@@ -77,50 +72,19 @@ class McpClient extends EventEmitter {
      */
     constructor(serverName, config, userId) {
         super();
-        
-        /** @type {string} */
         this.serverName = serverName;
-        
-        /** @type {McpTypes.McpServerConfig} */
-        this.config = {
-            timeout: 30000,
-            autoRestart: false,
-            ...config
-        };
-        
-        /** @type {string} */
+        this.config = { timeout: 30000, autoRestart: false, ...config };
         this.userId = userId;
-        
-        /** @type {import('child_process').ChildProcess|null} */
         this.serverProcess = null;
-        
-        /** @type {boolean} */
         this.isConnected = false;
-        
-        /** @type {boolean} */
         this.isInitialized = false;
-        
-        /** @type {Map<string|number, Function>} */
         this.pendingRequests = new Map();
-        
-        /** @type {number} */
         this.requestId = 1;
-        
-        /** @type {McpTypes.McpTool[]} */
         this.availableTools = [];
-        
-        /** @type {McpTypes.McpResource[]} */
         this.availableResources = [];
-        
-        /** @type {McpTypes.McpPrompt[]} */
         this.availablePrompts = [];
-        
-        /** @type {string} */
         this.serverCapabilities = {};
-        
-        /** @type {NodeJS.Timeout|null} */
         this.connectionTimeout = null;
-        
         this._setupErrorHandling();
     }
 
@@ -525,27 +489,32 @@ class McpClient extends EventEmitter {
             // Set up timeout
             const timeout = setTimeout(() => {
                 this.pendingRequests.delete(id);
-                reject(new Error(`Request timeout for method: ${method}`));
+                reject(new Error(`Request timeout for method: ${method} after ${this.config.timeout}ms`));
             }, this.config.timeout);
 
             // Store pending request
             this.pendingRequests.set(id, (response) => {
                 clearTimeout(timeout);
+                this._log(`Received response for ${method}:`, response);
+                
                 if (response.error) {
-                    reject(new Error(`MCP Error: ${response.error.message || response.error.code}`));
+                    const errorMsg = response.error.message || response.error.code || 'Unknown MCP error';
+                    reject(new Error(`MCP Error (${method}): ${errorMsg}`));
                 } else {
-                    resolve(response.result || {});
+                    // Ensure we return the result, even if it's null or undefined
+                    resolve(response.result !== undefined ? response.result : {});
                 }
             });
 
             // Send the message
             try {
                 const messageStr = JSON.stringify(message) + '\n';
+                this._log(`Sending request ${id} for ${method}:`, message);
                 this.serverProcess.stdin.write(messageStr);
             } catch (error) {
                 clearTimeout(timeout);
                 this.pendingRequests.delete(id);
-                reject(error);
+                reject(new Error(`Failed to send request: ${error.message}`));
             }
         });
     }
@@ -652,9 +621,36 @@ class McpClient extends EventEmitter {
             }
             this.pendingRequests.clear();
             
-            // Close server process
+            // Close server process more forcefully
             if (this.serverProcess && !this.serverProcess.killed) {
-                this.serverProcess.kill();
+                try {
+                    // Try graceful shutdown first
+                    this.serverProcess.kill('SIGTERM');
+                    
+                    // Wait a moment for graceful shutdown
+                    await new Promise((resolve) => {
+                        const timeout = setTimeout(() => {
+                            // Force kill if graceful shutdown didn't work
+                            if (this.serverProcess && !this.serverProcess.killed) {
+                                this.serverProcess.kill('SIGKILL');
+                            }
+                            resolve();
+                        }, 2000);
+                        
+                        if (this.serverProcess) {
+                            this.serverProcess.on('exit', () => {
+                                clearTimeout(timeout);
+                                resolve();
+                            });
+                        } else {
+                            clearTimeout(timeout);
+                            resolve();
+                        }
+                    });
+                } catch (killError) {
+                    this._log('Error killing server process:', killError.message);
+                }
+                
                 this.serverProcess = null;
             }
             
@@ -805,19 +801,22 @@ class McpClientManager {
      * @throws {Error} When connection fails
      */
     async connectToServer(serverName, config = null) {
-        // Use provided config or get from loaded configs
+        // Security: Only allow connection to servers configured by this user
         const serverConfig = config || this.serverConfigs[serverName];
         
         if (!serverConfig) {
             throw new Error(`No configuration found for server: ${serverName}`);
         }
         
-        // Disconnect existing client if any
+        // Security: Verify this server belongs to the current user
+        if (!config && !this.serverConfigs[serverName]) {
+            throw new Error(`Access denied: Server ${serverName} not configured for user ${this.userId}`);
+        }
+        
         if (this.clients.has(serverName)) {
             await this.disconnectFromServer(serverName);
         }
         
-        // Create and connect new client
         const client = new McpClient(serverName, serverConfig, this.userId);
         
         try {
@@ -914,16 +913,16 @@ class McpClientManager {
         return allResources;
     }
 
-         /**
-      * Calls a tool on a specific server
-      * @async
-      * @param {string} serverName - Name of the server
-      * @param {string} toolName - Name of the tool
-      * @param {Object} [toolArgs={}] - Tool arguments
-      * @returns {Promise<Object>} Tool execution result
-      * @throws {Error} When server not connected or tool call fails
-      */
-     async callTool(serverName, toolName, toolArgs = {}) {
+    /**
+     * Calls a tool on a specific server
+     * @async
+     * @param {string} serverName - Name of the server
+     * @param {string} toolName - Name of the tool
+     * @param {Object} [toolArgs={}] - Tool arguments
+     * @returns {Promise<Object>} Tool execution result
+     * @throws {Error} When server not connected or tool call fails
+     */
+    async callTool(serverName, toolName, toolArgs = {}) {
         const client = this.clients.get(serverName);
         
         if (!client) {
@@ -934,7 +933,7 @@ class McpClientManager {
             throw new Error(`Server ${serverName} is not connected`);
         }
         
-                 return await client.callTool(toolName, toolArgs);
+        return await client.callTool(toolName, toolArgs);
     }
 
     /**
@@ -976,6 +975,59 @@ function getMcpManager(userId) {
 }
 
 /**
+ * Cleans up MCP manager for a specific user
+ * @param {string} userId - User ID
+ */
+async function cleanupMcpManager(userId) {
+    if (mcpManagers.has(userId)) {
+        const manager = mcpManagers.get(userId);
+        try {
+            await manager.disconnectFromAllServers();
+            mcpManagers.delete(userId);
+            console.log(`[MCP-Client] Cleaned up manager for user ${userId}`);
+        } catch (error) {
+            console.error(`[MCP-Client] Error cleaning up manager for user ${userId}:`, error.message);
+        }
+    }
+}
+
+/**
+ * Gets available MCP tools for AI planning
+ * @async
+ * @param {string} [userId='default'] - User ID for context management
+ * @returns {Promise<Object>} Available tools organized by server
+ */
+async function getAvailableTools(userId = 'default') {
+    try {
+        const mcpManager = getMcpManager(userId);
+        
+        // Ensure we're connected to servers
+        if (mcpManager.getConnectedServers().length === 0) {
+            await mcpManager.connectToAllServers();
+        }
+        
+        const allTools = mcpManager.getAllAvailableTools();
+        const toolsForAI = {};
+        
+        // Format tools for AI discovery
+        for (const [serverName, tools] of Object.entries(allTools)) {
+            toolsForAI[serverName] = tools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                server: serverName,
+                fullName: `${serverName}.${tool.name}`,
+                inputSchema: tool.inputSchema
+            }));
+        }
+        
+        return toolsForAI;
+    } catch (error) {
+        console.error('[MCP-Client] Failed to get available tools:', error.message);
+        return {};
+    }
+}
+
+/**
  * Main task runner function for the MCP client tool
  * @async
  * @param {string} taskDescription - Description of the task to perform
@@ -986,6 +1038,8 @@ function getMcpManager(userId) {
  * @returns {Promise<Object>} Task execution result
  */
 async function runTask(taskDescription, otherAIData, stepCallback, userId = 'default', chatId = '1') {
+    let taskIntent; // Declare outside try block for error logging
+    
     try {
         console.log('[MCP-Client] Starting MCP task:', taskDescription);
         
@@ -993,7 +1047,9 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
         const mcpManager = getMcpManager(userId);
         
         // Parse the task to understand what MCP action is needed
-        const taskIntent = await parseTaskIntent(taskDescription, otherAIData);
+        taskIntent = await parseTaskIntent(taskDescription, otherAIData);
+        
+        console.log('[MCP-Client] Parsed task intent:', JSON.stringify(taskIntent, null, 2));
         
         // Connect to servers if not already connected
         if (mcpManager.getConnectedServers().length === 0) {
@@ -1003,23 +1059,36 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
         
         let result;
         
+        console.log('[MCP-Client] Executing action:', taskIntent.action);
+        
         switch (taskIntent.action) {
             case 'list_tools':
+                console.log('[MCP-Client] Executing list_tools for server:', taskIntent.serverName);
                 result = await handleListTools(mcpManager, taskIntent.serverName);
                 break;
             case 'list_resources':
+                console.log('[MCP-Client] Executing list_resources for server:', taskIntent.serverName);
                 result = await handleListResources(mcpManager, taskIntent.serverName);
                 break;
             case 'call_tool':
-                result = await handleCallTool(mcpManager, taskIntent.serverName, taskIntent.toolName, taskIntent.arguments);
+                console.log('[MCP-Client] Executing call_tool:', taskIntent.serverName, taskIntent.toolName);
+                result = await handleCallTool(mcpManager, taskIntent.serverName, taskIntent.toolName, taskIntent.toolArguments);
                 break;
             case 'read_resource':
+                console.log('[MCP-Client] Executing read_resource:', taskIntent.serverName, taskIntent.uri);
                 result = await handleReadResource(mcpManager, taskIntent.serverName, taskIntent.uri);
                 break;
             case 'list_servers':
+                console.log('[MCP-Client] Executing list_servers');
                 result = await handleListServers(mcpManager);
                 break;
+            case 'get_available_tools':
+                console.log('[MCP-Client] Executing get_available_tools');
+                result = await getAvailableTools(userId);
+                stepCallback({ success: true, result: 'Retrieved available MCP tools for AI planning' });
+                return { success: true, data: result };
             default:
+                console.log('[MCP-Client] Executing generic task handling');
                 result = await handleGenericMcpTask(mcpManager, taskDescription, otherAIData);
         }
         
@@ -1033,13 +1102,18 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
         };
         contextManager.setToolState('mcpClient', toolState, userId);
         
+        console.log('[MCP-Client] Task result:', JSON.stringify(result, null, 2));
+        
         stepCallback({ success: true, result: result });
         
-        console.log('[MCP-Client] Task completed successfully');
+        console.log('[MCP-Client] Task completed successfully, returning:', { success: true, data: result });
         return { success: true, data: result };
         
     } catch (error) {
         console.error('[MCP-Client] Task failed:', error.message);
+        console.error('[MCP-Client] Error stack:', error.stack);
+        console.error('[MCP-Client] Task description was:', taskDescription);
+        console.error('[MCP-Client] Task intent was:', JSON.stringify(taskIntent, null, 2));
         
         stepCallback({ success: false, error: error.message });
         
@@ -1060,37 +1134,92 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
 async function parseTaskIntent(taskDescription, otherAIData) {
     const description = taskDescription.toLowerCase();
     
-    // Simple pattern matching for now - could be enhanced with AI parsing
-    if (description.includes('list tools') || description.includes('show tools') || description.includes('available tools')) {
-        return { action: 'list_tools', serverName: extractServerName(taskDescription) };
+    console.log('[MCP-Client] Parsing task description:', taskDescription);
+    
+    // Enhanced pattern matching for better detection
+    
+    // Check for listing available MCP tools
+    if (description.includes('list tools') || description.includes('show tools') || 
+        description.includes('available tools') || description.includes('what tools')) {
+        const serverName = extractServerName(taskDescription);
+        console.log('[MCP-Client] Detected list_tools action for server:', serverName);
+        return { action: 'list_tools', serverName: serverName };
     }
     
-    if (description.includes('list resources') || description.includes('show resources') || description.includes('available resources')) {
-        return { action: 'list_resources', serverName: extractServerName(taskDescription) };
+    // Check for listing MCP resources
+    if (description.includes('list resources') || description.includes('show resources') || 
+        description.includes('available resources')) {
+        const serverName = extractServerName(taskDescription);
+        console.log('[MCP-Client] Detected list_resources action for server:', serverName);
+        return { action: 'list_resources', serverName: serverName };
     }
     
-    if (description.includes('list servers') || description.includes('show servers') || description.includes('connected servers')) {
+    // Check for direct tool call patterns
+    if (description.includes('call tool') || description.includes('use tool') || 
+        description.includes('execute tool') || description.includes('run tool')) {
+        const serverName = extractServerName(taskDescription);
+        const toolName = extractToolName(taskDescription);
+        const toolArguments = extractArguments(taskDescription);
+        
+        console.log('[MCP-Client] Detected call_tool action:', { serverName, toolName, toolArguments });
+        return {
+            action: 'call_tool',
+            serverName: serverName,
+            toolName: toolName,
+            toolArguments: toolArguments
+        };
+    }
+    
+    // Check for resource reading patterns
+    if (description.includes('read resource') || description.includes('get resource')) {
+        const serverName = extractServerName(taskDescription);
+        const uri = extractResourceUri(taskDescription);
+        
+        console.log('[MCP-Client] Detected read_resource action:', { serverName, uri });
+        return {
+            action: 'read_resource',
+            serverName: serverName,
+            uri: uri
+        };
+    }
+    
+    // Enhanced pattern: Detect when user wants to use a specific MCP server to perform an action
+    // This handles cases like "List all Coolify servers" which should call the list-servers tool
+    const serverPattern = /\b(\w+)\s+servers?\b/i;
+    const serverMatch = taskDescription.match(serverPattern);
+    
+    if (serverMatch && (description.includes('list') || description.includes('show') || description.includes('get'))) {
+        const potentialServerName = serverMatch[1].toLowerCase();
+        
+        // Don't treat generic words as server names
+        if (!['mcp', 'connected', 'available', 'all'].includes(potentialServerName)) {
+            console.log('[MCP-Client] Detected tool call pattern for server action:', potentialServerName);
+            
+            // Try to infer the tool name based on the action
+            let toolName = 'list-servers'; // default assumption
+            if (description.includes('status') || description.includes('statuses')) {
+                toolName = 'list-servers'; // most servers use this for status info
+            }
+            
+            return {
+                action: 'call_tool',
+                serverName: potentialServerName,
+                toolName: toolName,
+                toolArguments: {}
+            };
+        }
+    }
+    
+    // Check for listing connected MCP servers (not the servers managed by those servers)
+    if ((description.includes('list') && description.includes('mcp') && description.includes('servers')) ||
+        (description.includes('show') && description.includes('connected') && description.includes('servers')) ||
+        description.includes('connected mcp servers')) {
+        console.log('[MCP-Client] Detected list_servers action (MCP servers)');
         return { action: 'list_servers' };
     }
     
-    if (description.includes('call tool') || description.includes('use tool') || description.includes('execute tool')) {
-        return {
-            action: 'call_tool',
-            serverName: extractServerName(taskDescription),
-            toolName: extractToolName(taskDescription),
-            arguments: extractArguments(taskDescription)
-        };
-    }
-    
-    if (description.includes('read resource') || description.includes('get resource')) {
-        return {
-            action: 'read_resource',
-            serverName: extractServerName(taskDescription),
-            uri: extractResourceUri(taskDescription)
-        };
-    }
-    
     // Default to generic task handling
+    console.log('[MCP-Client] No specific action detected, using generic handling');
     return {
         action: 'generic',
         description: taskDescription,
@@ -1218,17 +1347,81 @@ async function handleListResources(mcpManager, serverName = null) {
  * @param {McpClientManager} mcpManager - The MCP manager
  * @param {string|null} serverName - Server name
  * @param {string|null} toolName - Tool name
- * @param {Object} arguments - Tool arguments
+ * @param {Object} toolArguments - Tool arguments
  * @returns {Promise<string>} Tool execution result
  */
-async function handleCallTool(mcpManager, serverName, toolName, arguments) {
+async function handleCallTool(mcpManager, serverName, toolName, toolArguments) {
     if (!serverName || !toolName) {
         throw new Error('Server name and tool name are required for tool calls');
     }
     
-    const result = await mcpManager.callTool(serverName, toolName, arguments);
-    
-    return `Tool ${toolName} on server ${serverName} executed successfully:\n${JSON.stringify(result, null, 2)}`;
+    try {
+        console.log(`[MCP-Client] Calling tool ${toolName} on server ${serverName} with args:`, toolArguments);
+        
+        // Try the original tool name first
+        let result;
+        try {
+            result = await mcpManager.callTool(serverName, toolName, toolArguments);
+        } catch (error) {
+            // If tool not found, try alternative naming conventions
+            if (error.message.includes('not found')) {
+                let alternativeToolName;
+                
+                // Try converting between underscore and hyphen
+                if (toolName.includes('-')) {
+                    alternativeToolName = toolName.replace(/-/g, '_');
+                } else if (toolName.includes('_')) {
+                    alternativeToolName = toolName.replace(/_/g, '-');
+                }
+                
+                if (alternativeToolName) {
+                    console.log(`[MCP-Client] Tool ${toolName} not found, trying alternative: ${alternativeToolName}`);
+                    try {
+                        result = await mcpManager.callTool(serverName, alternativeToolName, toolArguments);
+                        toolName = alternativeToolName; // Update for logging
+                    } catch (altError) {
+                        throw error; // Throw original error if alternative also fails
+                    }
+                } else {
+                    throw error; // No alternative to try
+                }
+            } else {
+                throw error; // Different error, re-throw
+            }
+        }
+        
+        console.log(`[MCP-Client] Tool ${toolName} returned:`, result);
+        
+        // Format the result for better readability
+        let formattedResult = `Tool ${toolName} on server ${serverName} executed successfully:\n\n`;
+        
+        if (result && result.content) {
+            // Handle MCP content format
+            if (Array.isArray(result.content)) {
+                result.content.forEach((item, index) => {
+                    if (item.type === 'text') {
+                        formattedResult += item.text + '\n';
+                    } else {
+                        formattedResult += `Content ${index + 1}: ${JSON.stringify(item, null, 2)}\n`;
+                    }
+                });
+            } else {
+                formattedResult += JSON.stringify(result.content, null, 2);
+            }
+        } else if (result && typeof result === 'object') {
+            formattedResult += JSON.stringify(result, null, 2);
+        } else if (result) {
+            formattedResult += String(result);
+        } else {
+            formattedResult += 'Tool executed successfully (no return data)';
+        }
+        
+        return formattedResult;
+        
+    } catch (error) {
+        console.error(`[MCP-Client] Tool call failed:`, error);
+        throw new Error(`Failed to call tool ${toolName} on server ${serverName}: ${error.message}`);
+    }
 }
 
 /**
@@ -1280,6 +1473,66 @@ async function handleListServers(mcpManager) {
 }
 
 /**
+ * Enhanced capability discovery for AI planning
+ * This returns MCP tools in a format that can be used directly by the AI planning system
+ * @async
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Enhanced MCP tools description for AI planning
+ */
+async function getMcpToolsForAI(userId = 'default') {
+    try {
+        const mcpManager = getMcpManager(userId);
+        
+        // Ensure we're connected to servers
+        if (mcpManager.getConnectedServers().length === 0) {
+            await mcpManager.connectToAllServers();
+        }
+        
+        const allTools = mcpManager.getAllAvailableTools();
+        const connectedServers = mcpManager.getConnectedServers();
+        
+        if (connectedServers.length === 0) {
+            return {
+                availableTools: {},
+                summary: 'No MCP servers are currently connected. Configure MCP servers in settings to access external tools.',
+                toolCount: 0
+            };
+        }
+        
+        const enhancedTools = {};
+        let totalToolCount = 0;
+        
+        for (const [serverName, tools] of Object.entries(allTools)) {
+            enhancedTools[serverName] = tools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                server: serverName,
+                callFormat: `mcpClient: Call tool ${tool.name} from ${serverName} with args {...}`,
+                inputSchema: tool.inputSchema,
+                fullIdentifier: `${serverName}.${tool.name}`
+            }));
+            totalToolCount += tools.length;
+        }
+        
+        return {
+            availableTools: enhancedTools,
+            summary: `${totalToolCount} MCP tools available across ${connectedServers.length} servers: ${connectedServers.join(', ')}`,
+            toolCount: totalToolCount,
+            connectedServers: connectedServers
+        };
+        
+    } catch (error) {
+        console.error('[MCP-Client] Failed to get MCP tools for AI:', error.message);
+        return {
+            availableTools: {},
+            summary: 'Failed to retrieve MCP tools: ' + error.message,
+            toolCount: 0,
+            error: error.message
+        };
+    }
+}
+
+/**
  * Handles generic MCP tasks using AI to determine the best approach
  * @async
  * @param {McpClientManager} mcpManager - The MCP manager
@@ -1288,9 +1541,6 @@ async function handleListServers(mcpManager) {
  * @returns {Promise<string>} Task result
  */
 async function handleGenericMcpTask(mcpManager, taskDescription, otherAIData) {
-    // This could be enhanced to use AI to determine the best MCP tools to use
-    // For now, provide a summary of available capabilities
-    
     const connectedServers = mcpManager.getConnectedServers();
     
     if (connectedServers.length === 0) {
@@ -1307,7 +1557,7 @@ async function handleGenericMcpTask(mcpManager, taskDescription, otherAIData) {
         result += `**${serverName}**:\n`;
         
         if (tools.length > 0) {
-            result += `  Tools: ${tools.map(t => t.name).join(', ')}\n`;
+            result += `  Tools: ${tools.map(t => `${t.name} (${t.description})`).join(', ')}\n`;
         }
         
         if (resources.length > 0) {
@@ -1329,7 +1579,10 @@ async function handleGenericMcpTask(mcpManager, taskDescription, otherAIData) {
 // Export the main function and classes for use by the tool system
 module.exports = {
     runTask,
+    getAvailableTools,
+    getMcpToolsForAI,
     McpClient,
     McpClientManager,
-    getMcpManager
+    getMcpManager,
+    cleanupMcpManager
 }; 

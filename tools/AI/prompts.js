@@ -4,11 +4,34 @@
 
 /**
  * Generates the global system prompt for the AI agent.
- * @returns {string} The global system prompt.
+ * @param {string} [userId='default'] - User ID to get MCP tools for
+ * @returns {Promise<string>} The global system prompt.
  */
-function generateGlobalPrompt() {
+async function generateGlobalPrompt(userId = 'default') {
   const sortedTools = toolDescriptions.sort((a, b) => a.title.localeCompare(b.title));
-  const toolsList = sortedTools.map(tool => `> - ${tool.title}: ${tool.description}`).join('\n');
+  let toolsList = sortedTools.map(tool => `> - ${tool.title}: ${tool.description}`).join('\n');
+  
+  // Try to add MCP tools if available
+  try {
+    const mcpModule = require('../mcp/main.js');
+    const mcpToolsInfo = await mcpModule.getMcpToolsForAI(userId);
+    
+    if (mcpToolsInfo.toolCount > 0) {
+      toolsList += '\n>\n> **MCP (Model Context Protocol) Tools:**\n';
+      toolsList += `> ${mcpToolsInfo.summary}\n>\n`;
+      
+      for (const [serverName, tools] of Object.entries(mcpToolsInfo.availableTools)) {
+        tools.forEach(tool => {
+          toolsList += `> - ${tool.fullIdentifier}: ${tool.description} (via MCP server: ${serverName})\n`;
+        });
+      }
+      
+      toolsList += '>\n> **To use MCP tools:** Use the mcpClient tool with format: "Call tool [toolName] from [serverName] with args {...}"\n';
+    }
+  } catch (error) {
+    // MCP not available or error loading - continue without MCP tools
+    console.log('[Prompts] MCP tools not available:', error.message);
+  }
   
   return `
 
@@ -156,12 +179,15 @@ For simple questions or chit-chat, return:
  * Generates the planning prompt for the AI agent.
  * @param {string} question - The user's question.
  * @param {Array} history - The conversation history.
- * @returns {string} The planning prompt.
+ * @param {string} [userId='default'] - User ID to get MCP tools for
+ * @returns {Promise<string>} The planning prompt.
  */
-function generatePlanningPrompt(question, history) {
+async function generatePlanningPrompt(question, history, userId = 'default') {
+  const globalPrompt = await generateGlobalPrompt(userId);
+  
   return `
     You are an AI agent that can execute complex tasks. You will be given a question and you will need to plan a task to answer the question.
-    ${generateGlobalPrompt()}
+    ${globalPrompt}
     
     ADDITIONAL GUIDANCE:
     - Always analyze the user's intent and context before planning.
