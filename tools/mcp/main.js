@@ -111,10 +111,7 @@ class McpClient extends EventEmitter {
      */
     async connect() {
         try {
-            this._log('Connecting to MCP server:', this.serverName);
-            
             if (this.isConnected) {
-                this._log('Already connected to server');
                 return true;
             }
 
@@ -130,7 +127,6 @@ class McpClient extends EventEmitter {
             this.isConnected = true;
             this.isInitialized = true;
             
-            this._log('Successfully connected to MCP server:', this.serverName);
             this._updateContext({ 
                 isConnected: true, 
                 connectedAt: new Date().toISOString(),
@@ -182,12 +178,10 @@ class McpClient extends EventEmitter {
                 });
 
                 this.serverProcess.on('exit', (code, signal) => {
-                    this._log(`Server process exited with code ${code}, signal ${signal}`);
                     this.isConnected = false;
                     this.emit('disconnected', { code, signal });
                     
                     if (this.config.autoRestart && code !== 0) {
-                        this._log('Auto-restarting server...');
                         setTimeout(() => this.connect(), 5000);
                     }
                 });
@@ -198,7 +192,7 @@ class McpClient extends EventEmitter {
                 });
 
                 this.serverProcess.stderr.on('data', (data) => {
-                    this._log('Server stderr:', data.toString());
+                    // Keep stderr output
                 });
 
                 // Wait a moment for the process to stabilize
@@ -241,7 +235,6 @@ class McpClient extends EventEmitter {
             });
 
             this.serverCapabilities = initResponse.capabilities || {};
-            this._log('Server capabilities:', this.serverCapabilities);
 
             // Send initialized notification
             await this._sendNotification('initialized', {});
@@ -263,9 +256,8 @@ class McpClient extends EventEmitter {
                 try {
                     const toolsResponse = await this._sendRequest('tools/list', {});
                     this.availableTools = toolsResponse.tools || [];
-                    this._log(`Discovered ${this.availableTools.length} tools`);
                 } catch (error) {
-                    this._log('No tools available or failed to list tools:', error.message);
+                    // Continue without tools
                 }
             }
 
@@ -274,9 +266,8 @@ class McpClient extends EventEmitter {
                 try {
                     const resourcesResponse = await this._sendRequest('resources/list', {});
                     this.availableResources = resourcesResponse.resources || [];
-                    this._log(`Discovered ${this.availableResources.length} resources`);
                 } catch (error) {
-                    this._log('No resources available or failed to list resources:', error.message);
+                    // Continue without resources
                 }
             }
 
@@ -285,14 +276,12 @@ class McpClient extends EventEmitter {
                 try {
                     const promptsResponse = await this._sendRequest('prompts/list', {});
                     this.availablePrompts = promptsResponse.prompts || [];
-                    this._log(`Discovered ${this.availablePrompts.length} prompts`);
                 } catch (error) {
-                    this._log('No prompts available or failed to list prompts:', error.message);
+                    // Continue without prompts
                 }
             }
 
         } catch (error) {
-            this._log('Failed to discover some capabilities:', error.message);
             // Don't throw here - partial capability discovery is acceptable
         }
     }
@@ -317,14 +306,11 @@ class McpClient extends EventEmitter {
         }
 
         try {
-            this._log(`Calling tool: ${toolName} with arguments:`, toolArgs);
-            
             const response = await this._sendRequest('tools/call', {
                 name: toolName,
                 arguments: toolArgs
             });
 
-            this._log(`Tool ${toolName} completed successfully`);
             this._updateContext({ 
                 lastToolCall: { 
                     name: toolName, 
@@ -355,13 +341,10 @@ class McpClient extends EventEmitter {
         }
 
         try {
-            this._log(`Reading resource: ${uri}`);
-            
             const response = await this._sendRequest('resources/read', {
                 uri: uri
             });
 
-            this._log(`Resource ${uri} read successfully`);
             this._updateContext({ 
                 lastResourceRead: { 
                     uri, 
@@ -398,14 +381,11 @@ class McpClient extends EventEmitter {
         }
 
         try {
-            this._log(`Getting prompt: ${promptName} with arguments:`, promptArgs);
-            
             const response = await this._sendRequest('prompts/get', {
                 name: promptName,
                 arguments: promptArgs
             });
 
-            this._log(`Prompt ${promptName} retrieved successfully`);
             this._updateContext({ 
                 lastPromptGet: { 
                     name: promptName, 
@@ -495,7 +475,6 @@ class McpClient extends EventEmitter {
             // Store pending request
             this.pendingRequests.set(id, (response) => {
                 clearTimeout(timeout);
-                this._log(`Received response for ${method}:`, response);
                 
                 if (response.error) {
                     const errorMsg = response.error.message || response.error.code || 'Unknown MCP error';
@@ -509,7 +488,6 @@ class McpClient extends EventEmitter {
             // Send the message
             try {
                 const messageStr = JSON.stringify(message) + '\n';
-                this._log(`Sending request ${id} for ${method}:`, message);
                 this.serverProcess.stdin.write(messageStr);
             } catch (error) {
                 clearTimeout(timeout);
@@ -569,7 +547,7 @@ class McpClient extends EventEmitter {
                         this._handleServerNotification(message);
                     }
                 } catch (parseError) {
-                    this._log('Failed to parse message:', messageStr, parseError.message);
+                    // Skip parsing errors
                 }
             }
         } catch (error) {
@@ -583,23 +561,18 @@ class McpClient extends EventEmitter {
      * @param {McpTypes.McpMessage} message - The notification message
      */
     _handleServerNotification(message) {
-        this._log('Received server notification:', message.method);
-        
         switch (message.method) {
             case 'notifications/resources/list_changed':
-                this._log('Resources list changed, refreshing...');
                 this._discoverCapabilities();
                 break;
             case 'notifications/tools/list_changed':
-                this._log('Tools list changed, refreshing...');
                 this._discoverCapabilities();
                 break;
             case 'notifications/prompts/list_changed':
-                this._log('Prompts list changed, refreshing...');
                 this._discoverCapabilities();
                 break;
             default:
-                this._log('Unknown notification:', message);
+                // Skip unknown notifications
         }
     }
 
@@ -609,8 +582,6 @@ class McpClient extends EventEmitter {
      */
     async disconnect() {
         try {
-            this._log('Disconnecting from MCP server:', this.serverName);
-            
             this._clearTimeout();
             this.isConnected = false;
             this.isInitialized = false;
@@ -648,7 +619,7 @@ class McpClient extends EventEmitter {
                         }
                     });
                 } catch (killError) {
-                    this._log('Error killing server process:', killError.message);
+                    // Skip kill error
                 }
                 
                 this.serverProcess = null;
@@ -660,7 +631,6 @@ class McpClient extends EventEmitter {
             });
             
             this.emit('disconnected');
-            this._log('Disconnected from MCP server');
             
         } catch (error) {
             this._logError('Error during disconnect', error);
@@ -690,15 +660,6 @@ class McpClient extends EventEmitter {
             ...data
         };
         contextManager.setToolState('mcpClient', toolState, this.userId);
-    }
-
-    /**
-     * Logs a message with MCP client prefix
-     * @private
-     * @param {...any} args - Arguments to log
-     */
-    _log(...args) {
-        console.log(`[MCP-${this.serverName}]`, ...args);
     }
 
     /**
@@ -750,9 +711,7 @@ class McpClientManager {
             
             if (mcpServersJson) {
                 this.serverConfigs = JSON.parse(mcpServersJson);
-                console.log(`[MCP-Manager] Loaded ${Object.keys(this.serverConfigs).length} server configurations`);
             } else {
-                console.log('[MCP-Manager] No MCP server configurations found');
                 this.serverConfigs = {};
             }
         } catch (error) {
@@ -788,7 +747,6 @@ class McpClientManager {
         
         await Promise.allSettled(connectionPromises);
         
-        console.log(`[MCP-Manager] Connected to ${connectedServers.length}/${Object.keys(this.serverConfigs).length} servers`);
         return connectedServers;
     }
 
@@ -822,7 +780,6 @@ class McpClientManager {
         try {
             await client.connect();
             this.clients.set(serverName, client);
-            console.log(`[MCP-Manager] Successfully connected to ${serverName}`);
             return client;
         } catch (error) {
             console.error(`[MCP-Manager] Failed to connect to ${serverName}:`, error.message);
@@ -840,7 +797,6 @@ class McpClientManager {
         if (client) {
             await client.disconnect();
             this.clients.delete(serverName);
-            console.log(`[MCP-Manager] Disconnected from ${serverName}`);
         }
     }
 
@@ -861,7 +817,6 @@ class McpClientManager {
         
         await Promise.allSettled(disconnectPromises);
         this.clients.clear();
-        console.log('[MCP-Manager] Disconnected from all servers');
     }
 
     /**
@@ -984,7 +939,6 @@ async function cleanupMcpManager(userId) {
         try {
             await manager.disconnectFromAllServers();
             mcpManagers.delete(userId);
-            console.log(`[MCP-Client] Cleaned up manager for user ${userId}`);
         } catch (error) {
             console.error(`[MCP-Client] Error cleaning up manager for user ${userId}:`, error.message);
         }
@@ -1041,15 +995,11 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
     let taskIntent; // Declare outside try block for error logging
     
     try {
-        console.log('[MCP-Client] Starting MCP task:', taskDescription);
-        
         // Get or create MCP manager for the user
         const mcpManager = getMcpManager(userId);
         
         // Parse the task to understand what MCP action is needed
         taskIntent = await parseTaskIntent(taskDescription, otherAIData);
-        
-        console.log('[MCP-Client] Parsed task intent:', JSON.stringify(taskIntent, null, 2));
         
         // Connect to servers if not already connected
         if (mcpManager.getConnectedServers().length === 0) {
@@ -1059,36 +1009,27 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
         
         let result;
         
-        console.log('[MCP-Client] Executing action:', taskIntent.action);
-        
         switch (taskIntent.action) {
             case 'list_tools':
-                console.log('[MCP-Client] Executing list_tools for server:', taskIntent.serverName);
                 result = await handleListTools(mcpManager, taskIntent.serverName);
                 break;
             case 'list_resources':
-                console.log('[MCP-Client] Executing list_resources for server:', taskIntent.serverName);
                 result = await handleListResources(mcpManager, taskIntent.serverName);
                 break;
             case 'call_tool':
-                console.log('[MCP-Client] Executing call_tool:', taskIntent.serverName, taskIntent.toolName);
                 result = await handleCallTool(mcpManager, taskIntent.serverName, taskIntent.toolName, taskIntent.toolArguments);
                 break;
             case 'read_resource':
-                console.log('[MCP-Client] Executing read_resource:', taskIntent.serverName, taskIntent.uri);
                 result = await handleReadResource(mcpManager, taskIntent.serverName, taskIntent.uri);
                 break;
             case 'list_servers':
-                console.log('[MCP-Client] Executing list_servers');
                 result = await handleListServers(mcpManager);
                 break;
             case 'get_available_tools':
-                console.log('[MCP-Client] Executing get_available_tools');
                 result = await getAvailableTools(userId);
                 stepCallback({ success: true, result: 'Retrieved available MCP tools for AI planning' });
                 return { success: true, data: result };
             default:
-                console.log('[MCP-Client] Executing generic task handling');
                 result = await handleGenericMcpTask(mcpManager, taskDescription, otherAIData);
         }
         
@@ -1102,11 +1043,8 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
         };
         contextManager.setToolState('mcpClient', toolState, userId);
         
-        console.log('[MCP-Client] Task result:', JSON.stringify(result, null, 2));
-        
         stepCallback({ success: true, result: result });
         
-        console.log('[MCP-Client] Task completed successfully, returning:', { success: true, data: result });
         return { success: true, data: result };
         
     } catch (error) {
@@ -1134,15 +1072,10 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
 async function parseTaskIntent(taskDescription, otherAIData) {
     const description = taskDescription.toLowerCase();
     
-    console.log('[MCP-Client] Parsing task description:', taskDescription);
-    
-    // Enhanced pattern matching for better detection
-    
     // Check for listing available MCP tools
     if (description.includes('list tools') || description.includes('show tools') || 
         description.includes('available tools') || description.includes('what tools')) {
         const serverName = extractServerName(taskDescription);
-        console.log('[MCP-Client] Detected list_tools action for server:', serverName);
         return { action: 'list_tools', serverName: serverName };
     }
     
@@ -1150,7 +1083,6 @@ async function parseTaskIntent(taskDescription, otherAIData) {
     if (description.includes('list resources') || description.includes('show resources') || 
         description.includes('available resources')) {
         const serverName = extractServerName(taskDescription);
-        console.log('[MCP-Client] Detected list_resources action for server:', serverName);
         return { action: 'list_resources', serverName: serverName };
     }
     
@@ -1161,7 +1093,6 @@ async function parseTaskIntent(taskDescription, otherAIData) {
         const toolName = extractToolName(taskDescription);
         const toolArguments = extractArguments(taskDescription);
         
-        console.log('[MCP-Client] Detected call_tool action:', { serverName, toolName, toolArguments });
         return {
             action: 'call_tool',
             serverName: serverName,
@@ -1175,7 +1106,6 @@ async function parseTaskIntent(taskDescription, otherAIData) {
         const serverName = extractServerName(taskDescription);
         const uri = extractResourceUri(taskDescription);
         
-        console.log('[MCP-Client] Detected read_resource action:', { serverName, uri });
         return {
             action: 'read_resource',
             serverName: serverName,
@@ -1193,8 +1123,6 @@ async function parseTaskIntent(taskDescription, otherAIData) {
         
         // Don't treat generic words as server names
         if (!['mcp', 'connected', 'available', 'all'].includes(potentialServerName)) {
-            console.log('[MCP-Client] Detected tool call pattern for server action:', potentialServerName);
-            
             // Try to infer the tool name based on the action
             let toolName = 'list-servers'; // default assumption
             if (description.includes('status') || description.includes('statuses')) {
@@ -1214,12 +1142,10 @@ async function parseTaskIntent(taskDescription, otherAIData) {
     if ((description.includes('list') && description.includes('mcp') && description.includes('servers')) ||
         (description.includes('show') && description.includes('connected') && description.includes('servers')) ||
         description.includes('connected mcp servers')) {
-        console.log('[MCP-Client] Detected list_servers action (MCP servers)');
         return { action: 'list_servers' };
     }
     
     // Default to generic task handling
-    console.log('[MCP-Client] No specific action detected, using generic handling');
     return {
         action: 'generic',
         description: taskDescription,
@@ -1259,7 +1185,7 @@ function extractArguments(taskDescription) {
         try {
             return JSON.parse(argsMatch[1]);
         } catch (error) {
-            console.log('[MCP-Client] Failed to parse arguments as JSON:', argsMatch[1]);
+            // Failed to parse, return empty object
         }
     }
     return {};
@@ -1356,8 +1282,6 @@ async function handleCallTool(mcpManager, serverName, toolName, toolArguments) {
     }
     
     try {
-        console.log(`[MCP-Client] Calling tool ${toolName} on server ${serverName} with args:`, toolArguments);
-        
         // Try the original tool name first
         let result;
         try {
@@ -1375,7 +1299,6 @@ async function handleCallTool(mcpManager, serverName, toolName, toolArguments) {
                 }
                 
                 if (alternativeToolName) {
-                    console.log(`[MCP-Client] Tool ${toolName} not found, trying alternative: ${alternativeToolName}`);
                     try {
                         result = await mcpManager.callTool(serverName, alternativeToolName, toolArguments);
                         toolName = alternativeToolName; // Update for logging
@@ -1389,8 +1312,6 @@ async function handleCallTool(mcpManager, serverName, toolName, toolArguments) {
                 throw error; // Different error, re-throw
             }
         }
-        
-        console.log(`[MCP-Client] Tool ${toolName} returned:`, result);
         
         // Format the result for better readability
         let formattedResult = `Tool ${toolName} on server ${serverName} executed successfully:\n\n`;
