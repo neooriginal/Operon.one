@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-                .welcome-container {
+        .welcome-container {
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -97,11 +97,30 @@
             background: rgba(255, 255, 255, 0.05);
             color: white;
         }
+
+        .chat-interface {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+
+        .chat-interface.active {
+            display: flex;
+        }
+
+        .welcome-screen {
+            display: flex;
+            height: 100%;
+        }
+
+        .welcome-screen.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- Left Sidebar - Same as in chat -->
+        <!-- Left Sidebar -->
         <nav class="sidebar">
             <div class="sidebar-header">
                 <div class="logo-text">Operon<span class="accent">.one</span></div>
@@ -109,7 +128,7 @@
             </div>
             <!-- Placeholder for dynamically loaded recent chats -->
             <div class="recent-chats-container" id="recent-chats-list">
-                <p style="padding: 15px; color: var(--gray);">Loading chats...</p> <!-- Loading indicator -->
+                <p style="padding: 15px; color: var(--gray);">Loading chats...</p>
             </div>
             <div class="sidebar-footer">
                 <!-- User Info -->
@@ -123,23 +142,41 @@
             </div>
         </nav>
 
-        <!-- Welcome Screen (replaces Chat Area) -->
+        <!-- Main Content Area -->
         <div class="chat-container">
             <div class="chat-header">
                 <h1>Operon<span class="accent">.one</span> <span class="gradient-text">Dashboard</span></h1>
             </div>
             
-            <div class="welcome-container">
-                <h1>Welcome to Operon.one</h1>
-                <p>Enter your task or question to get started with AI-powered assistance. Our system can help you with complex questions, data analysis, and specialized tasks.</p>
-                
-                <div class="welcome-input-container">
-                    <input type="text" class="welcome-input" id="welcome-input" placeholder="What would you like to accomplish today?">
+            <!-- Welcome Screen -->
+            <div class="welcome-screen" id="welcome-screen">
+                <div class="welcome-container">
+                    <h1>Welcome to Operon.one</h1>
+                    <p>Enter your task or question to get started with AI-powered assistance. Our system can help you with complex questions, data analysis, and specialized tasks.</p>
                     
-                    <div class="welcome-buttons">
-                        <button class="welcome-button primary-button" id="start-button">Begin Task</button>
-                        <button class="welcome-button secondary-button" id="browse-button">Browse Templates</button>
+                    <div class="welcome-input-container">
+                        <input type="text" class="welcome-input" id="welcome-input" placeholder="What would you like to accomplish today?">
+                        
+                        <div class="welcome-buttons">
+                            <button class="welcome-button primary-button" id="start-button">Begin Task</button>
+                            <button class="welcome-button secondary-button" id="browse-button">Browse Templates</button>
+                        </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="chat-interface" id="chat-interface">
+                <!-- Status Display Area -->
+                <div id="status-display" class="status-display">
+                    <i class="fas fa-info-circle"></i> Ready to help with complex tasks
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Chat messages will be appended here -->
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="message-input" placeholder="Enter your task or question...">
+                    <button id="send-button">Send</button>
                 </div>
             </div>
         </div>
@@ -152,42 +189,55 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <script>
-        
         document.addEventListener('DOMContentLoaded', function() {
-            
             const userId = localStorage.getItem('userId');
             const userEmail = localStorage.getItem('userEmail');
             const authToken = localStorage.getItem('authToken');
             
             if (!userId || !authToken) {
-                
                 window.location.href = 'login';
                 return;
             }
             
-            
             document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
             
-            
             document.getElementById('logout-button').addEventListener('click', function() {
-                
                 localStorage.removeItem('userId');
                 localStorage.removeItem('userEmail');
                 localStorage.removeItem('authToken');
-                
-                
                 window.location.href = 'login';
             });
+
+            // Check if we should show chat interface immediately
+            const currentChatId = localStorage.getItem('currentChatId');
+            const initialQuery = localStorage.getItem('initialQuery');
             
-            
-            
-            if (typeof loadRecentChats === 'function') {
-                loadRecentChats();
+            if (currentChatId && currentChatId !== 'new' && !initialQuery) {
+                // Show chat interface if we have an existing chat
+                showChatInterface();
+            } else if (initialQuery) {
+                // Show chat interface and start with initial query
+                showChatInterface();
             } else {
-                
+                // Show welcome screen and load chats for sidebar
+                showWelcomeScreen();
                 loadWelcomePageChats();
             }
             
+            function showWelcomeScreen() {
+                document.getElementById('welcome-screen').classList.remove('hidden');
+                document.getElementById('chat-interface').classList.remove('active');
+            }
+            
+            function showChatInterface() {
+                document.getElementById('welcome-screen').classList.add('hidden');
+                document.getElementById('chat-interface').classList.add('active');
+                
+                // Check if we need to handle an initial query
+                if (window.handleInitialQuery) {
+                    window.handleInitialQuery();
+                }
+            }
             
             function loadWelcomePageChats() {
                 fetch('/api/chats', {
@@ -203,8 +253,6 @@
                 })
                 .then(data => {
                     const recentChatsList = document.getElementById('recent-chats-list');
-                    
-                    
                     recentChatsList.innerHTML = '';
                     
                     if (!data.chats || data.chats.length === 0) {
@@ -212,20 +260,16 @@
                         return;
                     }
                     
-                    
                     data.chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-                    
                     
                     data.chats.forEach(chat => {
                         const chatItem = document.createElement('div');
                         chatItem.className = 'recent-chat-item';
                         chatItem.dataset.chatId = chat.id;
                         
-                        
                         const chatDate = new Date(chat.updatedAt);
                         const today = new Date();
                         let timeDisplay;
-                        
                         
                         if (chatDate.toDateString() === today.toDateString()) {
                             timeDisplay = 'Today';
@@ -245,17 +289,15 @@
                             </button>
                         `;
                         
-                        
                         chatItem.querySelector('.chat-content').addEventListener('click', () => {
-                            
                             localStorage.setItem('currentChatId', chat.id);
-                            
-                            window.location.href = 'chat';
+                            showChatInterface();
+                            // Trigger the script.js chat loading by dispatching a custom event
+                            window.dispatchEvent(new CustomEvent('loadChat', { detail: { chatId: chat.id } }));
                         });
                         
-                        
                         chatItem.querySelector('.delete-chat-btn').addEventListener('click', async (e) => {
-                            e.stopPropagation(); 
+                            e.stopPropagation();
                             if (!confirm('Are you sure you want to delete this chat?')) {
                                 return;
                             }
@@ -271,7 +313,6 @@
                                 if (!response.ok) {
                                     throw new Error('Failed to delete chat');
                                 }
-                                
                                 
                                 loadWelcomePageChats();
                                 
@@ -291,24 +332,25 @@
                 });
             }
             
-            
             document.getElementById('start-button').addEventListener('click', function() {
                 const input = document.getElementById('welcome-input').value.trim();
                 if (input) {
-                    
                     document.getElementById('start-button').disabled = true;
                     document.getElementById('start-button').textContent = 'Starting...';
                     
-                    
                     localStorage.setItem('currentChatId', 'new');
-                    
                     localStorage.setItem('initialQuery', input);
                     
+                    showChatInterface();
                     
-                    window.location.href = 'chat';
+                    // Reset button state
+                    setTimeout(() => {
+                        document.getElementById('start-button').disabled = false;
+                        document.getElementById('start-button').textContent = 'Begin Task';
+                        document.getElementById('welcome-input').value = '';
+                    }, 1000);
                 }
             });
-            
             
             document.getElementById('welcome-input').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
@@ -316,21 +358,16 @@
                 }
             });
             
-            
             document.getElementById('browse-button').addEventListener('click', function() {
-                
                 alert('Template browsing feature coming soon!');
             });
             
-            
             document.getElementById('new-task-button').addEventListener('click', function() {
-                
                 localStorage.removeItem('initialQuery');
-                
-                
-                window.location.href = '';
+                localStorage.setItem('currentChatId', 'new');
+                showWelcomeScreen();
+                loadWelcomePageChats();
             });
-            
             
             fetch('/api/validate-token', {
                 method: 'GET',
@@ -339,9 +376,21 @@
                 }
             }).catch(error => {
                 console.error('Token validation error:', error);
-                
             });
         });
     </script>
+    
+    <!-- File Modal -->
+    <div id="file-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">File Preview</h2>
+                <span class="modal-close">&times;</span>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- Content will be inserted here dynamically -->
+            </div>
+        </div>
+    </div>
 </body>
 </html> 

@@ -62,8 +62,12 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatusDisplay('Ready', 'idle'); 
         }
         
-        if (recentChatsList && chatMessages) {
+        // Load chats if we have the chat interface active, otherwise just load for sidebar
+        if (chatMessages && document.getElementById('chat-interface') && document.getElementById('chat-interface').classList.contains('active')) {
             loadUserChats(); 
+        } else if (recentChatsList) {
+            // Just load chats for sidebar without initializing chat interface
+            loadUserChatsForSidebar();
         }
     });
 
@@ -80,6 +84,65 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatusDisplay(`Connection Error`, 'error');
         }
     });
+
+    // Listen for custom loadChat event from the combined interface
+    window.addEventListener('loadChat', (event) => {
+        const { chatId } = event.detail;
+        currentChatId = chatId;
+        localStorage.setItem('currentChatId', currentChatId);
+        if (recentChatsList) {
+            setActiveChatInUI(currentChatId);
+        }
+        loadChatHistory(currentChatId);
+    });
+
+    // Expose functions globally for the combined interface
+    window.loadChatHistory = loadChatHistory;
+    window.loadUserChats = loadUserChats;
+    
+    // Function to handle initial query when chat interface becomes active
+    window.handleInitialQuery = function() {
+        const storedInitialQuery = localStorage.getItem('initialQuery');
+        if (storedInitialQuery && chatMessages && messageInput) {
+            console.log('Handling initial query:', storedInitialQuery);
+            chatMessages.innerHTML = '';
+            currentChatId = 'new';
+            localStorage.setItem('currentChatId', 'new');
+            
+            messageInput.value = storedInitialQuery;
+            localStorage.removeItem('initialQuery');
+            
+            setTimeout(() => {
+                handleSendMessage();
+            }, 100);
+        }
+    };
+
+    // Function to load chats only for sidebar (used in welcome screen)
+    async function loadUserChatsForSidebar() {
+        try {
+            const response = await fetch('/api/chats', {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to load chats');
+            }
+            
+            const data = await response.json();
+            
+            if (recentChatsList) {
+                renderChatList(data.chats);
+            }
+        } catch (error) {
+            console.error('Error loading chats:', error);
+            if (recentChatsList) {
+                recentChatsList.innerHTML = '<p style="padding: 15px; color: var(--gray);">Failed to load chats</p>';
+            }
+        }
+    }
 
     
     async function loadUserChats() {
@@ -219,6 +282,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentChatId = chat.id;
                 localStorage.setItem('currentChatId', currentChatId);
                 setActiveChatInUI(currentChatId);
+                
+                // Check if we're in the combined interface
+                const chatInterface = document.getElementById('chat-interface');
+                const welcomeScreen = document.getElementById('welcome-screen');
+                
+                if (chatInterface && welcomeScreen) {
+                    // We're in the combined interface, show chat interface
+                    welcomeScreen.classList.add('hidden');
+                    chatInterface.classList.add('active');
+                }
+                
                 loadChatHistory(currentChatId);
             });
             
@@ -454,28 +528,38 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (newTaskButton) {
         newTaskButton.addEventListener('click', () => {
+            // Check if we're in the combined interface
+            const chatInterface = document.getElementById('chat-interface');
+            const welcomeScreen = document.getElementById('welcome-screen');
             
-            if (chatMessages) {
+            if (chatInterface && welcomeScreen) {
+                // We're in the combined interface, show welcome screen
+                chatInterface.classList.remove('active');
+                welcomeScreen.classList.remove('hidden');
                 
-                chatMessages.innerHTML = '';
-                
-                
-                
-                
-                currentChatId = 'new';
+                // Clear any stored data
+                localStorage.removeItem('initialQuery');
                 localStorage.setItem('currentChatId', 'new');
                 
+                // Clear active chat selection
+                document.querySelectorAll('.recent-chat-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+            } else if (chatMessages) {
+                // We're in the old chat interface
+                chatMessages.innerHTML = '';
+                currentChatId = 'new';
+                localStorage.setItem('currentChatId', 'new');
                 
                 document.querySelectorAll('.recent-chat-item').forEach(item => {
                     item.classList.remove('active');
                 });
                 
-                
                 if (messageInput) {
                     messageInput.focus();
                 }
             } else {
-                
+                // Fallback to redirect
                 window.location.href = 'index.html';
             }
         });

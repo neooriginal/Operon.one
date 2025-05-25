@@ -116,11 +116,11 @@ app.get("/dashboard", (req, res) => {
 });
 
 app.get("/dashboard/chat", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
+    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
 app.get("/chat", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "dashboard", "chat.html"));
+    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
 app.get("/", (req, res) => {
@@ -155,6 +155,11 @@ app.get("/legal/cookies", (req, res) => {
 app.get('/api/user/profile', authenticateToken, (req, res) => {
     
     res.json({ user: req.user });
+});
+
+app.get('/api/validate-token', authenticateToken, (req, res) => {
+    
+    res.json({ valid: true, user: req.user });
 });
 
 
@@ -375,8 +380,28 @@ io.on('connection', (socketClient) => {
          socketClient.chatId = numericChatId;
          
          try {
+             // Import and call the central orchestrator
+             const { centralOrchestrator } = require('./index');
              
+             // Emit task received confirmation
+             socketClient.emit('task_received', { 
+                 userId: taskUserId, 
+                 chatId: numericChatId, 
+                 task: task 
+             });
              
+             // Process the task asynchronously
+             centralOrchestrator(task, taskUserId, numericChatId, false)
+                 .then(result => {
+                     console.log(`Task completed for ${taskUserId}:`, result);
+                 })
+                 .catch(error => {
+                     console.error(`Error in task processing for ${taskUserId}:`, error);
+                     socketClient.emit('task_error', { 
+                         error: 'Error processing your task: ' + error.message,
+                         userId: taskUserId
+                     });
+                 });
              
          } catch (error) {
              console.error(`Error processing task for ${taskUserId}:`, error);
