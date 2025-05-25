@@ -379,6 +379,9 @@
                         `;
                         
                         chatItem.querySelector('.chat-content').addEventListener('click', () => {
+                            // Reset any loading flags when switching chats
+                            window.isLoadingHistory = false;
+                            
                             localStorage.setItem('currentChatId', chat.id);
                             showChatInterface();
                             // Trigger the script.js chat loading by dispatching a custom event

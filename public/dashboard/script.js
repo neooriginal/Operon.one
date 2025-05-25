@@ -279,6 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             
             chatItem.querySelector('.chat-content').addEventListener('click', () => {
+                // Reset any loading flags and clear state when switching chats
+                window.isLoadingHistory = false;
+                
                 currentChatId = chat.id;
                 localStorage.setItem('currentChatId', currentChatId);
                 setActiveChatInUI(currentChatId);
@@ -327,8 +330,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!chatMessages) return;
         
         try {
+            // Set a flag to prevent socket events from adding messages during history loading
+            window.isLoadingHistory = true;
             
+            // Clear any existing messages and reset step groups
             chatMessages.innerHTML = '';
+            stepGroups = {};
             
             const response = await fetch(`/api/chats/${chatId}`, {
                 headers: {
@@ -346,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             
             if (data.messages.length === 0) {
+                window.isLoadingHistory = false;
                 return;
             }
             
@@ -353,6 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const processedMessages = [];
             let hasTaskSteps = data.taskSteps && data.taskSteps.length > 0;
             let taskVisualizationAdded = false;
+            
+            // Keep track of processed message contents to avoid duplicates
+            const processedContents = new Set();
             
             data.messages.forEach((msg, index) => {
                 const messageContent = extractTextFromObject(msg.content);
@@ -363,6 +374,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     messageContent.trim() === '') {
                     return;
                 }
+                
+                // Skip if we've already processed this exact content
+                const contentKey = `${msg.role}:${messageContent.trim()}`;
+                if (processedContents.has(contentKey)) {
+                    console.log('Skipping duplicate message during history load:', messageContent.substring(0, 50) + '...');
+                    return;
+                }
+                processedContents.add(contentKey);
                 
                 let role = msg.role;
                 if (role === 'assistant') {
@@ -391,10 +410,16 @@ document.addEventListener('DOMContentLoaded', () => {
             // Load and display files for this chat
             await loadChatFiles(chatId);
             
+            // Clear the loading flag after a short delay to allow any pending socket events to be ignored
+            setTimeout(() => {
+                window.isLoadingHistory = false;
+            }, 1000);
+            
             
             scrollToBottom();
         } catch (error) {
             console.error('Error loading chat history:', error);
+            window.isLoadingHistory = false;
             if (chatMessages) {
                 addMessage('Failed to load chat history', 'system');
             }
@@ -921,28 +946,89 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     
-    function isDuplicateMessage(messageText, maxMessagesToCheck = 3) {
+    function isDuplicateMessage(messageText, maxMessagesToCheck = 5) {
         if (!chatMessages) return false;
         
         const messages = chatMessages.querySelectorAll('.message.ai');
         if (messages.length === 0) return false;
         
+        const cleanMessageText = messageText.trim();
+        if (!cleanMessageText) return false;
+        
         
         const messagesToCheck = Math.min(messages.length, maxMessagesToCheck);
         for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
             const msgContent = messages[i].querySelector('.message-content');
-            if (msgContent && msgContent.textContent.trim() === messageText.trim()) {
-                console.log('Preventing duplicate message');
-                return true;
+            if (msgContent) {
+                const existingText = msgContent.textContent.trim();
+                
+                // Check for exact match
+                if (existingText === cleanMessageText) {
+                    console.log('Preventing exact duplicate message:', cleanMessageText.substring(0, 50) + '...');
+                    return true;
+                }
+                
+                // Check for substantial similarity (90% match for longer messages)
+                if (cleanMessageText.length > 50 && existingText.length > 50) {
+                    const similarity = calculateSimilarity(existingText, cleanMessageText);
+                    if (similarity > 0.9) {
+                        console.log('Preventing similar duplicate message (similarity:', similarity, '):', cleanMessageText.substring(0, 50) + '...');
+                        return true;
+                    }
+                }
             }
         }
         
         return false;
     }
+    
+    function calculateSimilarity(str1, str2) {
+        const longer = str1.length > str2.length ? str1 : str2;
+        const shorter = str1.length > str2.length ? str2 : str1;
+        
+        if (longer.length === 0) return 1.0;
+        
+        const editDistance = levenshteinDistance(longer, shorter);
+        return (longer.length - editDistance) / longer.length;
+    }
+    
+    function levenshteinDistance(str1, str2) {
+        const matrix = [];
+        
+        for (let i = 0; i <= str2.length; i++) {
+            matrix[i] = [i];
+        }
+        
+        for (let j = 0; j <= str1.length; j++) {
+            matrix[0][j] = j;
+        }
+        
+        for (let i = 1; i <= str2.length; i++) {
+            for (let j = 1; j <= str1.length; j++) {
+                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j] + 1
+                    );
+                }
+            }
+        }
+        
+        return matrix[str2.length][str1.length];
+    }
 
     
     socket.on('ai_message', (data) => {
         try {
+            // Skip if we're currently loading history
+            if (window.isLoadingHistory) {
+                console.log('Skipping ai_message during history loading');
+                return;
+            }
+            
             
             if (data.chatId && data.chatId !== currentChatId) return;
             
@@ -1050,6 +1136,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let stepGroups = {}; 
 
     socket.on('steps', (data) => {
+        // Skip if we're currently loading history (steps will be reconstructed from database)
+        if (window.isLoadingHistory && !data.loadedFromHistory) {
+            console.log('Skipping steps event during history loading');
+            return;
+        }
+        
         
         if (data.plan && Array.isArray(data.plan)) {
             const statusText = data.loadedFromHistory ? 'Plan loaded from history' : 'Plan received';
@@ -1072,6 +1164,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     
     socket.on('step_completed', (data) => {
+        // Skip if we're currently loading history (step completions will be reconstructed from database)
+        if (window.isLoadingHistory) {
+            console.log('Skipping step_completed event during history loading');
+            return;
+        }
+        
         
         if (data.userId === userId) {
             console.log('Step completed:', data);
@@ -1103,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = extractTextFromObject(data.result) || 'Task completed successfully';
                 
                 
-                if (!isDuplicateMessage(result) && !data.loadedFromHistory) {
+                if (!isDuplicateMessage(result) && !data.loadedFromHistory && !window.isLoadingHistory) {
                     addMessage(result, 'ai');
                 }
                 
