@@ -319,8 +319,6 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
 
 
 io.on('connection', (socketClient) => {
-     console.log(`User connected: ${socketClient.id}, authenticated: ${socketClient.authenticated}`);
-
      
      const userId = socketClient.authenticated ? socketClient.userId : socketClient.id;
      
