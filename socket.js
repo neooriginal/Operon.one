@@ -21,7 +21,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
-  max: 100, 
+  max: 500, 
   standardHeaders: true,
   message: { error: 'Too many requests, please try again later.' }
 });
