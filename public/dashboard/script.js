@@ -268,33 +268,54 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const data = await response.json();
             console.log('Loaded chat history:', data.messages);
+            console.log('Loaded task steps:', data.taskSteps);
             
             
             if (data.messages.length === 0) {
                 return;
             }
             
+            // Process messages in chronological order, but handle task visualization specially
+            const processedMessages = [];
+            let hasTaskSteps = data.taskSteps && data.taskSteps.length > 0;
+            let taskVisualizationAdded = false;
             
-            data.messages.forEach(msg => {
-                
+            data.messages.forEach((msg, index) => {
                 const messageContent = extractTextFromObject(msg.content);
-                console.log('Processing message:', msg);
                 
+                // Skip JSON responses and "Processing your task..." messages
+                if (isJsonResponse(messageContent) || 
+                    messageContent.includes('Processing your task') ||
+                    messageContent.trim() === '') {
+                    return;
+                }
                 
                 let role = msg.role;
                 if (role === 'assistant') {
                     role = 'ai';
                 }
                 
-                console.log(`Adding message with role ${role}:`, messageContent);
-                
-                
-                addMessage(messageContent, role);
-                
-                
-                const lastMessageElement = chatMessages.lastElementChild;
-                console.log('Added message element:', lastMessageElement);
+                processedMessages.push({ content: messageContent, role: role, originalIndex: index });
             });
+            
+            // Add messages in order, inserting task visualization after the first user message
+            processedMessages.forEach((msg, index) => {
+                addMessage(msg.content, msg.role);
+                
+                // Add task visualization after the first user message (if it exists and hasn't been added yet)
+                if (hasTaskSteps && !taskVisualizationAdded && msg.role === 'user' && index === 0) {
+                    reconstructTaskVisualization(data.taskSteps);
+                    taskVisualizationAdded = true;
+                }
+            });
+            
+            // If no user messages but we have task steps, add them now
+            if (hasTaskSteps && !taskVisualizationAdded) {
+                reconstructTaskVisualization(data.taskSteps);
+            }
+            
+            // Load and display files for this chat
+            await loadChatFiles(chatId);
             
             
             scrollToBottom();
@@ -303,6 +324,85 @@ document.addEventListener('DOMContentLoaded', () => {
             if (chatMessages) {
                 addMessage('Failed to load chat history', 'system');
             }
+        }
+    }
+    
+    /**
+     * Reconstructs task visualization from stored task steps
+     * @param {Array} taskSteps - Array of task step objects from database
+     */
+    function reconstructTaskVisualization(taskSteps) {
+        if (!taskSteps || taskSteps.length === 0) return;
+        
+        // Group steps by their original plan (assuming they're from the same task)
+        const planSteps = taskSteps.map(step => ({
+            step: step.stepData.step,
+            action: step.stepData.action,
+            expectedOutput: step.stepData.expectedOutput,
+            status: step.stepStatus,
+            stepIndex: step.stepIndex
+        }));
+        
+        // Sort by step index to maintain order
+        planSteps.sort((a, b) => a.stepIndex - b.stepIndex);
+        
+        // Create the plan visualization
+        stepGroups = {}; // Reset step groups
+        const planGroupContent = addStepGroup(`Plan (${planSteps.length} Steps)`, false);
+        
+        planSteps.forEach((step, index) => {
+            const stepId = `step-${index}`;
+            
+            const actionEl = addActionElement(
+                `Step ${index + 1}: ${step.step || 'Unnamed Step'}`, 
+                `Action: ${step.action || 'N/A'}<br>Expected: ${step.expectedOutput || 'N/A'}`, 
+                'plan-step', 
+                planGroupContent 
+            );
+            actionEl.dataset.stepId = stepId;
+            
+            // Apply completed styling if step was completed
+            if (step.status === 'completed') {
+                const iconContainer = actionEl.querySelector('.action-icon');
+                if (iconContainer) {
+                    iconContainer.innerHTML = getIconForType('step_completed');
+                    iconContainer.style.color = '#28a745';
+                }
+                actionEl.style.opacity = '0.7';
+            }
+        });
+        
+        console.log('Reconstructed task visualization with', planSteps.length, 'steps');
+    }
+    
+    async function loadChatFiles(chatId) {
+        try {
+            // Get files for this chat from the backend
+            const response = await fetch(`/api/chats/${chatId}/files`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.files && 
+                   ((data.files.host && data.files.host.length > 0) || 
+                   (data.files.container && data.files.container.length > 0))) {
+                    const filesHtml = generateFilesHtml(data.files);
+                    addMessage(`<div class="file-output">
+                        <div class="file-header">
+                            <i class="fas fa-file-alt"></i> Task Output Files
+                        </div>
+                        <div class="file-list">
+                            ${filesHtml}
+                        </div>
+                    </div>`, 'system', 'html');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading chat files:', error);
+            // Don't show error to user, just log it
         }
     }
     
@@ -474,6 +574,25 @@ document.addEventListener('DOMContentLoaded', () => {
         
         
         return JSON.stringify(messageObj, null, 2);
+    }
+
+    function isJsonResponse(text) {
+        if (!text || typeof text !== 'string') return false;
+        
+        const trimmed = text.trim();
+        
+        // Check if it starts and ends with JSON brackets/braces
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+                JSON.parse(trimmed);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+        
+        return false;
     }
 
     function addMessage(text, sender, type = 'text') {
@@ -666,7 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
             messageInput.value = '';
             
             
-            updateStatusDisplay('Processing your request...', 'loading');
+            updateStatusDisplay('Task received', 'loading');
             
             
             socket.emit('submit_task', { 
@@ -732,6 +851,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!messageText || messageText.trim() === '') {
                 console.log('Ignoring empty message');
+                return;
+            }
+            
+            // Skip JSON responses and processing messages
+            if (isJsonResponse(messageText) || 
+                messageText.includes('Processing your task')) {
+                console.log('Skipping JSON or processing message');
                 return;
             }
             
@@ -825,7 +951,8 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('steps', (data) => {
         
         if (data.plan && Array.isArray(data.plan)) {
-            updateStatusDisplay('Plan received', 'info'); 
+            const statusText = data.loadedFromHistory ? 'Plan loaded from history' : 'Plan received';
+            updateStatusDisplay(statusText, 'info'); 
             stepGroups = {}; 
             const planGroupContent = addStepGroup(`Plan (${data.plan.length} Steps)`, false);
             data.plan.forEach((step, index) => {
@@ -875,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = extractTextFromObject(data.result) || 'Task completed successfully';
                 
                 
-                if (!isDuplicateMessage(result)) {
+                if (!isDuplicateMessage(result) && !data.loadedFromHistory) {
                     addMessage(result, 'ai');
                 }
                 
@@ -894,16 +1021,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>`, 'system', 'html');
                 }
                 
-                updateStatusDisplay('Task completed', 'completed');
+                const statusText = data.loadedFromHistory ? 'History loaded' : 'Task completed';
+                updateStatusDisplay(statusText, 'completed');
                 
                 
                 messageInput.disabled = false;
                 sendButton.disabled = false;
-                
-                
-                const metricsSummary = data.metrics ? `${data.metrics.successCount}/${data.metrics.totalSteps} steps successful.` : '';
-                const durationSummary = data.duration ? `Duration: ${(data.duration / 1000).toFixed(1)}s.` : '';
-                addActionElement('Task Summary', `${durationSummary} ${metricsSummary}`.trim(), 'task_completed');
             }
         } catch (error) {
             console.error('Error processing task completion:', error);

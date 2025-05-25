@@ -6,7 +6,7 @@ const fs = require('fs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { router: authRoutes, authenticateToken } = require('./authRoutes');
-const { chatFunctions, fileFunctions } = require('./database');
+const { chatFunctions, fileFunctions, taskStepFunctions } = require('./database');
 const mime = require('mime-types');
 const rateLimit = require('express-rate-limit');
 
@@ -183,10 +183,48 @@ app.get('/api/chats/:chatId', authenticateToken, async (req, res) => {
     try {
         const chatId = req.params.chatId;
         const messages = await chatFunctions.getChatHistory(req.user.id, chatId);
-        res.json({ messages });
+        
+        // Get task steps for this chat
+        let taskSteps = [];
+        try {
+            taskSteps = await taskStepFunctions.getTaskSteps(req.user.id, chatId);
+        } catch (stepError) {
+            console.error('Error getting task steps:', stepError);
+            // Continue without steps if there's an error
+        }
+        
+        res.json({ messages, taskSteps });
     } catch (error) {
         console.error('Error getting chat history:', error);
         res.status(500).json({ error: 'Failed to retrieve chat history' });
+    }
+});
+
+app.get('/api/chats/:chatId/files', authenticateToken, async (req, res) => {
+    try {
+        const chatId = req.params.chatId;
+        const files = await fileFunctions.getTrackedFiles(req.user.id, chatId);
+        
+        // Format files to match the expected structure
+        const formattedFiles = {
+            host: files.hostFiles.map(file => ({
+                id: file.id,
+                fileName: file.originalName || (file.filePath ? file.filePath.split('/').pop() : `file_${file.id}`),
+                path: file.filePath,
+                content: file.fileContent
+            })),
+            container: files.containerFiles.map(file => ({
+                id: file.id,
+                fileName: file.originalName || (file.containerPath ? file.containerPath.split('/').pop() : `file_${file.id}`),
+                path: file.containerPath,
+                content: file.fileContent
+            }))
+        };
+        
+        res.json({ files: formattedFiles });
+    } catch (error) {
+        console.error('Error getting chat files:', error);
+        res.status(500).json({ error: 'Failed to retrieve chat files' });
     }
 });
 

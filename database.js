@@ -169,6 +169,28 @@ function initDatabase() {
       console.log('Settings table ready');
     }
   });
+  
+  
+  db.run(`CREATE TABLE IF NOT EXISTS task_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT NOT NULL,
+    chatId INTEGER NOT NULL,
+    messageId INTEGER,
+    stepIndex INTEGER NOT NULL,
+    stepData TEXT NOT NULL,
+    stepStatus TEXT DEFAULT 'pending',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completedAt DATETIME,
+    FOREIGN KEY (userId) REFERENCES users(id),
+    FOREIGN KEY (chatId) REFERENCES chats(id),
+    FOREIGN KEY (messageId) REFERENCES chat_history(id)
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating task_steps table:', err.message);
+    } else {
+      console.log('Task steps table ready');
+    }
+  });
 }
 
 /**
@@ -554,14 +576,25 @@ const chatFunctions = {
           }
 
           
-          db.run('DELETE FROM chats WHERE id = ? AND userId = ?', 
-            [chatId, userId], 
-            function(err) {
+          db.run('DELETE FROM task_steps WHERE userId = ? AND chatId = ?', 
+            [userId, chatId], 
+            (err) => {
               if (err) {
                 reject(err);
-              } else {
-                resolve({ deleted: this.changes });
+                return;
               }
+
+              
+              db.run('DELETE FROM chats WHERE id = ? AND userId = ?', 
+                [chatId, userId], 
+                function(err) {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve({ deleted: this.changes });
+                  }
+                }
+              );
             }
           );
         }
@@ -950,6 +983,130 @@ process.on('exit', () => {
 });
 
 /**
+ * Task step-related database functions
+ * @namespace taskStepFunctions
+ */
+const taskStepFunctions = {
+  /**
+   * Store task steps for a chat
+   * @param {string} userId - User ID
+   * @param {number} chatId - Chat ID
+   * @param {Array} steps - Array of step objects
+   * @param {number} messageId - Associated message ID (optional)
+   * @returns {Promise<Array>} Array of created step IDs
+   */
+  async storeTaskSteps(userId, chatId, steps, messageId = null) {
+    const stepIds = [];
+    
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const stepData = JSON.stringify({
+        step: step.step,
+        action: step.action,
+        expectedOutput: step.expectedOutput,
+        originalIndex: i
+      });
+      
+      const stepId = await new Promise((resolve, reject) => {
+        db.run(
+          'INSERT INTO task_steps (userId, chatId, messageId, stepIndex, stepData, stepStatus) VALUES (?, ?, ?, ?, ?, ?)',
+          [userId, chatId, messageId, i, stepData, 'pending'],
+          function(err) {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(this.lastID);
+            }
+          }
+        );
+      });
+      
+      stepIds.push(stepId);
+    }
+    
+    return stepIds;
+  },
+
+  /**
+   * Update step status
+   * @param {string} userId - User ID
+   * @param {number} chatId - Chat ID
+   * @param {number} stepIndex - Step index
+   * @param {string} status - New status ('pending', 'completed', 'error')
+   * @returns {Promise<Object>} Result with changes count
+   */
+  async updateStepStatus(userId, chatId, stepIndex, status) {
+    return new Promise((resolve, reject) => {
+      const completedAt = status === 'completed' ? new Date().toISOString() : null;
+      
+      db.run(
+        'UPDATE task_steps SET stepStatus = ?, completedAt = ? WHERE userId = ? AND chatId = ? AND stepIndex = ?',
+        [status, completedAt, userId, chatId, stepIndex],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ changes: this.changes });
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Get task steps for a chat
+   * @param {string} userId - User ID
+   * @param {number} chatId - Chat ID
+   * @returns {Promise<Array>} Array of task steps
+   */
+  async getTaskSteps(userId, chatId) {
+    return new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM task_steps WHERE userId = ? AND chatId = ? ORDER BY stepIndex ASC',
+        [userId, chatId],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            const steps = rows.map(row => ({
+              id: row.id,
+              stepIndex: row.stepIndex,
+              stepData: tryParseJSON(row.stepData, {}),
+              stepStatus: row.stepStatus,
+              createdAt: row.createdAt,
+              completedAt: row.completedAt
+            }));
+            resolve(steps);
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Clear task steps for a chat
+   * @param {string} userId - User ID
+   * @param {number} chatId - Chat ID
+   * @returns {Promise<Object>} Result with changes count
+   */
+  async clearTaskSteps(userId, chatId) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'DELETE FROM task_steps WHERE userId = ? AND chatId = ?',
+        [userId, chatId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ changes: this.changes });
+          }
+        }
+      );
+    });
+  }
+};
+
+/**
  * Get the database instance
  * @returns {sqlite3.Database} Database instance
  */
@@ -964,5 +1121,6 @@ module.exports = {
   chatFunctions,
   fileFunctions,
   settingsFunctions,
+  taskStepFunctions,
   getDb  
 }; 

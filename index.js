@@ -11,6 +11,7 @@ const contextManager = require('./utils/context');
 const io = require('./socket');
 const sanitize = require('sanitize-filename');
 const prompts = require('./tools/AI/prompts');
+const { taskStepFunctions } = require('./database');
 require('dotenv').config();
 
 const SCREENSHOT_INTERVAL = 5000;
@@ -280,6 +281,13 @@ async function executeTaskPlan(planObject, question, userId, chatId, isFollowUp)
   // Emit steps to client
   io.to(`user:${userId}`).emit('steps', { userId, chatId, plan });
   
+  // Store steps in database for history reconstruction
+  try {
+    await taskStepFunctions.storeTaskSteps(userId, chatId, plan);
+  } catch (error) {
+    console.error('Error storing task steps:', error.message);
+  }
+  
   // Setup screenshot interval if using browser
   let screenshotInterval = setupScreenshotInterval(plan, userId, chatId);
   
@@ -346,6 +354,13 @@ async function executeSteps(plan, question, userId, chatId) {
     
     // Emit step completion
     emitStepCompletion(enhancedStep, currentStepIndex, plan, userId, chatId);
+    
+    // Update step status in database
+    try {
+      await taskStepFunctions.updateStepStatus(userId, chatId, currentStepIndex, 'completed');
+    } catch (error) {
+      console.error('Error updating step status:', error.message);
+    }
     
     // Store step output
     const stepOutput = {
@@ -459,8 +474,6 @@ async function executeToolAction(enhancedStep, inputData, currentStepIndex, plan
     userId,
     chatId
   );
-  
-  console.log(`[Orchestrator] Tool ${enhancedStep.action} returned:`, JSON.stringify(summary, null, 2));
   
   // Track container files if needed
   if (["execute", "bash"].includes(enhancedStep.action) && 
@@ -907,6 +920,42 @@ if (require.main === module) {
             }
           } catch (fileError) {
             console.error('Error getting files from history:', fileError);
+          }
+          
+          // Get task steps for visualization
+          let taskSteps = [];
+          try {
+            taskSteps = await taskStepFunctions.getTaskSteps(userId, chatId);
+          } catch (stepError) {
+            console.error('Error getting task steps from history:', stepError);
+          }
+          
+          // Emit task steps first if they exist
+          if (taskSteps && taskSteps.length > 0) {
+            const plan = taskSteps.map(step => ({
+              step: step.stepData.step,
+              action: step.stepData.action,
+              expectedOutput: step.stepData.expectedOutput
+            }));
+            socket.emit('steps', { userId, chatId, plan, loadedFromHistory: true });
+            
+            // Emit step completions for completed steps
+            taskSteps.forEach((taskStep, index) => {
+              if (taskStep.stepStatus === 'completed') {
+                socket.emit('step_completed', {
+                  userId,
+                  chatId,
+                  step: taskStep.stepData.step,
+                  action: taskStep.stepData.action,
+                  metrics: {
+                    stepIndex: index,
+                    stepCount: index + 1,
+                    totalSteps: taskSteps.length,
+                    successCount: taskSteps.filter(s => s.stepStatus === 'completed').length
+                  }
+                });
+              }
+            });
           }
           
           // Emit task completion with history data
