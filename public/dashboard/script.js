@@ -887,10 +887,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         
         if (!currentChatId || currentChatId === 'new') {
-            createNewChat().then(() => {
-                processSendMessage(currentChatId);
-                
-                updateChatTitleFromContent(currentChatId, message);
+            createNewChat().then((newChat) => {
+                if (newChat && newChat.id) {
+                    currentChatId = newChat.id;
+                    localStorage.setItem('currentChatId', currentChatId);
+                    processSendMessage(currentChatId);
+                    updateChatTitleFromContent(currentChatId, message);
+                } else {
+                    console.error('Failed to create new chat');
+                    updateStatusDisplay('Failed to create new chat', 'error');
+                    if (messageInput && sendButton) {
+                        messageInput.disabled = false;
+                        sendButton.disabled = false;
+                    }
+                }
+            }).catch((error) => {
+                console.error('Error creating new chat:', error);
+                updateStatusDisplay('Failed to create new chat', 'error');
+                if (messageInput && sendButton) {
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                }
             });
         } else {
             

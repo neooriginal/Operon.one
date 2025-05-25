@@ -362,13 +362,18 @@ io.on('connection', (socketClient) => {
          const { task, chatId = 1 } = data;
          
          
-         const numericChatId = parseInt(chatId, 10);
-         if (isNaN(numericChatId)) {
-             socketClient.emit('task_error', { 
-                 error: 'Invalid chat ID format',
-                 userId: socketClient.userId
-             });
-             return;
+         let numericChatId;
+         if (chatId === 'new' || chatId === null || chatId === undefined) {
+             numericChatId = 1; // Default to 1 for new chats
+         } else {
+             numericChatId = parseInt(chatId, 10);
+             if (isNaN(numericChatId)) {
+                 socketClient.emit('task_error', { 
+                     error: 'Invalid chat ID format',
+                     userId: socketClient.userId
+                 });
+                 return;
+             }
          }
          
          
