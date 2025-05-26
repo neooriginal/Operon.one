@@ -257,6 +257,13 @@ section:nth-of-type(odd) {
 .logo {
     display: flex;
     align-items: center;
+    gap: 12px;
+}
+
+.logo-img {
+    height: 32px;
+    width: auto;
+    object-fit: contain;
 }
 
 .logo-text {
@@ -812,5 +819,13 @@ body *, p, h1, h2, h3, h4, h5, a, span, div {
 
     .waitlist-form .form-group {
         flex-direction: column;
+    }
+
+    .logo-img {
+        height: 24px;
+    }
+    
+    .logo-text {
+        font-size: 1.1rem;
     }
 } 
