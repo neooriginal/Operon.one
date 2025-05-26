@@ -2,6 +2,8 @@
 
 ## 🔥 The Next-Generation Platform for Automated Operations
 
+![image](https://github.com/user-attachments/assets/c5b1cb77-f0f6-4eed-8116-b9fe64b48cc1)
+
 Operon.one is a powerful, next generation, generative action-ai to interact with multiple platforms
 
 ### ✨ Key Features
