@@ -1,17 +1,29 @@
-![logo](https://github.com/user-attachments/assets/dab2bc2d-bc0d-4122-a68a-a6a770dc0b8a)
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/dab2bc2d-bc0d-4122-a68a-a6a770dc0b8a" alt="Operon Logo" width="150"/>
+</p>
 
-## 🔥 The Next-Generation Action-AI
-Operon.one is a powerful, next generation, generative action-ai to interact with multiple platforms including MCP
+<h2 align="center">🔥 The Next-Generation Action-AI</h2>
 
-![image](https://github.com/user-attachments/assets/c5b1cb77-f0f6-4eed-8116-b9fe64b48cc1)
+<p align="center">
+  <strong>Operon.one</strong> is a powerful, next-generation generative Action-AI to interact with multiple platforms including MCP.
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/c5b1cb77-f0f6-4eed-8116-b9fe64b48cc1" alt="Operon UI Preview" width="800"/>
+</p>
+
+---
 
 ## 🚧 Work in Progress
 
-**Note:** Operon.one is currently under active development. Core features are functional, but we're constantly improving and adding new capabilities. Expect frequent updates and occasional breaking changes as we work toward a stable release.
+> **Note:** Operon.one is currently under active development.
+> Core features are functional, but we’re continuously improving and expanding functionality.
+> Expect **frequent updates** and **occasional breaking changes** as we move toward a stable release.
 
+---
 
-### ⚡ Getting Started
+## ⚡ Getting Started
 
 ```bash
 # Clone the repository
@@ -27,17 +39,23 @@ cp .env.example .env
 npm start
 ```
 
+---
 
-### 🗺️ Roadmap
+## 🗺️ Roadmap
 
-- Mobile application for on-the-go management
-- Cloud deployment options
-- General performance improvements and better handling
-
-## 📜 License
-
-This project is proprietary software. See the [LICENSE](LICENSE) file for details.
+* 📱 Mobile application for on-the-go management
+* ☁️ Cloud deployment options
+* 🚀 General performance improvements and better error handling
 
 ---
 
-Made with ❤️ by the Operon.one Team 
+## 📜 License
+
+This project is **proprietary software**.
+See the [LICENSE](LICENSE) file for more information.
+
+---
+
+<p align="center">
+  Made with ❤️ by the <strong>Operon.one</strong> Team
+</p>
