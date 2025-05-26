@@ -1,26 +1,29 @@
-# 🚀 Operon.one
 
-## 🔥 The Next-Generation Platform for Automated Operations
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/dab2bc2d-bc0d-4122-a68a-a6a770dc0b8a" alt="Operon Logo" width="150"/>
+</p>
 
-Operon.one is a powerful, next generation, generative action-ai to interact with multiple platforms
+<h2 align="center">🔥 The Next-Generation Action-AI</h2>
 
-### ✨ Key Features
+<p align="center">
+  <strong>Operon.one</strong> is a powerful, next-generation generative Action-AI to interact with multiple platforms including MCP.
+</p>
 
-- **Advanced Automation**: Leverage AI and machine learning to automate complex decision-making processes
-- **Seamless Integration**: Connect with existing tools and services through our comprehensive API
-- **Real-time Collaboration**: Work together with your team in real-time with WebSocket communication
-- **Enterprise-grade Security**: Robust authentication and authorization mechanisms to keep your data safe
-- **Extensible Architecture**: Build custom plugins and extensions to meet your specific needs
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/c5b1cb77-f0f6-4eed-8116-b9fe64b48cc1" alt="Operon UI Preview" width="800"/>
+</p>
 
-### 🛠️ Built With
+---
 
-- Node.js and Express for the backend API
-- Socket.io for real-time communication
-- OpenAI integration for intelligent automation
-- SQLite for reliable data persistence
-- JWT-based authentication for security
+## 🚧 Work in Progress
 
-### ⚡ Getting Started
+> **Note:** Operon.one is currently under active development.
+> Core features are functional, but we’re continuously improving and expanding functionality.
+> Expect **frequent updates** and **occasional breaking changes** as we move toward a stable release.
+
+---
+
+## ⚡ Getting Started
 
 ```bash
 # Clone the repository
@@ -36,22 +39,23 @@ cp .env.example .env
 npm start
 ```
 
-## 🚧 Work in Progress
+---
 
-**Note:** Operon.one is currently under active development. Core features are functional, but we're constantly improving and adding new capabilities. Expect frequent updates and occasional breaking changes as we work toward a stable release.
+## 🗺️ Roadmap
 
-### 🗺️ Roadmap
-
-- Enhanced dashboard
-- Mobile application for on-the-go management
-- Extended plugin ecosystem
-- Cloud deployment options
-- General performance improvements and better handling
-
-## 📜 License
-
-This project is proprietary software. See the [LICENSE](LICENSE) file for details.
+* 📱 Mobile application for on-the-go management
+* ☁️ Cloud deployment options
+* 🚀 General performance improvements and better error handling
 
 ---
 
-Made with ❤️ by the Operon.one Team 
+## 📜 License
+
+This project is **proprietary software**.
+See the [LICENSE](LICENSE) file for more information.
+
+---
+
+<p align="center">
+  Made with ❤️ by the <strong>Operon.one</strong> Team
+</p>
