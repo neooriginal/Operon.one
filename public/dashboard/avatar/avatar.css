@@ -1,0 +1,429 @@
+/* Modern, minimalistic AI Avatar CSS */
+
+
+.avatar-container {
+    display: flex;
+    justify-content: center;
+    margin: 40px 0;
+}
+
+/* Main Avatar Container */
+.ai-avatar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    transform-origin: center;
+    transition: transform 0.3s ease;
+}
+
+/* Avatar Head */
+.avatar-head {
+    position: relative;
+    width: 120px;
+    height: 80px;
+    background: var(--avatar-color);
+    border-radius: 45px 45px 40px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Antenna - signature feature */
+.avatar-head::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 12px;
+    background: var(--avatar-color);
+    border-radius: 2px;
+}
+
+.avatar-head::after {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    background: var(--avatar-color);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(74, 90, 106, 0.4);
+}
+
+/* Side Connector - enhanced with details */
+.connector {
+    position: absolute;
+    right: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 30px;
+    background: var(--avatar-color);
+    border-radius: 0 10px 10px 0;
+}
+
+.connector::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 6px;
+    width: 2px;
+    height: 6px;
+    background: var(--background-light);
+    border-radius: 1px;
+}
+
+.connector::after {
+    content: '';
+    position: absolute;
+    top: 16px;
+    left: 6px;
+    width: 2px;
+    height: 6px;
+    background: var(--background-light);
+    border-radius: 1px;
+}
+
+/* Eyes */
+.eye {
+    width: 20px;
+    height: 20px;
+    background: var(--background-light);
+    border-radius: 50%;
+    position: absolute;
+    top: 45%;
+    transform: translateY(-50%);
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.eye::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--avatar-color);
+    border-radius: 50%;
+    top: calc(50% + var(--pupil-y, 0px));
+    left: calc(50% + var(--pupil-x, 0px));
+    transform: translate(-50%, -50%);
+    transition: all 0.15s ease;
+}
+
+.left-eye {
+    left: 25px;
+}
+
+.right-eye {
+    right: 25px;
+}
+
+/* Mouth */
+.mouth {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 35px;
+    height: 4px;
+    background: var(--background-light);
+    border-radius: 2px 2px 4px 4px;
+    transition: all 0.3s ease;
+}
+
+/* Avatar Body */
+.avatar-body {
+    width: 120px;
+    height: 80px;
+    background: var(--avatar-color);
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+/* Chest panel - tech detail */
+.avatar-body::before {
+    content: '';
+    position: absolute;
+    width: 50px;
+    height: 40px;
+    background: linear-gradient(135deg, rgba(245, 242, 240, 0.1) 0%, rgba(245, 242, 240, 0.05) 100%);
+    border-radius: 15px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(245, 242, 240, 0.15);
+}
+
+/* Power indicator dot */
+.avatar-body::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: #4ade80;
+    border-radius: 50%;
+    top: 25px;
+    right: 20px;
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+    animation: power-pulse 2s ease-in-out infinite;
+}
+
+@keyframes power-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.2);
+    }
+}
+
+
+
+/* Animation States */
+.ai-avatar.idle .avatar-head {
+    animation: idle-head-movement 4s ease-in-out infinite;
+}
+
+.ai-avatar.idle .eye {
+    animation: idle-blink 3s ease-in-out infinite;
+}
+
+.ai-avatar.talking .mouth {
+    animation: talking-mouth 0.5s ease-in-out infinite alternate;
+}
+
+.ai-avatar.talking .eye {
+    animation: talking-blink 2s ease-in-out infinite;
+}
+
+.ai-avatar.talking {
+    animation: talking-bounce 0.6s ease-in-out infinite alternate;
+}
+
+/* Keyframe Animations */
+@keyframes idle-head-movement {
+    0%, 100% {
+        transform: translateX(0px) rotate(0deg);
+    }
+    25% {
+        transform: translateX(-2px) rotate(-1deg);
+    }
+    50% {
+        transform: translateX(0px) rotate(0deg);
+    }
+    75% {
+        transform: translateX(2px) rotate(1deg);
+    }
+}
+
+/* Antenna animations */
+.ai-avatar.idle .avatar-head::before {
+    animation: antenna-sway 4s ease-in-out infinite;
+}
+
+.ai-avatar.idle .avatar-head::after {
+    animation: antenna-glow 3s ease-in-out infinite, antenna-bob 4s ease-in-out infinite;
+}
+
+@keyframes antenna-sway {
+    0%, 100% {
+        transform: translateX(-50%) rotate(0deg);
+    }
+    25% {
+        transform: translateX(-50%) rotate(-3deg);
+    }
+    50% {
+        transform: translateX(-50%) rotate(0deg);
+    }
+    75% {
+        transform: translateX(-50%) rotate(2deg);
+    }
+}
+
+@keyframes antenna-bob {
+    0%, 100% {
+        transform: translateX(-50%) translateY(0px);
+    }
+    50% {
+        transform: translateX(-50%) translateY(-2px);
+    }
+}
+
+@keyframes antenna-glow {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(74, 90, 106, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(74, 90, 106, 0.8), 0 0 25px rgba(74, 90, 106, 0.3);
+    }
+}
+
+@keyframes idle-blink {
+    0%, 90%, 100% {
+        height: 20px;
+    }
+    93%, 97% {
+        height: 3px;
+    }
+}
+
+@keyframes talking-mouth {
+    0% {
+        height: 4px;
+        width: 40px;
+    }
+    100% {
+        height: 8px;
+        width: 35px;
+        border-radius: 4px;
+    }
+}
+
+@keyframes talking-blink {
+    0%, 90%, 100% {
+        height: 20px;
+    }
+    95% {
+        height: 3px;
+    }
+}
+
+@keyframes talking-bounce {
+    0% {
+        transform: translateY(0px) scale(1);
+    }
+    100% {
+        transform: translateY(-2px) scale(1);
+    }
+}
+
+/* Controls */
+.controls {
+    margin: 40px 0;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.controls button {
+    padding: 12px 24px;
+    background: var(--button-color);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+}
+
+.controls button:hover {
+    background: #5a6fd8;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.controls button:active {
+    transform: translateY(0);
+}
+
+/* Integration Info */
+.integration-info {
+    margin-top: 60px;
+    padding: 30px;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    text-align: left;
+}
+
+.integration-info h2 {
+    margin-top: 0;
+    color: var(--avatar-color);
+}
+
+.integration-info code {
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #d63384;
+}
+
+.integration-info ol {
+    line-height: 1.8;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+    .avatar-head, .avatar-body {
+        width: 100px;
+    }
+    
+    .avatar-head {
+        height: 66px;
+    }
+    
+    .avatar-body {
+        height: 66px;
+    }
+    
+    .avatar-body::before {
+        width: 42px;
+        height: 32px;
+    }
+    
+    .avatar-body::after {
+        top: 20px;
+        right: 16px;
+        width: 5px;
+        height: 5px;
+    }
+    
+
+    
+    .eye {
+        width: 17px;
+        height: 17px;
+    }
+    
+    .eye::after {
+        width: 7px;
+        height: 7px;
+    }
+    
+    .left-eye {
+        left: 20px;
+    }
+    
+    .right-eye {
+        right: 20px;
+    }
+    
+    .mouth {
+        width: 35px;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .controls button {
+        width: 200px;
+    }
+} 
