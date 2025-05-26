@@ -30,7 +30,10 @@ class Context {
         toolStates: new Map(),
         variables: new Map(),
         startTime: Date.now(),
-        chatId: chatId
+        chatId: chatId,
+        isTaskRunning: false,
+        taskStartTime: null,
+        lastTaskId: null
       });
       
       
@@ -68,8 +71,12 @@ class Context {
    * Reset a user's context
    * @param {string} userId - User identifier
    */
-  resetContext(userId = 'default') {
-    return this.initializeContext(userId);
+  resetContext(userId = 'default', chatId = 1) {
+    const contextKey = `${userId}_${chatId}`;
+    if (this.contexts.has(contextKey)) {
+      this.contexts.delete(contextKey);
+    }
+    return this.initializeContext(userId, chatId);
   }
 
   /**
@@ -321,6 +328,42 @@ class Context {
   getTaskDuration(userId = 'default') {
     const startTime = this.getStartTime(userId);
     return Date.now() - startTime;
+  }
+
+  /**
+   * Check if a task is currently running for a user
+   * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier
+   */
+  isTaskRunning(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).isTaskRunning;
+  }
+
+  /**
+   * Set task running state
+   * @param {boolean} running - Whether task is running
+   * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier
+   */
+  setTaskRunning(running, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    context.isTaskRunning = running;
+    if (running) {
+      context.taskStartTime = Date.now();
+      context.lastTaskId = `${userId}_${chatId}_${Date.now()}`;
+    } else {
+      context.taskStartTime = null;
+    }
+    return context.isTaskRunning;
+  }
+
+  /**
+   * Get the last task ID
+   * @param {string} userId - User identifier
+   * @param {number} chatId - Chat identifier
+   */
+  getLastTaskId(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).lastTaskId;
   }
 }
 

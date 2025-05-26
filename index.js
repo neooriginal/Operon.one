@@ -146,10 +146,24 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
       chatId = 1; 
     }
     
-    // Initialize or continue context
+    // Check if a task is already running for this user
+    if (contextManager.isTaskRunning(userId, chatId)) {
+      console.log(`Task already running for user ${userId} in chat ${chatId}`);
+      io.to(`user:${userId}`).emit('task_error', { 
+        userId, 
+        chatId, 
+        error: 'A task is already running. Please wait for it to complete before submitting a new task.' 
+      });
+      return 'Task already running. Please wait for completion.';
+    }
+    
+    // Initialize or continue context first
     if (!isFollowUp) {
       contextManager.resetContext(userId, chatId);
     }
+    
+    // Set task as running only once after context is initialized/reset
+    contextManager.setTaskRunning(true, userId, chatId);
     
     // Notify user that task is received
     io.to(`user:${userId}`).emit('task_received', { userId, chatId, task: question, isFollowUp });
@@ -201,10 +215,6 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
 async function handleDirectAnswer(planObject, question, userId, chatId) {
   io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Direct answer provided' });
   
-  const directAnswer = typeof planObject.answer === 'string' 
-    ? planObject.answer 
-    : JSON.stringify(planObject.answer);
-  
   // Add to conversation history
   contextManager.addToHistory({
     role: "user", 
@@ -216,33 +226,32 @@ async function handleDirectAnswer(planObject, question, userId, chatId) {
   contextManager.addToHistory({
     role: "assistant", 
     content: [
-      {type: "text", text: directAnswer}
+      {type: "text", text: planObject.answer}
     ]
   }, userId, chatId);
   
-  // Emit completion event
+  // Emit task completion for direct answers
   io.to(`user:${userId}`).emit('task_completed', { 
     userId, 
     chatId,
-    result: directAnswer,
+    result: cleanJsonResponses(planObject.answer),
     duration: 0,
     completedAt: new Date().toISOString(),
-    outputFiles: {
-      host: [],
-      container: []
-    },
+    outputFiles: { host: [], container: [] },
     metrics: {
-      stepCount: 1,
-      successCount: 1,
-      totalSteps: 1,
+      stepCount: 0,
+      successCount: 0,
+      totalSteps: 0,
       durationSeconds: 0,
       averageStepTime: 0
     }
   });
   
-  await cleanupUserResources(userId);
+  // Mark task as no longer running
+  contextManager.setTaskRunning(false, userId, chatId);
   
-  return directAnswer;
+  await cleanupUserResources(userId);
+  return planObject.answer;
 }
 
 /**
@@ -620,6 +629,9 @@ async function finalizeAndReturn(question, plan, userId, chatId) {
     finalOutput = "Task completed but could not be finalized: " + error.message;
     io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
   }
+  
+  // Mark task as no longer running
+  contextManager.setTaskRunning(false, userId, chatId);
   
   await cleanupUserResources(userId);
   return finalOutput;

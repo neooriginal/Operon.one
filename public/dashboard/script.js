@@ -1142,6 +1142,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Skip if we already have steps for this task
+        const existingStepGroup = chatMessages.querySelector('.step-group');
+        if (existingStepGroup && !data.loadedFromHistory) {
+            console.log('Steps already exist, skipping duplicate steps event');
+            return;
+        }
         
         if (data.plan && Array.isArray(data.plan)) {
             const statusText = data.loadedFromHistory ? 'Plan loaded from history' : 'Plan received';
@@ -1170,45 +1176,40 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        
         if (data.userId === userId) {
             console.log('Step completed:', data);
             updateStatusDisplay(`Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}`, 'status_update');
             const stepId = `step-${data.metrics.stepIndex}`;
             const stepElement = chatMessages.querySelector(`.action-element[data-step-id="${stepId}"]`);
             if (stepElement) {
-                
                 const iconContainer = stepElement.querySelector('.action-icon');
                 if (iconContainer) {
                     iconContainer.innerHTML = getIconForType('step_completed');
-                     iconContainer.style.color = '#28a745'; 
+                    iconContainer.style.color = '#28a745'; 
                 }
-                
                 stepElement.style.opacity = '0.7'; 
             }
-            
         }
     });
 
     
     socket.on('task_completed', (data) => {
         try {
-            
             if (data.userId === userId) {
                 console.log('Task completed:', data);
                 
-                
                 const result = extractTextFromObject(data.result) || 'Task completed successfully';
                 
-                
+                // Only add the message if it's not a duplicate and not from history loading
                 if (!isDuplicateMessage(result) && !data.loadedFromHistory && !window.isLoadingHistory) {
                     addMessage(result, 'ai');
                 }
                 
-                
+                // Only add file output if we have files and haven't already shown them
                 if (data.outputFiles && 
                    ((data.outputFiles.host && data.outputFiles.host.length > 0) || 
-                   (data.outputFiles.container && data.outputFiles.container.length > 0))) {
+                   (data.outputFiles.container && data.outputFiles.container.length > 0)) &&
+                   !document.querySelector('.file-output')) {
                     const filesHtml = generateFilesHtml(data.outputFiles);
                     addMessage(`<div class="file-output">
                         <div class="file-header">
@@ -1223,12 +1224,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const statusText = data.loadedFromHistory ? 'History loaded' : 'Task completed';
                 updateStatusDisplay(statusText, 'completed');
                 
-                
                 messageInput.disabled = false;
                 sendButton.disabled = false;
             }
         } catch (error) {
-            console.error('Error processing task completion:', error);
+            console.error('Error processing task completion:', error.message);
             updateStatusDisplay('Error completing task', 'error');
         }
     });
