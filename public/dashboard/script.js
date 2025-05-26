@@ -22,8 +22,91 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusDisplay = document.getElementById('status-display');
     const recentChatsList = document.getElementById('recent-chats-list');
     const newTaskButton = document.getElementById('new-task-button');
+    const sidebar = document.querySelector('.sidebar');
 
-    
+    // Add sidebar toggle button for mobile
+    const sidebarHeader = document.querySelector('.sidebar-header');
+    if (sidebarHeader) {
+        const toggleButton = document.createElement('button');
+        toggleButton.className = 'sidebar-toggle';
+        toggleButton.innerHTML = '<i class="fas fa-bars"></i>';
+        toggleButton.setAttribute('aria-label', 'Toggle sidebar');
+        sidebarHeader.appendChild(toggleButton);
+
+        // Handle sidebar toggle
+        toggleButton.addEventListener('click', () => {
+            sidebar.classList.toggle('expanded');
+            toggleButton.innerHTML = sidebar.classList.contains('expanded') ? 
+                '<i class="fas fa-times"></i>' : 
+                '<i class="fas fa-bars"></i>';
+        });
+
+        // Close sidebar when clicking outside
+        document.addEventListener('click', (event) => {
+            const isClickInside = sidebar.contains(event.target);
+            if (!isClickInside && window.innerWidth <= 768 && sidebar.classList.contains('expanded')) {
+                sidebar.classList.remove('expanded');
+                toggleButton.innerHTML = '<i class="fas fa-bars"></i>';
+            }
+        });
+    }
+
+    // Handle mobile keyboard adjustments
+    if (messageInput) {
+        messageInput.addEventListener('focus', () => {
+            if (window.innerWidth <= 768) {
+                // Add a small delay to allow the keyboard to show up
+                setTimeout(() => {
+                    window.scrollTo(0, document.body.scrollHeight);
+                    if (chatMessages) {
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    }
+                }, 300);
+            }
+        });
+    }
+
+    // Improve mobile scrolling
+    let touchStartY;
+    if (chatMessages) {
+        chatMessages.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        chatMessages.addEventListener('touchmove', (e) => {
+            if (!touchStartY) {
+                return;
+            }
+
+            const touchY = e.touches[0].clientY;
+            const isScrollingUp = touchY > touchStartY;
+            const isAtTop = chatMessages.scrollTop === 0;
+            const isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop === chatMessages.clientHeight;
+
+            // Prevent pull-to-refresh when at the top
+            if (isAtTop && isScrollingUp) {
+                e.preventDefault();
+            }
+
+            // Prevent overscroll when at the bottom
+            if (isAtBottom && !isScrollingUp) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
+
+    // Adjust viewport height for mobile browsers
+    function adjustViewportHeight() {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+
+    window.addEventListener('resize', adjustViewportHeight);
+    window.addEventListener('orientationchange', () => {
+        setTimeout(adjustViewportHeight, 100);
+    });
+    adjustViewportHeight();
+
     const userId = localStorage.getItem('userId') || '';
     const userEmail = localStorage.getItem('userEmail') || '';
     const authToken = localStorage.getItem('authToken') || '';
