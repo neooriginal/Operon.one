@@ -1,26 +1,15 @@
-# 🚀 Operon.one
+![logo](https://github.com/user-attachments/assets/dab2bc2d-bc0d-4122-a68a-a6a770dc0b8a)
 
-## 🔥 The Next-Generation Platform for Automated Operations
+
+## 🔥 The Next-Generation Action-AI
+Operon.one is a powerful, next generation, generative action-ai to interact with multiple platforms including MCP
 
 ![image](https://github.com/user-attachments/assets/c5b1cb77-f0f6-4eed-8116-b9fe64b48cc1)
 
-Operon.one is a powerful, next generation, generative action-ai to interact with multiple platforms
+## 🚧 Work in Progress
 
-### ✨ Key Features
+**Note:** Operon.one is currently under active development. Core features are functional, but we're constantly improving and adding new capabilities. Expect frequent updates and occasional breaking changes as we work toward a stable release.
 
-- **Advanced Automation**: Leverage AI and machine learning to automate complex decision-making processes
-- **Seamless Integration**: Connect with existing tools and services through our comprehensive API
-- **Real-time Collaboration**: Work together with your team in real-time with WebSocket communication
-- **Enterprise-grade Security**: Robust authentication and authorization mechanisms to keep your data safe
-- **Extensible Architecture**: Build custom plugins and extensions to meet your specific needs
-
-### 🛠️ Built With
-
-- Node.js and Express for the backend API
-- Socket.io for real-time communication
-- OpenAI integration for intelligent automation
-- SQLite for reliable data persistence
-- JWT-based authentication for security
 
 ### ⚡ Getting Started
 
@@ -38,15 +27,10 @@ cp .env.example .env
 npm start
 ```
 
-## 🚧 Work in Progress
-
-**Note:** Operon.one is currently under active development. Core features are functional, but we're constantly improving and adding new capabilities. Expect frequent updates and occasional breaking changes as we work toward a stable release.
 
 ### 🗺️ Roadmap
 
-- Enhanced dashboard
 - Mobile application for on-the-go management
-- Extended plugin ecosystem
 - Cloud deployment options
 - General performance improvements and better handling
 
