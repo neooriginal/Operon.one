@@ -1,13 +1,13 @@
 const elementNumberingScript = `
 (function() {
-    
+    // Clear any previous elements
     window.aiIndexedElements = window.aiIndexedElements || [];
     
-    
+    // Remove any previously added element number labels
     const existingLabels = document.querySelectorAll('div[data-ai-element-number]');
     existingLabels.forEach(label => label.remove());
     
-    
+    // Reset outlines on previously indexed elements
     if (window.aiIndexedElements.length > 0) {
         window.aiIndexedElements.forEach(el => {
             if (el && el.style) {
@@ -16,12 +16,12 @@ const elementNumberingScript = `
         });
     }
     
-    
+    // Select all interactive elements
     let elements = document.querySelectorAll('button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"]), [onclick], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [role="tab"], [role="combobox"]');
     window.aiIndexedElements = [];
     
     elements = Array.from(elements).filter(el => {
-        
+        // Filter visible elements
         const rect = el.getBoundingClientRect();
         const computedStyle = window.getComputedStyle(el);
         
@@ -31,14 +31,14 @@ const elementNumberingScript = `
                computedStyle.visibility !== 'hidden' && 
                computedStyle.opacity !== '0' &&
                el.type !== 'hidden' &&
-               
+               // Allow elements slightly outside viewport
                rect.bottom >= -100 && 
                rect.right >= -100 && 
                rect.top <= (window.innerHeight + 100) && 
                rect.left <= (window.innerWidth + 100);
     });
     
-    
+    // Helper to get a descriptive text for each element
     const getElementDescription = (el) => {
         let desc = '';
         if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
@@ -61,9 +61,9 @@ const elementNumberingScript = `
         return desc;
     };
     
-    
+    // Helper to determine color based on element type
     const getElementColor = (el) => {
-        
+        // Color-code by element type
         if (el.tagName === 'INPUT') {
             switch(el.type) {
                 case 'text':
@@ -73,51 +73,55 @@ const elementNumberingScript = `
                 case 'tel':
                 case 'url':
                 case 'number':
-                    return '#4285F4'; 
+                    return '#4285F4'; // Blue for text inputs
                 case 'checkbox':
                 case 'radio':
-                    return '#0F9D58'; 
+                    return '#0F9D58'; // Green for checkboxes/radios
                 case 'submit':
                 case 'button':
-                    return '#DB4437'; 
+                    return '#DB4437'; // Red for button inputs
                 default:
-                    return '#F4B400'; 
+                    return '#F4B400'; // Yellow for other inputs
             }
         } else if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
-            return '#DB4437'; 
+            return '#DB4437'; // Red for buttons
         } else if (el.tagName === 'A') {
-            return '#9C27B0'; 
+            return '#9C27B0'; // Purple for links
         } else if (el.tagName === 'SELECT' || el.getAttribute('role') === 'combobox') {
-            return '#FF9800'; 
+            return '#FF9800'; // Orange for dropdowns
         } else if (el.tagName === 'TEXTAREA') {
-            return '#4285F4'; 
+            return '#4285F4'; // Blue for textareas
         }
-        return '#757575'; 
+        return '#757575'; // Gray for other elements
     };
+    
+    // Create window.numberedElements for references through numeric ID
+    window.numberedElements = {};
     
     elements.forEach((el, index) => {
         window.aiIndexedElements.push(el);
         const number = index + 1;
+        window.numberedElements[number] = el;
         
         const rect = el.getBoundingClientRect();
         const elementType = el.tagName.toLowerCase();
         const elementWidth = rect.width;
         const elementHeight = rect.height;
         
-        
+        // Log element for debugging
         console.log(\`Element \${number}: \${elementType} - \${getElementDescription(el)}\`);
         
-        
+        // Create a label with the element number
         let label = document.createElement('div');
         label.setAttribute('data-ai-element-number', number);
         label.textContent = number;
         label.style.position = 'absolute';
-        label.style.zIndex = '2147483647'; 
+        label.style.zIndex = '2147483647'; // Max z-index
         
-        
+        // Get appropriate color for the element type
         const backgroundColor = getElementColor(el);
         
-        
+        // Style the label
         label.style.background = backgroundColor;
         label.style.color = 'white';
         label.style.padding = '2px 4px';
@@ -132,24 +136,24 @@ const elementNumberingScript = `
         label.style.minWidth = '16px';
         label.style.lineHeight = '16px';
         
-        
+        // Position label depending on element size
         if (elementWidth < 30 || elementHeight < 20) {
-            
+            // For small elements, place the label above
             label.style.left = \`\${window.scrollX + rect.left}px\`;
             label.style.top = \`\${window.scrollY + rect.top - 18}px\`;
         } else {
-            
+            // For larger elements, place the label on the top-right corner
             label.style.left = \`\${window.scrollX + rect.right - 20}px\`;
             label.style.top = \`\${window.scrollY + rect.top}px\`;
         }
         
         document.body.appendChild(label);
         
-        
+        // Highlight the element with an outline
         el.style.outline = \`2px solid \${backgroundColor}88\`;
     });
     
-    
+    // Function to click on elements by their number
     window.clickElement = function(number) {
         if (number < 1 || number > window.aiIndexedElements.length) {
             console.warn('No element found with number:', number);
@@ -222,6 +226,7 @@ const elementNumberingScript = `
         }
     };
     
+    // Function to focus on elements by their number
     window.focusElement = function(number) {
         if (number < 1 || number > window.aiIndexedElements.length) {
             console.warn('No element found with number:', number);
@@ -264,6 +269,7 @@ const elementNumberingScript = `
         }
     };
     
+    // Function to get detailed information about elements
     window.getElementInfo = function(number) {
         if (number < 1 || number > window.aiIndexedElements.length) {
             console.warn('No element found with number:', number);
@@ -284,7 +290,7 @@ const elementNumberingScript = `
                 visibleText = el.value || el.placeholder || '';
             }
             
-            visibleText = visibleText.trim().replace(/\s+/g, ' ');
+            visibleText = visibleText.trim().replace(/\\s+/g, ' ');
             
             const elementContext = {
                 innerText: visibleText,
@@ -330,7 +336,7 @@ const elementNumberingScript = `
         }
     };
     
-    
+    // Highlight iframes to indicate they exist
     function handleIframes() {
         try {
             const iframes = document.querySelectorAll('iframe');

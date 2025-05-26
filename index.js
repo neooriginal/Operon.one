@@ -105,6 +105,21 @@ function loadTools() {
           });
           
           console.log(`Loaded tool: ${toolConfig.title}`);
+          
+          // Initialize browser tool if it's the one we just loaded
+          if (toolConfig.title === 'webBrowser' && folder === 'browser') {
+            // Look for the initialize module
+            const initializePath = path.join(toolsDirectory, folder, 'initialize.js');
+            if (fs.existsSync(initializePath)) {
+              const initModule = require(initializePath);
+              if (typeof initModule.initialize === 'function') {
+                // Initialize async but don't block startup
+                initModule.initialize().catch(err => {
+                  console.error(`Failed to initialize browser tool: ${err.message}`);
+                });
+              }
+            }
+          }
         }
       } else {
         console.warn(`Warning: No tool.json found in ${folder}, skipping`);

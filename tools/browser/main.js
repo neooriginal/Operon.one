@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { chromium } = require('playwright');
 const elementNumberingScript = require('./scriptInjector');
 const ai = require('../AI/ai');
 const contextManager = require('../../utils/context');
@@ -18,14 +18,11 @@ async function initialize(userId = 'default'){
         return browserInstances.get(userId);
     }
     
-    const browser = await puppeteer.launch({
-        headless: false,
-        defaultViewport: null,
+    const browser = await chromium.launch({
+        headless: false
     });
     
-    
     browserInstances.set(userId, browser);
-    
     
     let toolState = contextManager.getToolState('browser', userId) || {
         history: [],
@@ -33,7 +30,6 @@ async function initialize(userId = 'default'){
         sessions: [],
         activeSession: null
     };
-    
     
     const session = {
         id: Date.now(),
@@ -44,7 +40,6 @@ async function initialize(userId = 'default'){
     toolState.sessions.push(session);
     toolState.activeSession = session.id;
     
-    
     contextManager.setToolState('browser', toolState, userId);
     
     return browser;
@@ -53,7 +48,6 @@ async function initialize(userId = 'default'){
 async function taskFunction(task, data, image, websiteTextContent, userId = 'default'){
     
     let toolState = contextManager.getToolState('browser', userId);
-    
     
     const elementData = limitElements(data);
     const truncatedWebsiteContent = websiteTextContent.substring(0, MAX_WEBSITE_TEXT_LENGTH);
@@ -94,7 +88,6 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     Once you have enough information to confidently complete the task, respond with the "close" action. Look at previous messages for the information collected earlier and use it to summarize and finish the task.
     `
 
-    
     toolState.history.push({
         role: "user", 
         content: [
@@ -102,9 +95,7 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         ]
     });
     
-    
     limitHistory(toolState);
-    
     
     contextManager.setToolState('browser', toolState, userId);
 
@@ -114,7 +105,6 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         return taskFunction(task, data, image, websiteTextContent, userId);
     }
     
-    
     toolState.history.push({
         role: "assistant", 
         content: [
@@ -122,14 +112,12 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
         ]
     });
     
-    
     limitHistory(toolState);
 
     toolState.lastActions.push(JSON.stringify(result));
     if (toolState.lastActions.length > 5) {
         toolState.lastActions = toolState.lastActions.slice(-5);
     }
-    
     
     if (toolState.activeSession) {
         const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -142,7 +130,6 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
             });
         }
     }
-    
     
     contextManager.setToolState('browser', toolState, userId);
     
@@ -157,7 +144,6 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     }else if(result.action === "close"){
         console.log(result.summary);
         
-        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -167,14 +153,10 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
             }
         }
         
-        
         contextManager.setToolState('browser', toolState, userId);
-        
         
         const summaryCallback = toolState.summaryCallback;
         if (summaryCallback) {
-            
-            
             const callbackMap = toolState.callbackMap || new Map();
             const actualCallback = callbackMap.get(summaryCallback);
             if (actualCallback) {
@@ -193,7 +175,6 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
 
 function limitHistory(toolState) {
     if (toolState.history.length > MAX_HISTORY_LENGTH * 2) { 
-        
         toolState.history = toolState.history.slice(-MAX_HISTORY_LENGTH * 2);
     }
 }
@@ -201,7 +182,6 @@ function limitHistory(toolState) {
 
 function limitElements(elementData) {
     if (!elementData) return "";
-    
     
     const elements = elementData.split(',').slice(0, MAX_ELEMENT_COUNT);
     return elements.join(',');
@@ -227,7 +207,6 @@ async function initialAI(task, userId = 'default'){
         `
     let result = await ai.callAI(prompt, task, toolState.history, undefined, true, "browser", userId);
     
-    
     toolState.history.push({
         role: "user", 
         content: [
@@ -241,7 +220,6 @@ async function initialAI(task, userId = 'default'){
             {type: "text", text: JSON.stringify(result)}
         ]
     });
-    
     
     contextManager.setToolState('browser', toolState, userId);
     
@@ -266,7 +244,6 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
         activeSession: null
     };
     
-    
     const session = {
         id: Date.now(),
         startTime: new Date().toISOString(),
@@ -277,10 +254,8 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     toolState.sessions.push(session);
     toolState.activeSession = session.id;
     
-    
     toolState.history = [];
     toolState.lastActions = [];
-    
     
     if (otherAIData) {
         const truncatedData = otherAIData.substring(0, MAX_WEBSITE_TEXT_LENGTH);
@@ -292,15 +267,11 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
         });
     }
     
-    
-    
     const callbackId = Date.now();
     toolState.summaryCallback = callbackId;
     
-    
     toolState.callbackMap = toolState.callbackMap || new Map();
     toolState.callbackMap.set(callbackId, callback);
-    
     
     contextManager.setToolState('browser', toolState, userId);
     
@@ -310,7 +281,6 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     } catch (error) {
         console.error("Error in browser task:", error);
         
-        
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
@@ -318,7 +288,6 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
                 toolState.sessions[sessionIndex].endTime = new Date().toISOString();
             }
         }
-        
         
         contextManager.setToolState('browser', toolState, userId);
         
@@ -338,31 +307,23 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
 async function goToPage(url, userId = 'default'){
     const browser = await initialize(userId);
     
-    
     if(pageInstances.has(userId)){
         await pageInstances.get(userId).close().catch(e => console.log("Error closing page:", e));
     }
     
-    
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const page = await context.newPage();
     pageInstances.set(userId, page);
-    
     
     let toolState = contextManager.getToolState('browser', userId);
     
     try {
-        
-        await page.setDefaultNavigationTimeout(90000); 
-        
-        
         await page.goto(url, { 
             timeout: 60000, 
-            waitUntil: ['load', 'domcontentloaded'] 
+            waitUntil: 'domcontentloaded'
         });
         
-        
         await sleep(2000);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -375,14 +336,12 @@ async function goToPage(url, userId = 'default'){
             }
         }
         
-        
         contextManager.setToolState('browser', toolState, userId);
         
         await sleep(1000);
         return {success: true};
     } catch (error) {
         console.error("Error navigating to page:", error);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -396,7 +355,6 @@ async function goToPage(url, userId = 'default'){
                 });
             }
         }
-        
         
         contextManager.setToolState('browser', toolState, userId);
         
@@ -423,9 +381,7 @@ async function scroll(direction, userId = 'default'){
             await page.evaluate(`window.scrollTo(0, 1000);`);
         }
         
-        
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -437,7 +393,6 @@ async function scroll(direction, userId = 'default'){
                 });
             }
         }
-        
         
         contextManager.setToolState('browser', toolState, userId);
         
@@ -457,16 +412,14 @@ async function click(element, userId = 'default'){
     const page = pageInstances.get(userId);
     let result = undefined;
     
-    let listener = page.on('console', message => {
+    page.on('console', message => {
         if(message.text().startsWith('Error clicking element:')){
             result = message.text();
         }
     });
     
     try {
-        
         const navigationPromise = page.waitForNavigation({ timeout: 5000 }).catch(() => {});
-        
         
         await page.evaluate(`
             try{
@@ -476,15 +429,11 @@ async function click(element, userId = 'default'){
             }
         `);
         
-        
         await navigationPromise;
         
-        page.off('console', listener);
         if(!result) result="success";
         
-        
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -498,17 +447,13 @@ async function click(element, userId = 'default'){
             }
         }
         
-        
         contextManager.setToolState('browser', toolState, userId);
         
         return {result: result};
     } catch (error) {
-        page.off('console', listener);
         console.log("Error during click operation:", error);
         
-        
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -522,7 +467,6 @@ async function click(element, userId = 'default'){
                 });
             }
         }
-        
         
         contextManager.setToolState('browser', toolState, userId);
         
@@ -538,14 +482,12 @@ async function input(element, text, userId = 'default'){
     
     const page = pageInstances.get(userId);
     
-    
     if (!element) {
         console.log("Error: No element specified for input");
         return {result: "Error: No element specified"};
     }
     
     try {
-        
         const success = await page.evaluate((elementId, inputText) => {
             try {
                 const el = window.numberedElements[elementId];
@@ -561,9 +503,7 @@ async function input(element, text, userId = 'default'){
             }
         }, element, text);
         
-        
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -578,7 +518,6 @@ async function input(element, text, userId = 'default'){
             }
         }
         
-        
         contextManager.setToolState('browser', toolState, userId);
         
         if (success) {
@@ -589,9 +528,7 @@ async function input(element, text, userId = 'default'){
     } catch (error) {
         console.log("Error during input operation:", error);
         
-        
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -606,7 +543,6 @@ async function input(element, text, userId = 'default'){
                 });
             }
         }
-        
         
         contextManager.setToolState('browser', toolState, userId);
         
@@ -627,12 +563,9 @@ async function getContent(userId = 'default') {
     const page = pageInstances.get(userId);
     
     try {
-        
         await sleep(500);
-
         
         await page.evaluate(elementNumberingScript);
-
         
         const pageData = await page.evaluate(() => {
             let elementsString = '';
@@ -658,16 +591,14 @@ async function getContent(userId = 'default') {
             };
         });
         
-        
         const screenshot = await page.screenshot({ 
-            encoding: 'base64',
-            quality: SCREENSHOT_QUALITY,
-            type: 'jpeg'
+            type: 'jpeg',
+            quality: SCREENSHOT_QUALITY
         });
         
+        const base64Screenshot = screenshot.toString('base64');
         
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -682,13 +613,12 @@ async function getContent(userId = 'default') {
             }
         }
         
-        
         contextManager.setToolState('browser', toolState, userId);
         
         return {
             elements: pageData.elements,
             websiteTextContent: pageData.websiteTextContent,
-            screenshot: 'data:image/jpeg;base64,' + screenshot
+            screenshot: 'data:image/jpeg;base64,' + base64Screenshot
         };
     } catch (error) {
         console.error("Error getting page content:", error);
@@ -702,9 +632,7 @@ async function getContent(userId = 'default') {
 
 async function close(userId = 'default'){
     try {
-        
         let toolState = contextManager.getToolState('browser', userId);
-        
         
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
@@ -714,18 +642,14 @@ async function close(userId = 'default'){
             }
         }
         
-        
         toolState.activeSession = null;
         
-        
         contextManager.setToolState('browser', toolState, userId);
-        
         
         if (pageInstances.has(userId)) {
             await pageInstances.get(userId).close().catch(e => console.log("Error closing page:", e));
             pageInstances.delete(userId);
         }
-        
         
         return {success: true};
     } catch (error) {
@@ -741,21 +665,18 @@ async function close(userId = 'default'){
  */
 async function takeScreenshot(userId = 'default') {
     try {
-        
         if (!pageInstances.has(userId)) {
             return null;
         }
         
         const page = pageInstances.get(userId);
         
-        
         const screenshot = await page.screenshot({ 
             type: 'jpeg', 
-            quality: SCREENSHOT_QUALITY,
-            encoding: 'base64'
+            quality: SCREENSHOT_QUALITY
         });
         
-        return screenshot;
+        return screenshot.toString('base64');
     } catch (error) {
         console.error(`Error taking screenshot for user ${userId}:`, error.message);
         return null;
@@ -769,13 +690,11 @@ async function takeScreenshot(userId = 'default') {
  */
 async function cleanupResources(userId = 'default') {
   try {
-    
     if (browserInstances.has(userId)) {
       const browser = browserInstances.get(userId);
       await browser.close().catch(e => console.error(`Error closing browser for user ${userId}:`, e));
       browserInstances.delete(userId);
     }
-    
     
     if (pageInstances.has(userId)) {
       pageInstances.delete(userId);

@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node tester.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "npx playwright install chromium --with-deps"
   },
   "keywords": [],
   "author": "",
@@ -24,7 +25,7 @@
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^2.6.9",
     "openai": "^4.90.0",
-    "puppeteer": "^24.4.0",
+    "playwright": "^1.52.0",
     "rimraf": "^5.0.5",
     "sanitize-filename": "^1.6.3",
     "socket.io": "^4.8.1",
