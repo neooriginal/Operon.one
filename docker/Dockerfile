@@ -1,8 +1,8 @@
 # Use Node.js 18 Alpine as base image for smaller size
 FROM node:18-alpine
 
-# Install Docker CLI
-RUN apk add --no-cache docker
+# Install Docker CLI and dependencies needed for Playwright
+RUN apk add --no-cache docker chromium
 
 # Set working directory
 WORKDIR /app
@@ -13,8 +13,8 @@ RUN addgroup node docker
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --omit=dev && \
+# Install dependencies without running postinstall scripts (to avoid Playwright auto-install)
+RUN npm install --omit=dev --ignore-scripts && \
     npm cache clean --force
 
 # Copy application code
@@ -24,9 +24,12 @@ COPY . .
 RUN mkdir -p /app/data /app/output && \
     chown -R node:node /app
 
-# Install Playwright dependencies and browsers
-RUN npx playwright install-deps && \
-    npx playwright install chromium
+# Install Playwright manually for Alpine (use system chromium)
+RUN npx playwright install-deps || true && \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npx playwright install chromium || true
+
+# Set environment variable to use system chromium
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Switch to node user
 USER node
