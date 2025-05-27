@@ -111,27 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const userEmail = localStorage.getItem('userEmail') || '';
     const authToken = localStorage.getItem('authToken') || '';
     let currentChatId = localStorage.getItem('currentChatId') || 'new';
-
-    // Avatar control
-    let dashboardAvatar = null;
-
-    // Initialize avatar when available
-    function initializeAvatar() {
-        if (typeof AIAvatar !== 'undefined' && !dashboardAvatar) {
-            const avatarElement = document.getElementById('dashboardAvatar');
-            if (avatarElement) {
-                dashboardAvatar = new AIAvatar('dashboardAvatar');
-                dashboardAvatar.setIdle();
-                console.log('Dashboard avatar initialized');
-            }
-        }
-    }
-
-    // Try to initialize avatar immediately, then on window load
-    initializeAvatar();
-    window.addEventListener('load', initializeAvatar);
-
-
+    
     const initialQuery = localStorage.getItem('initialQuery');
 
 
@@ -163,12 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (statusDisplay) {
             updateStatusDisplay('Ready', 'idle');
         }
-
-        // Set avatar to idle when connected
-        if (dashboardAvatar) {
-            dashboardAvatar.setIdle();
-        }
-
+        
         // Load chats if we have the chat interface active, otherwise just load for sidebar
         if (chatMessages && document.getElementById('chat-interface') && document.getElementById('chat-interface').classList.contains('active')) {
             loadUserChats();
@@ -183,22 +158,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (statusDisplay) {
             updateStatusDisplay('Connection lost', 'error');
         }
-
-        // Set avatar to idle when disconnected
-        if (dashboardAvatar) {
-            dashboardAvatar.setIdle();
-        }
     });
 
     socket.on('connect_error', (err) => {
         console.error('Connection Error:', err.message);
         if (statusDisplay) {
             updateStatusDisplay(`Connection Error`, 'error');
-        }
-
-        // Set avatar to idle on connection error
-        if (dashboardAvatar) {
-            dashboardAvatar.setIdle();
         }
     });
 
@@ -1012,14 +977,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
             updateStatusDisplay('Task received', 'loading');
-
-            // Start avatar talking animation
-            if (dashboardAvatar) {
-                dashboardAvatar.startTalking();
-            }
-
-
-            socket.emit('submit_task', {
+            
+            socket.emit('submit_task', { 
                 task: message,
                 userId: userId,
                 chatId: chatId
@@ -1251,16 +1210,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.userId === userId) {
             console.log('Status update:', data);
             updateStatusDisplay(data.status || 'Processing...', 'status_update');
-
-            // Keep avatar talking during status updates (but don't start if not already talking)
-            if (dashboardAvatar && !window.isLoadingHistory) {
-                // Only ensure talking if we're actively processing, not if idle
-                if (data.status && !data.status.toLowerCase().includes('ready') && !data.status.toLowerCase().includes('idle')) {
-                    if (!dashboardAvatar.isTalking()) {
-                        dashboardAvatar.startTalking();
-                    }
-                }
-            }
         }
     });
 
@@ -1355,12 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const statusText = data.loadedFromHistory ? 'History loaded' : 'Task completed';
                 updateStatusDisplay(statusText, 'completed');
-
-                // Stop avatar talking animation
-                if (dashboardAvatar && !data.loadedFromHistory) {
-                    dashboardAvatar.stopTalking();
-                }
-
+                
                 messageInput.disabled = false;
                 sendButton.disabled = false;
             }
@@ -1429,13 +1373,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Task error:', data);
             addActionElement('Error', data.error, 'error');
             updateStatusDisplay('Task failed', 'error');
-
-            // Stop avatar talking animation on error
-            if (dashboardAvatar) {
-                dashboardAvatar.stopTalking();
-            }
-
-
+            
             messageInput.disabled = false;
             sendButton.disabled = false;
         }
@@ -1447,11 +1385,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.userId === userId) {
             console.log('Task received:', data);
             updateStatusDisplay('Task received', 'status_update');
-
-            // Ensure avatar is talking when task is received by server
-            if (dashboardAvatar && !dashboardAvatar.isTalking()) {
-                dashboardAvatar.startTalking();
-            }
         }
     });
 
