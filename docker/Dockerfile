@@ -7,10 +7,8 @@ RUN apk add --no-cache docker
 # Set working directory
 WORKDIR /app
 
-# Create a non-root user for security
-RUN addgroup -g 1000 appgroup && \
-    adduser -D -s /bin/sh -u 1000 -G appgroup appuser && \
-    addgroup appuser docker
+# Add node user to docker group
+RUN addgroup node docker
 
 # Copy package files
 COPY package*.json ./
@@ -24,14 +22,14 @@ COPY . .
 
 # Create necessary directories and set permissions
 RUN mkdir -p /app/data /app/output && \
-    chown -R appuser:appgroup /app
+    chown -R node:node /app
 
 # Install Playwright dependencies and browsers
 RUN npx playwright install-deps && \
     npx playwright install chromium
 
-# Switch to non-root user
-USER appuser
+# Switch to node user
+USER node
 
 # Expose port
 EXPOSE 3000
