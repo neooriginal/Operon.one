@@ -1,8 +1,15 @@
 # Use Node.js 18 Alpine as base image for smaller size
 FROM node:18-alpine
 
-# Install Docker CLI and dependencies needed for Playwright
-RUN apk add --no-cache docker chromium
+# Install build dependencies, Docker CLI and dependencies needed for Playwright
+RUN apk add --no-cache \
+    docker \
+    chromium \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    sqlite-dev
 
 # Set working directory
 WORKDIR /app
@@ -13,8 +20,9 @@ RUN addgroup node docker
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies without running postinstall scripts (to avoid Playwright auto-install)
+# Install dependencies with proper sqlite3 compilation
 RUN npm install --omit=dev --ignore-scripts && \
+    npm rebuild sqlite3 && \
     npm cache clean --force
 
 # Copy application code
