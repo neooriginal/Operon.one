@@ -22,8 +22,6 @@ services:
       - ./data:/app/data
       # Mount output directory for user files
       - ./output:/app/output
-      # Mount node_modules for better performance (optional)
-      - node_modules:/app/node_modules
     networks:
       - operonone-network
     depends_on:
@@ -63,8 +61,8 @@ services:
     networks:
       - operonone-network
 
-volumes:
-  node_modules:
+# volumes:
+#   node_modules:
 
 networks:
   operonone-network:
