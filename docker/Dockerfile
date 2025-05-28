@@ -1,50 +1,43 @@
-# Use Node.js 18 Alpine as base image for smaller size
-FROM node:18-alpine
+# Use Node.js 18 on Debian for better compatibility
+FROM node:18-slim
 
-# Install build dependencies, Docker CLI and dependencies needed for Playwright
-RUN apk add --no-cache \
-    docker \
+# Install essential dependencies
+RUN apt-get update && apt-get install -y \
     chromium \
+    docker.io \
     python3 \
-    make \
-    g++ \
-    sqlite \
-    sqlite-dev \
-    # Add additional dependencies for bcrypt
-    curl \
-    gnupg \
-    build-base
+    build-essential \
+    sqlite3 \
+    libsqlite3-dev \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Add node user to docker group
-RUN addgroup node docker
+# Add node user to docker group to allow Docker access
+RUN groupadd -g 999 docker_external || true && \
+    usermod -aG docker_external node
+
+# Set environment variables for Playwright
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with proper native module compilation
-# Ensure bcrypt is rebuilt for Alpine
+# Install dependencies
 RUN npm install --omit=dev && \
-    npm rebuild bcrypt --build-from-source && \
     npm cache clean --force
 
 # Copy application code
 COPY . .
 
-# Create necessary directories and set permissions
+# Create necessary directories
 RUN mkdir -p /app/data /app/output && \
-    chown -R node:node /app
+    chown -R node:node /app /app/data /app/output
 
-# Install Playwright manually for Alpine (use system chromium)
-RUN npx playwright install-deps || true && \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npx playwright install chromium || true
-
-# Set environment variable to use system chromium
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-
-# Switch to node user
+# Switch to node user for security
 USER node
 
 # Expose port

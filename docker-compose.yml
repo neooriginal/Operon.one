@@ -12,9 +12,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Add your environment variables here
-      # - OPENAI_API_KEY=${OPENAI_API_KEY}
-      # - JWT_SECRET=${JWT_SECRET}
+      # Add environment variables from .env file
+    env_file:
+      - .env
     volumes:
       # Mount Docker socket to allow container to use Docker
       - /var/run/docker.sock:/var/run/docker.sock
@@ -22,47 +22,11 @@ services:
       - ./data:/app/data
       # Mount output directory for user files
       - ./output:/app/output
-    networks:
-      - operonone-network
-    depends_on:
-      - cleanup
-    # Add security options
-    security_opt:
-      - no-new-privileges:true
     # Add docker group GID to allow Docker access
     group_add:
       - ${DOCKER_GID:-999}
-    # Limit resources to prevent abuse
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: "1.0"
-        reservations:
-          memory: 512M
-          cpus: "0.25"
-
-  # Service to periodically clean up orphaned Docker containers
-  cleanup:
-    image: docker:24-cli
-    container_name: operonone-cleanup
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: >
-      sh -c "
-        while true; do
-          echo 'Cleaning up old OperonOne containers...'
-          docker container prune -f --filter 'label=com.operonone.cleanup=true' || true
-          docker image prune -f --filter 'dangling=true' || true
-          sleep 3600
-        done
-      "
     networks:
       - operonone-network
-
-# volumes:
-#   node_modules:
 
 networks:
   operonone-network:
