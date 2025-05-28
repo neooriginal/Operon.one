@@ -32,9 +32,10 @@ RUN npm install --omit=dev && \
 # Copy application code
 COPY . .
 
-# Create necessary directories
+# Create necessary directories with proper permissions
 RUN mkdir -p /app/data /app/output && \
-    chown -R node:node /app /app/data /app/output
+    chown -R node:node /app /app/data /app/output && \
+    chmod 755 /app/data /app/output
 
 # Switch to node user for security
 USER node

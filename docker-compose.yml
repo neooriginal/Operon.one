@@ -12,7 +12,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Add environment variables from .env file
+      - DATA_DIR=/app/data
     env_file:
       - .env
     volumes:
