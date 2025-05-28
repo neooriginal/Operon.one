@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node tester.js",
     "start": "node index.js",
-    "postinstall": "npx playwright install chromium --with-deps"
+    "postinstall": "npx playwright install chromium --with-deps",
+    "rebuild-bcrypt": "npm rebuild bcrypt --build-from-source"
   },
   "keywords": [],
   "author": "",

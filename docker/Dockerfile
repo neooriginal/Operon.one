@@ -9,7 +9,11 @@ RUN apk add --no-cache \
     make \
     g++ \
     sqlite \
-    sqlite-dev
+    sqlite-dev \
+    # Add additional dependencies for bcrypt
+    curl \
+    gnupg \
+    build-base
 
 # Set working directory
 WORKDIR /app
@@ -21,7 +25,9 @@ RUN addgroup node docker
 COPY package*.json ./
 
 # Install dependencies with proper native module compilation
+# Ensure bcrypt is rebuilt for Alpine
 RUN npm install --omit=dev && \
+    npm rebuild bcrypt --build-from-source && \
     npm cache clean --force
 
 # Copy application code
