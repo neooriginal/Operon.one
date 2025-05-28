@@ -16,8 +16,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Add node user to docker group to allow Docker access
-RUN groupadd -g 999 docker_external || true && \
-    usermod -aG docker_external node
+RUN usermod -aG docker node
 
 # Set environment variables for Playwright
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
