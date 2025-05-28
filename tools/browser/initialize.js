@@ -9,36 +9,45 @@ const { execSync } = require('child_process');
  */
 async function ensurePlaywrightInstalled() {
   try {
-    // Check if playwright executable is present
-    const playwrightExists = fs.existsSync(path.join(
-      process.cwd(),
-      'node_modules',
-      '.bin', 
-      process.platform === 'win32' ? 'playwright.cmd' : 'playwright'
-    ));
+    // First try using browser with system-installed Chromium if available
+    const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium';
     
-    if (!playwrightExists) {
-      console.log('Playwright not found. Installing Playwright...');
-      execSync('npm install playwright', { stdio: 'inherit' });
+    if (fs.existsSync(chromiumExecutablePath)) {
+      console.log(`Using system Chromium at ${chromiumExecutablePath}`);
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = chromiumExecutablePath;
+      return true;
     }
     
-    // Check if browsers are installed
+    // Fall back to Playwright's browser
     try {
-      await chromium.launch({ headless: true }).then(browser => browser.close());
+      const browser = await chromium.launch({ headless: true });
+      await browser.close();
       console.log('Playwright browser is already installed');
       return true;
     } catch (error) {
-      if (error.message.includes('not found') || error.message.includes('could not find')) {
+      if (error.message.includes('not found') || error.message.includes('could not find') || 
+          error.message.includes('Executable doesn\'t exist')) {
         console.log('Playwright browser not installed. Installing browser...');
-        execSync('npx playwright install chromium --with-deps', { stdio: 'inherit' });
-        return true;
+        try {
+          execSync('npx playwright install chromium', { stdio: 'inherit' });
+          return true;
+        } catch (installError) {
+          console.error('Failed to install Playwright browser:', installError);
+          // If installation fails, try to use system chromium again as last resort
+          if (fs.existsSync('/usr/bin/chromium')) {
+            console.log('Falling back to system Chromium browser');
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = '/usr/bin/chromium';
+            return true;
+          }
+          throw installError;
+        }
       } else {
         throw error;
       }
     }
   } catch (error) {
     console.error('Error ensuring Playwright is installed:', error);
-    return false;
+    throw error;
   }
 }
 
