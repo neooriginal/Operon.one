@@ -20,9 +20,8 @@ RUN addgroup node docker
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with proper sqlite3 compilation
-RUN npm install --omit=dev --ignore-scripts && \
-    npm rebuild sqlite3 && \
+# Install dependencies with proper native module compilation
+RUN npm install --omit=dev && \
     npm cache clean --force
 
 # Copy application code
