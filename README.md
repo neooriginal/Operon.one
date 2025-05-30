@@ -53,6 +53,7 @@ npm start
 ---
 
 ## 🗺️ Roadmap
+Planned functionality includes:
 
 - 📱 Mobile application for on-the-go management
 - ☁️ Cloud deployment options
