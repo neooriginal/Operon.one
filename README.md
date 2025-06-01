@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://github.com/user-attachments/assets/dab2bc2d-bc0d-4122-a68a-a6a770dc0b8a" alt="Operon Logo" width="150"/>
-</p>
+</p> 
 
 <h2 align="center">🔥 The Next-Generation Action-AI</h2>
 
