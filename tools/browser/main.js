@@ -3,91 +3,124 @@ const elementNumberingScript = require('./scriptInjector');
 const ai = require('../AI/ai');
 const contextManager = require('../../utils/context');
 
+// Performance optimizations
+const MAX_WEBSITE_TEXT_LENGTH = 800; // Increased for better context
+const MAX_ELEMENT_COUNT = 20; // Increased for better interaction
+const SCREENSHOT_QUALITY = 60; // Improved quality
+const MAX_HISTORY_LENGTH = 5; // Increased history
+const PAGE_LOAD_TIMEOUT = 30000; // 30 second timeout
+const NAVIGATION_TIMEOUT = 10000; // 10 second navigation timeout
 
-const MAX_WEBSITE_TEXT_LENGTH = 500; 
-const MAX_ELEMENT_COUNT = 15; 
-const SCREENSHOT_QUALITY = 50; 
-const MAX_HISTORY_LENGTH = 3; 
-
-
+// Enhanced browser management
 const browserInstances = new Map();
 const pageInstances = new Map();
+const sessionMetrics = new Map();
 
+/**
+ * Enhanced browser initialization with better configuration
+ * @param {string} userId - User identifier
+ * @returns {Object} Browser instance
+ */
 async function initialize(userId = 'default'){
     if(browserInstances.has(userId)){
         return browserInstances.get(userId);
     }
     
-    const browser = await chromium.launch({
-        headless: false
-    });
-    
-    browserInstances.set(userId, browser);
-    
-    let toolState = contextManager.getToolState('browser', userId) || {
-        history: [],
-        lastActions: [],
-        sessions: [],
-        activeSession: null
-    };
-    
-    const session = {
-        id: Date.now(),
-        startTime: new Date().toISOString(),
-        pages: []
-    };
-    
-    toolState.sessions.push(session);
-    toolState.activeSession = session.id;
-    
-    contextManager.setToolState('browser', toolState, userId);
-    
-    return browser;
+    try {
+        const browser = await chromium.launch({
+            headless: false,
+            args: [
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-web-security',
+                '--allow-running-insecure-content',
+                '--disable-features=VizDisplayCompositor'
+            ],
+            timeout: 30000
+        });
+        
+        browserInstances.set(userId, browser);
+        
+        let toolState = contextManager.getToolState('browser', userId) || {
+            history: [],
+            lastActions: [],
+            sessions: [],
+            activeSession: null,
+            performance: {
+                totalSessions: 0,
+                averageSessionTime: 0,
+                successfulActions: 0,
+                failedActions: 0
+            }
+        };
+        
+        const session = {
+            id: Date.now(),
+            startTime: new Date().toISOString(),
+            pages: [],
+            actions: [],
+            performance: {
+                startTime: Date.now(),
+                actionCount: 0,
+                errorCount: 0
+            }
+        };
+        
+        toolState.sessions.push(session);
+        toolState.activeSession = session.id;
+        toolState.performance.totalSessions++;
+        
+        contextManager.setToolState('browser', toolState, userId);
+        
+        console.log(`Browser initialized for user ${userId}`);
+        return browser;
+        
+    } catch (error) {
+        console.error(`Failed to initialize browser for user ${userId}:`, error.message);
+        throw new Error(`Browser initialization failed: ${error.message}`);
+    }
 }
 
+/**
+ * Enhanced task function with improved AI prompting and error handling
+ */
 async function taskFunction(task, data, image, websiteTextContent, userId = 'default'){
-    
     let toolState = contextManager.getToolState('browser', userId);
     
+    // Enhanced element data processing
     const elementData = limitElements(data);
     const truncatedWebsiteContent = websiteTextContent.substring(0, MAX_WEBSITE_TEXT_LENGTH);
     
-    data = "Elements avalible for interaction: " + elementData + "\n\n" + "Website text content: " + truncatedWebsiteContent;
+    data = "Elements available for interaction: " + elementData + "\n\n" + "Website text content: " + truncatedWebsiteContent;
+    
+    // Improved AI prompt with better context and instructions
     let prompt = `
-    You are an AI agent that can execute complex tasks. You are ment to control a web browser and navigate through the web.
-    Do your best to complete the task provided by the user. 
-    Respond in a JSON format with the following format. Only respond with one at a time:
-    {
-        "action": "goToPage",
-        "url": "url to go to",
-    },
-    {
-        "action": "click",
-        "element": "element to click" 
-    },
-    {
-        "action": "input",
-        "text": "text to input", 
-        "element": "element to input text into" 
-    },
-    {
-        "action": "scroll",
-        "direction": "up" 
-    },
-    {
-        "action": "close",
-        "summary": \`summary of the tasks results in detail\` 
-        
-    }
+    You are an AI agent controlling a web browser. Your goal is to complete the user's task efficiently and accurately.
+    
+    Available actions:
+    1. {"action": "goToPage", "url": "URL_HERE"} - Navigate to a specific URL
+    2. {"action": "click", "element": "ELEMENT_ID"} - Click on an interactive element
+    3. {"action": "input", "text": "TEXT_HERE", "element": "ELEMENT_ID"} - Type text into form fields
+    4. {"action": "scroll", "direction": "up|down"} - Scroll the page
+    5. {"action": "wait", "duration": 2000} - Wait for page to load (milliseconds)
+    6. {"action": "close", "summary": "DETAILED_SUMMARY"} - Complete the task with summary
+    
+    Context from previous actions: ${toolState.lastActions.slice(-3).join(", ")}
+    
+    Current task: ${task}
+    
+    Instructions:
+    - Analyze the page content carefully before acting
+    - Be patient with page loads and dynamic content
+    - Provide detailed summaries when closing
+    - If you encounter errors, try alternative approaches
+    - Confirm task completion before closing
+    
+    Respond with ONE action only in JSON format.
+    `;
 
-    Try not to repeat actions and actually check that an action might have already been completed even though there is no big ui feedback.
-    Last actions you did: ${toolState.lastActions.join(", ")}
-
-    The main task is: ${task}
-
-    Once you have enough information to confidently complete the task, respond with the "close" action. Look at previous messages for the information collected earlier and use it to summarize and finish the task.
-    `
-
+    // Update conversation history
     toolState.history.push({
         role: "user", 
         content: [
@@ -96,89 +129,230 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     });
     
     limitHistory(toolState);
-    
     contextManager.setToolState('browser', toolState, userId);
 
-    let result = await ai.callAI(prompt, data, toolState.history, image, true, "browser", userId);
+    try {
+        let result = await ai.callAI(prompt, data, toolState.history, image, true, "browser", userId);
 
-    if(!result) {
-        return taskFunction(task, data, image, websiteTextContent, userId);
-    }
-    
-    toolState.history.push({
-        role: "assistant", 
-        content: [
-            {type: "text", text: JSON.stringify(result)}
-        ]
-    });
-    
-    limitHistory(toolState);
-
-    toolState.lastActions.push(JSON.stringify(result));
-    if (toolState.lastActions.length > 5) {
-        toolState.lastActions = toolState.lastActions.slice(-5);
-    }
-    
-    if (toolState.activeSession) {
-        const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
-        if (sessionIndex >= 0) {
-            toolState.sessions[sessionIndex].actions = toolState.sessions[sessionIndex].actions || [];
-            toolState.sessions[sessionIndex].actions.push({
-                action: result.action,
-                timestamp: Date.now(),
-                details: result
-            });
+        if(!result) {
+            throw new Error("No response from AI");
         }
-    }
-    
-    contextManager.setToolState('browser', toolState, userId);
-    
-    if(result.action === "goToPage"){
-        await goToPage(result.url, userId);
-    }else if(result.action === "click"){
-        await click(result.element, userId);
-    }else if(result.action === "input"){
-        await input(result.element, result.text, userId);
-    }else if(result.action === "scroll"){
-        await scroll(result.direction, userId);
-    }else if(result.action === "close"){
-        console.log(result.summary);
         
+        // Validate and sanitize AI response
+        result = validateAndSanitizeAction(result);
+        
+        toolState.history.push({
+            role: "assistant", 
+            content: [
+                {type: "text", text: JSON.stringify(result)}
+            ]
+        });
+        
+        limitHistory(toolState);
+
+        // Update action tracking
+        toolState.lastActions.push(JSON.stringify(result));
+        if (toolState.lastActions.length > 5) {
+            toolState.lastActions = toolState.lastActions.slice(-5);
+        }
+        
+        // Update session metrics
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
-                toolState.sessions[sessionIndex].completed = true;
-                toolState.sessions[sessionIndex].endTime = new Date().toISOString();
-                toolState.sessions[sessionIndex].summary = result.summary;
+                toolState.sessions[sessionIndex].actions = toolState.sessions[sessionIndex].actions || [];
+                toolState.sessions[sessionIndex].actions.push({
+                    action: result.action,
+                    timestamp: Date.now(),
+                    details: result
+                });
+                toolState.sessions[sessionIndex].performance.actionCount++;
             }
         }
         
         contextManager.setToolState('browser', toolState, userId);
         
-        const summaryCallback = toolState.summaryCallback;
-        if (summaryCallback) {
-            const callbackMap = toolState.callbackMap || new Map();
-            const actualCallback = callbackMap.get(summaryCallback);
-            if (actualCallback) {
-                actualCallback(result.summary);
+        // Execute the action
+        const actionResult = await executeAction(result, userId, toolState);
+        
+        if (actionResult && actionResult.error) {
+            toolState.sessions[toolState.sessions.findIndex(s => s.id === toolState.activeSession)].performance.errorCount++;
+            contextManager.setToolState('browser', toolState, userId);
+        }
+        
+        if(result.action === "close"){
+            return await handleTaskCompletion(result, userId, toolState);
+        }
+
+        // Continue with next iteration
+        let content = await getContent(userId);
+        return taskFunction(task, content.elements, content.screenshot, content.websiteTextContent, userId);
+        
+    } catch (error) {
+        console.error("Browser task error:", error.message);
+        
+        // Update error metrics
+        if (toolState.activeSession) {
+            const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
+            if (sessionIndex >= 0) {
+                toolState.sessions[sessionIndex].performance.errorCount++;
+                toolState.sessions[sessionIndex].errors = toolState.sessions[sessionIndex].errors || [];
+                toolState.sessions[sessionIndex].errors.push({
+                    error: error.message,
+                    timestamp: Date.now(),
+                    context: { task, data: elementData }
+                });
             }
         }
         
-        await close(userId);
-        return result.summary;
+        toolState.performance.failedActions++;
+        contextManager.setToolState('browser', toolState, userId);
+        
+        return {
+            error: error.message,
+            success: false,
+            partial: "Browser task encountered an error. Please try again."
+        };
     }
-
-    let content = await getContent(userId);
-    return taskFunction(task, content.elements, content.screenshot, content.websiteTextContent, userId);
 }
 
+/**
+ * Validates and sanitizes AI action responses
+ * @param {Object} result - AI response
+ * @returns {Object} Validated action
+ */
+function validateAndSanitizeAction(result) {
+    if (!result || typeof result !== 'object') {
+        throw new Error("Invalid AI response format");
+    }
+    
+    const validActions = ['goToPage', 'click', 'input', 'scroll', 'wait', 'close'];
+    
+    if (!result.action || !validActions.includes(result.action)) {
+        throw new Error(`Invalid action: ${result.action}`);
+    }
+    
+    // Sanitize based on action type
+    switch(result.action) {
+        case 'goToPage':
+            if (!result.url || typeof result.url !== 'string') {
+                throw new Error("Invalid URL for goToPage action");
+            }
+            // Basic URL validation
+            try {
+                new URL(result.url);
+            } catch {
+                if (!result.url.startsWith('http')) {
+                    result.url = 'https://' + result.url;
+                }
+            }
+            break;
+            
+        case 'input':
+            if (!result.text || !result.element) {
+                throw new Error("Missing text or element for input action");
+            }
+            result.text = String(result.text);
+            break;
+            
+        case 'scroll':
+            if (!['up', 'down'].includes(result.direction)) {
+                result.direction = 'down'; // Default
+            }
+            break;
+            
+        case 'wait':
+            result.duration = Math.min(Math.max(parseInt(result.duration) || 2000, 1000), 10000);
+            break;
+    }
+    
+    return result;
+}
+
+/**
+ * Executes browser actions with improved error handling
+ * @param {Object} result - Action to execute
+ * @param {string} userId - User ID
+ * @param {Object} toolState - Current tool state
+ * @returns {Object} Execution result
+ */
+async function executeAction(result, userId, toolState) {
+    try {
+        switch(result.action) {
+            case "goToPage":
+                return await goToPage(result.url, userId);
+                
+            case "click":
+                return await click(result.element, userId);
+                
+            case "input":
+                return await input(result.element, result.text, userId);
+                
+            case "scroll":
+                return await scroll(result.direction, userId);
+                
+            case "wait":
+                await sleep(result.duration || 2000);
+                return { success: true, action: 'wait' };
+                
+            default:
+                return { success: false, error: `Unknown action: ${result.action}` };
+        }
+    } catch (error) {
+        console.error(`Action execution error for ${result.action}:`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Handles task completion with improved session management
+ */
+async function handleTaskCompletion(result, userId, toolState) {
+    console.log("Task completed:", result.summary);
+    
+    if (toolState.activeSession) {
+        const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
+        if (sessionIndex >= 0) {
+            const session = toolState.sessions[sessionIndex];
+            session.completed = true;
+            session.endTime = new Date().toISOString();
+            session.summary = result.summary;
+            session.performance.duration = Date.now() - session.performance.startTime;
+            
+            // Update overall performance metrics
+            toolState.performance.successfulActions++;
+            const sessionDuration = session.performance.duration;
+            toolState.performance.averageSessionTime = 
+                (toolState.performance.averageSessionTime * (toolState.performance.totalSessions - 1) + sessionDuration) / 
+                toolState.performance.totalSessions;
+        }
+    }
+    
+    contextManager.setToolState('browser', toolState, userId);
+    
+    // Trigger callback if available
+    const summaryCallback = toolState.summaryCallback;
+    if (summaryCallback) {
+        const callbackMap = toolState.callbackMap || new Map();
+        const actualCallback = callbackMap.get(summaryCallback);
+        if (actualCallback) {
+            actualCallback(result.summary);
+        }
+    }
+    
+    // Clean up but don't immediately close browser for potential follow-up tasks
+    setTimeout(() => {
+        close(userId).catch(console.error);
+    }, 5000);
+    
+    return result.summary;
+}
 
 function limitHistory(toolState) {
     if (toolState.history.length > MAX_HISTORY_LENGTH * 2) { 
         toolState.history = toolState.history.slice(-MAX_HISTORY_LENGTH * 2);
     }
 }
-
 
 function limitElements(elementData) {
     if (!elementData) return "";
@@ -233,7 +407,6 @@ async function initialAI(task, userId = 'default'){
     let content = await getContent(userId);
     return taskFunction(task, content.elements, content.screenshot, content.websiteTextContent, userId);
 }
-
 
 async function runTask(task, otherAIData, callback, userId = 'default') {
     
@@ -304,45 +477,102 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
     }
 }
 
+/**
+ * Enhanced page navigation with better error handling and timeout management
+ */
 async function goToPage(url, userId = 'default'){
     const browser = await initialize(userId);
     
-    if(pageInstances.has(userId)){
-        await pageInstances.get(userId).close().catch(e => console.log("Error closing page:", e));
-    }
-    
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    pageInstances.set(userId, page);
-    
-    let toolState = contextManager.getToolState('browser', userId);
-    
     try {
+        // Close existing page if it exists
+        if(pageInstances.has(userId)){
+            await pageInstances.get(userId).close().catch(e => console.log("Error closing page:", e));
+        }
+        
+        const context = await browser.newContext({
+            viewport: { width: 1920, height: 1080 },
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        });
+        
+        const page = await context.newPage();
+        pageInstances.set(userId, page);
+        
+        // Enhanced page setup with better element detection
+        await page.addInitScript(() => {
+            // Improved element detection and interaction
+            window.numberedElements = [];
+            window.elementMap = new Map();
+            
+            window.setupElementDetection = () => {
+                const interactiveElements = document.querySelectorAll(
+                    'button, a, input, select, textarea, [onclick], [role="button"], [tabindex]'
+                );
+                
+                interactiveElements.forEach((el, index) => {
+                    if (el.offsetParent !== null && !el.disabled) { // Only visible, enabled elements
+                        window.numberedElements[index] = el;
+                        window.elementMap.set(el, index);
+                        el.setAttribute('data-element-id', index);
+                    }
+                });
+            };
+            
+            // Auto-setup when DOM changes
+            const observer = new MutationObserver(() => {
+                setTimeout(window.setupElementDetection, 100);
+            });
+            
+            observer.observe(document.body, { childList: true, subtree: true });
+            
+            if (document.readyState === 'complete') {
+                window.setupElementDetection();
+            } else {
+                document.addEventListener('DOMContentLoaded', window.setupElementDetection);
+                window.addEventListener('load', window.setupElementDetection);
+            }
+        });
+        
+        let toolState = contextManager.getToolState('browser', userId);
+        
+        console.log(`Navigating to: ${url}`);
+        
         await page.goto(url, { 
-            timeout: 60000, 
+            timeout: PAGE_LOAD_TIMEOUT,
             waitUntil: 'domcontentloaded'
         });
         
-        await sleep(2000);
+        // Wait for page to stabilize
+        await sleep(3000);
         
+        // Setup element detection
+        await page.evaluate(() => {
+            if (window.setupElementDetection) {
+                window.setupElementDetection();
+            }
+        });
+        
+        // Update session tracking
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {
                 toolState.sessions[sessionIndex].pages = toolState.sessions[sessionIndex].pages || [];
                 toolState.sessions[sessionIndex].pages.push({
                     url,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    title: await page.title().catch(() => 'Unknown')
                 });
             }
         }
         
         contextManager.setToolState('browser', toolState, userId);
         
-        await sleep(1000);
-        return {success: true};
-    } catch (error) {
-        console.error("Error navigating to page:", error);
+        console.log(`Successfully navigated to: ${url}`);
+        return {success: true, url: url};
         
+    } catch (error) {
+        console.error("Navigation error:", error.message);
+        
+        let toolState = contextManager.getToolState('browser', userId);
         if (toolState.activeSession) {
             const sessionIndex = toolState.sessions.findIndex(s => s.id === toolState.activeSession);
             if (sessionIndex >= 0) {

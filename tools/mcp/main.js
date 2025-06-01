@@ -6,6 +6,8 @@
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const contextManager = require('../../utils/context');
+const path = require('path');
+const fs = require('fs');
 
 /**
  * @namespace McpTypes
@@ -682,72 +684,184 @@ class McpClient extends EventEmitter {
  */
 class McpClientManager {
     /**
-     * Creates an MCP client manager
+     * Creates an MCP client manager for a specific user
      * @param {string} userId - User ID for context management
      */
     constructor(userId) {
-        /** @type {string} */
         this.userId = userId;
-        
-        /** @type {Map<string, McpClient>} */
         this.clients = new Map();
-        
-        /** @type {Object.<string, McpTypes.McpServerConfig>} */
-        this.serverConfigs = {};
+        this.serverConfigs = new Map();
+        this.connectionPool = new Map();
+        this.healthChecks = new Map();
+        this.maxConnectionsPerServer = 3;
+        this.healthCheckInterval = 30000; // 30 seconds
+        this.serverDiscoveryAttempts = new Map();
+        this.maxDiscoveryAttempts = 3;
+        this._startHealthMonitoring();
     }
 
     /**
-     * Loads server configurations for the user
+     * Starts health monitoring for connected servers
+     * @private
+     */
+    _startHealthMonitoring() {
+        setInterval(() => {
+            this._performHealthChecks();
+        }, this.healthCheckInterval);
+    }
+
+    /**
+     * Performs health checks on all connected servers
+     * @private
+     */
+    async _performHealthChecks() {
+        for (const [serverName, client] of this.clients) {
+            if (client.isServerConnected()) {
+                try {
+                    // Simple ping to check server health
+                    await client._sendRequest('ping', {});
+                    this.healthChecks.set(serverName, { status: 'healthy', lastCheck: Date.now() });
+                } catch (error) {
+                    this.healthChecks.set(serverName, { 
+                        status: 'unhealthy', 
+                        lastCheck: Date.now(), 
+                        error: error.message 
+                    });
+                    
+                    // Attempt reconnection for unhealthy servers
+                    if (client.config.autoRestart) {
+                        setTimeout(() => this._attemptReconnection(serverName), 5000);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Attempts to reconnect to a server
+     * @private
+     * @param {string} serverName - Name of the server to reconnect
+     */
+    async _attemptReconnection(serverName) {
+        const attempts = this.serverDiscoveryAttempts.get(serverName) || 0;
+        if (attempts < this.maxDiscoveryAttempts) {
+            try {
+                console.log(`Attempting to reconnect to MCP server: ${serverName}`);
+                await this.connectToServer(serverName);
+                this.serverDiscoveryAttempts.set(serverName, 0);
+                console.log(`Successfully reconnected to MCP server: ${serverName}`);
+            } catch (error) {
+                this.serverDiscoveryAttempts.set(serverName, attempts + 1);
+                console.error(`Reconnection attempt ${attempts + 1} failed for ${serverName}:`, error.message);
+            }
+        }
+    }
+
+    /**
+     * Enhanced server configuration loading with auto-discovery
      * @async
-     * @returns {Promise<void>}
      */
     async loadServerConfigs() {
         try {
-            // Import the settings functions from database
-            const { settingsFunctions } = require('../../database');
+            const configPath = path.join(__dirname, 'servers.json');
             
-            // Get MCP servers from user settings
-            const mcpServersJson = await settingsFunctions.getSetting(this.userId, 'mcpServers');
-            
-            if (mcpServersJson) {
-                this.serverConfigs = JSON.parse(mcpServersJson);
-            } else {
-                this.serverConfigs = {};
+            // Create default config if it doesn't exist
+            if (!fs.existsSync(configPath)) {
+                const defaultConfigs = {
+                    "filesystem": {
+                        "command": "npx",
+                        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+                        "timeout": 30000,
+                        "autoRestart": true
+                    },
+                    "git": {
+                        "command": "npx",
+                        "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "."],
+                        "timeout": 30000,
+                        "autoRestart": true
+                    },
+                    "brave-search": {
+                        "command": "npx",
+                        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+                        "env": {
+                            "BRAVE_API_KEY": process.env.BRAVE_API_KEY || ""
+                        },
+                        "timeout": 30000,
+                        "autoRestart": true
+                    },
+                    "github": {
+                        "command": "npx",
+                        "args": ["-y", "@modelcontextprotocol/server-github"],
+                        "env": {
+                            "GITHUB_PERSONAL_ACCESS_TOKEN": process.env.GITHUB_TOKEN || ""
+                        },
+                        "timeout": 30000,
+                        "autoRestart": true
+                    }
+                };
+                
+                fs.writeFileSync(configPath, JSON.stringify(defaultConfigs, null, 2));
+                console.log('Created default MCP server configurations');
             }
+            
+            const configData = fs.readFileSync(configPath, 'utf8');
+            const configs = JSON.parse(configData);
+            
+            // Load and validate configurations
+            for (const [serverName, config] of Object.entries(configs)) {
+                if (this._validateServerConfig(config)) {
+                    this.serverConfigs.set(serverName, config);
+                } else {
+                    console.warn(`Invalid configuration for MCP server: ${serverName}`);
+                }
+            }
+            
+            console.log(`Loaded ${this.serverConfigs.size} MCP server configurations`);
+            
         } catch (error) {
-            console.error('[MCP-Manager] Failed to load server configurations:', error.message);
-            this.serverConfigs = {};
+            console.error('Error loading MCP server configurations:', error.message);
         }
     }
 
     /**
-     * Connects to all configured MCP servers
+     * Validates server configuration
+     * @private
+     * @param {Object} config - Server configuration to validate
+     * @returns {boolean} True if valid, false otherwise
+     */
+    _validateServerConfig(config) {
+        return config && 
+               typeof config.command === 'string' && 
+               Array.isArray(config.args);
+    }
+
+    /**
+     * Enhanced connection to all configured servers with connection pooling
      * @async
-     * @returns {Promise<string[]>} Array of successfully connected server names
      */
     async connectToAllServers() {
-        await this.loadServerConfigs();
-        
-        const connectedServers = [];
         const connectionPromises = [];
         
-        for (const [serverName, config] of Object.entries(this.serverConfigs)) {
-            const promise = this.connectToServer(serverName, config)
-                .then(() => {
-                    connectedServers.push(serverName);
-                    return serverName;
-                })
-                .catch((error) => {
-                    console.error(`[MCP-Manager] Failed to connect to ${serverName}:`, error.message);
-                    return null;
-                });
-            
-            connectionPromises.push(promise);
+        for (const [serverName, config] of this.serverConfigs) {
+            connectionPromises.push(
+                this.connectToServer(serverName, config)
+                    .catch(error => {
+                        console.error(`Failed to connect to ${serverName}:`, error.message);
+                        return null;
+                    })
+            );
         }
         
-        await Promise.allSettled(connectionPromises);
+        const results = await Promise.allSettled(connectionPromises);
+        const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
         
-        return connectedServers;
+        console.log(`Connected to ${successCount}/${this.serverConfigs.size} MCP servers`);
+        
+        this._updateContext({ 
+            connectedServers: successCount,
+            totalConfiguredServers: this.serverConfigs.size,
+            connectionTimestamp: new Date().toISOString()
+        });
     }
 
     /**
@@ -760,14 +874,14 @@ class McpClientManager {
      */
     async connectToServer(serverName, config = null) {
         // Security: Only allow connection to servers configured by this user
-        const serverConfig = config || this.serverConfigs[serverName];
+        const serverConfig = config || this.serverConfigs.get(serverName);
         
         if (!serverConfig) {
             throw new Error(`No configuration found for server: ${serverName}`);
         }
         
         // Security: Verify this server belongs to the current user
-        if (!config && !this.serverConfigs[serverName]) {
+        if (!config && !this.serverConfigs.has(serverName)) {
             throw new Error(`Access denied: Server ${serverName} not configured for user ${this.userId}`);
         }
         
@@ -911,6 +1025,22 @@ class McpClientManager {
         }
         
         return await client.readResource(uri);
+    }
+
+    /**
+     * Updates the context manager with current state
+     * @private
+     * @param {Object} data - Data to update in context
+     */
+    _updateContext(data) {
+        const toolState = contextManager.getToolState('mcpClient', this.userId) || {};
+        toolState.lastTask = {
+            description: data.description,
+            intent: data.intent,
+            result: data.result,
+            timestamp: new Date().toISOString()
+        };
+        contextManager.setToolState('mcpClient', toolState, this.userId);
     }
 }
 

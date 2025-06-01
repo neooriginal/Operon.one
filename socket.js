@@ -139,6 +139,14 @@ app.get("/settings", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "settings.html"));
 });
 
+app.get("/dashboard/voice", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "voice.html"));
+});
+
+app.get("/voice", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "voice.html"));
+});
+
 app.get("/legal/terms", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "legal", "terms-of-service.html"));
 });

@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const ascii = require('./utils/ascii');
 const contextManager = require('./utils/context');
+const crypto = require('crypto');
 
 const io = require('./socket');
 const sanitize = require('sanitize-filename');
@@ -15,6 +16,184 @@ const { taskStepFunctions } = require('./database');
 require('dotenv').config();
 
 const SCREENSHOT_INTERVAL = 5000;
+
+// Security enhancements
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 20; // Max requests per minute per user
+const MAX_TASK_DURATION = 1800000; // 30 minutes max task duration
+const MAX_INPUT_LENGTH = 10000; // Max input length
+const ALLOWED_FILE_EXTENSIONS = ['.txt', '.json', '.csv', '.md', '.py', '.js', '.html', '.css'];
+
+const userRateLimits = new Map();
+const activeTaskTimeouts = new Map();
+
+/**
+ * Enhanced input validation and sanitization
+ * @param {string} input - User input to validate
+ * @param {string} type - Type of input (question, path, etc.)
+ * @returns {Object} Validation result
+ */
+function validateInput(input, type = 'general') {
+  const validation = {
+    isValid: true,
+    sanitized: input,
+    errors: []
+  };
+
+  if (!input || typeof input !== 'string') {
+    validation.isValid = false;
+    validation.errors.push('Input must be a non-empty string');
+    return validation;
+  }
+
+  // Length validation
+  if (input.length > MAX_INPUT_LENGTH) {
+    validation.isValid = false;
+    validation.errors.push(`Input exceeds maximum length of ${MAX_INPUT_LENGTH} characters`);
+    return validation;
+  }
+
+  // Basic XSS prevention
+  const xssPatterns = [
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    /javascript:/gi,
+    /on\w+\s*=/gi,
+    /<iframe/gi,
+    /<object/gi,
+    /<embed/gi
+  ];
+
+  let sanitized = input;
+  for (const pattern of xssPatterns) {
+    if (pattern.test(sanitized)) {
+      validation.errors.push('Potentially malicious content detected');
+      validation.isValid = false;
+      return validation;
+    }
+  }
+
+  // SQL injection basic prevention
+  const sqlPatterns = [
+    /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bDROP\b|\bCREATE\b|\bALTER\b).*/gi,
+    /(\bOR\b|\bAND\b)\s*\d+\s*=\s*\d+/gi,
+    /['";]/g
+  ];
+
+  for (const pattern of sqlPatterns) {
+    if (pattern.test(sanitized)) {
+      validation.errors.push('Potentially malicious database query detected');
+      validation.isValid = false;
+      return validation;
+    }
+  }
+
+  // Command injection prevention
+  const cmdPatterns = [
+    /[;&|`$(){}[\]]/g,
+    /\.\.\//g,
+    /\/etc\/passwd/gi,
+    /\/bin\//gi,
+    /cmd\.exe/gi,
+    /powershell/gi
+  ];
+
+  for (const pattern of cmdPatterns) {
+    if (pattern.test(sanitized)) {
+      validation.errors.push('Potentially malicious command detected');
+      validation.isValid = false;
+      return validation;
+    }
+  }
+
+  // Type-specific validation
+  switch (type) {
+    case 'path':
+      // Path traversal prevention
+      if (sanitized.includes('..') || sanitized.includes('~')) {
+        validation.errors.push('Path traversal not allowed');
+        validation.isValid = false;
+      }
+      break;
+
+    case 'url':
+      try {
+        const url = new URL(sanitized);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          validation.errors.push('Only HTTP and HTTPS URLs are allowed');
+          validation.isValid = false;
+        }
+      } catch {
+        validation.errors.push('Invalid URL format');
+        validation.isValid = false;
+      }
+      break;
+
+    case 'filename':
+      const ext = path.extname(sanitized).toLowerCase();
+      if (ext && !ALLOWED_FILE_EXTENSIONS.includes(ext)) {
+        validation.errors.push(`File extension ${ext} not allowed`);
+        validation.isValid = false;
+      }
+      break;
+  }
+
+  validation.sanitized = sanitized;
+  return validation;
+}
+
+/**
+ * Rate limiting check for users
+ * @param {string} userId - User ID to check
+ * @returns {boolean} True if within rate limit
+ */
+function checkRateLimit(userId) {
+  const now = Date.now();
+  const userLimits = userRateLimits.get(userId) || { requests: [], lastReset: now };
+
+  // Clean old requests
+  userLimits.requests = userLimits.requests.filter(
+    time => now - time < RATE_LIMIT_WINDOW
+  );
+
+  if (userLimits.requests.length >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+
+  userLimits.requests.push(now);
+  userRateLimits.set(userId, userLimits);
+  return true;
+}
+
+/**
+ * Enhanced user authentication validation
+ * @param {string} userId - User ID to validate
+ * @returns {boolean} True if user is valid
+ */
+function validateUser(userId) {
+  if (!userId || typeof userId !== 'string') {
+    return false;
+  }
+
+  // Basic format validation
+  if (userId.length < 3 || userId.length > 50) {
+    return false;
+  }
+
+  // Alphanumeric and basic characters only
+  if (!/^[a-zA-Z0-9_-]+$/.test(userId)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Generates a secure session token
+ * @returns {string} Secure random token
+ */
+function generateSecureToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 /**
  * Sanitizes a path by ensuring it contains only safe characters.
@@ -66,6 +245,51 @@ function sanitizeFilePath(unsafePath, userId) {
 const toolsDirectory = path.join(__dirname, 'tools');
 const tools = {};
 const toolDescriptions = [];
+
+// Performance improvements: Add caching and connection pooling
+const toolResponseCache = new Map();
+const CACHE_TTL = 300000; // 5 minutes
+const MAX_CACHE_SIZE = 1000;
+
+/**
+ * Simple LRU cache implementation for tool responses
+ */
+class ResponseCache {
+  constructor(maxSize = MAX_CACHE_SIZE) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+
+  get(key) {
+    if (this.cache.has(key)) {
+      const item = this.cache.get(key);
+      if (Date.now() - item.timestamp < CACHE_TTL) {
+        // Move to end (mark as recently used)
+        this.cache.delete(key);
+        this.cache.set(key, item);
+        return item.value;
+      } else {
+        this.cache.delete(key);
+      }
+    }
+    return null;
+  }
+
+  set(key, value) {
+    if (this.cache.size >= this.maxSize) {
+      // Remove oldest item
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, { value, timestamp: Date.now() });
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const responseCache = new ResponseCache();
 
 /**
  * Loads all enabled tools from the tools directory.
@@ -138,7 +362,7 @@ ascii.printWelcome();
 loadTools();
 
 /**
- * Main orchestrator for processing user requests.
+ * Main orchestrator for processing user requests with enhanced security.
  * @param {string} question - The user's question or request.
  * @param {string} userId - The user ID (default: 'default').
  * @param {number} chatId - The chat ID (default: 1).
@@ -147,19 +371,48 @@ loadTools();
  */
 async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = false) {
   try {
-    // Validate inputs
-    if (!question || typeof question !== 'string') {
-      throw new Error('Invalid question format');
+    // Enhanced input validation
+    const questionValidation = validateInput(question, 'general');
+    if (!questionValidation.isValid) {
+      throw new Error(`Invalid input: ${questionValidation.errors.join(', ')}`);
+    }
+    question = questionValidation.sanitized;
+    
+    // Enhanced user validation
+    if (!validateUser(userId)) {
+      throw new Error('Invalid user identifier format');
     }
     
-    if (!userId) {
-      throw new Error('Authentication required: valid user ID is mandatory for production use');
+    // Rate limiting check
+    if (!checkRateLimit(userId)) {
+      throw new Error('Rate limit exceeded. Please wait before submitting another request.');
     }
     
+    // Enhanced chat ID validation
     chatId = parseInt(chatId, 10);
-    if (isNaN(chatId) || chatId < 1) {
+    if (isNaN(chatId) || chatId < 1 || chatId > 999999) {
       chatId = 1; 
     }
+    
+    // Check if user has an active task with timeout
+    const existingTimeout = activeTaskTimeouts.get(userId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+    
+    // Set task timeout
+    const taskTimeout = setTimeout(() => {
+      console.warn(`Task timeout for user ${userId}, chat ${chatId}`);
+      contextManager.setTaskRunning(false, userId, chatId);
+      activeTaskTimeouts.delete(userId);
+      io.to(`user:${userId}`).emit('task_error', { 
+        userId, 
+        chatId, 
+        error: 'Task exceeded maximum execution time and was terminated for security reasons.' 
+      });
+    }, MAX_TASK_DURATION);
+    
+    activeTaskTimeouts.set(userId, taskTimeout);
     
     // Check if a task is already running for this user
     if (contextManager.isTaskRunning(userId, chatId)) {
@@ -171,6 +424,9 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
       });
       return 'Task already running. Please wait for completion.';
     }
+    
+    // Security audit log
+    console.log(`[SECURITY] Task started - User: ${userId}, Chat: ${chatId}, Length: ${question.length}, IP: ${getClientIP()}`);
     
     // Initialize or continue context first
     if (!isFollowUp) {
@@ -193,8 +449,11 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
     
-    // Get plan from AI
-    let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "auto", userId, chatId);
+    // Get plan from AI with timeout protection
+    let planObject = await withTimeout(
+      tools.chatCompletion.callAI(prompt, question, history, undefined, true, "auto", userId, chatId),
+      60000 // 1 minute timeout for planning
+    );
     
     // Handle direct answers without complex planning
     if (planObject.directAnswer === true && planObject.answer) {
@@ -205,7 +464,14 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     return await executeTaskPlan(planObject, question, userId, chatId, isFollowUp);
     
   } catch (error) {
-    console.error("Critical error in orchestration:", error.message);
+    console.error(`[SECURITY] Critical error in orchestration for user ${userId}:`, error.message);
+    
+    // Clear task timeout
+    const taskTimeout = activeTaskTimeouts.get(userId);
+    if (taskTimeout) {
+      clearTimeout(taskTimeout);
+      activeTaskTimeouts.delete(userId);
+    }
     
     io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
     
@@ -214,6 +480,9 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     } catch (cleanupError) {
       console.error("Error during cleanup:", cleanupError.message);
     }
+    
+    // Security audit log for errors
+    console.log(`[SECURITY] Task failed - User: ${userId}, Error: ${error.message}`);
     
     return `Critical error occurred during execution: ${error.message}`;
   }
@@ -436,83 +705,114 @@ async function executeToolAction(enhancedStep, inputData, currentStepIndex, plan
     };
   }
   
-  // Handle chat completion tool
-  if (enhancedStep.action === "chatCompletion") {
-    const updatedHistory = contextManager.getHistoryWithChatId(userId, chatId);
-    const summary = await tool.callAI(enhancedStep.step, inputData, updatedHistory, undefined, true, "auto", userId, chatId);
-    contextManager.addToHistory({
-      role: "assistant", 
-      content: [
-        {type: "text", text: JSON.stringify(summary)}
-      ]
-    }, userId, chatId);
-    return summary;
-  } 
+  // Performance improvement: Check cache for non-stateful operations
+  const cacheKey = `${enhancedStep.action}_${enhancedStep.step}_${inputData}`;
+  const cacheable = ['webSearch', 'deepResearch'].includes(enhancedStep.action);
   
-  // Handle research tools
-  if (["deepResearch", "webSearch"].includes(enhancedStep.action)) {
-    const intensity = enhancedStep.intensity || undefined;
-    return await tool.runTask(enhancedStep.step, inputData, (summary) => {
-      emitStepCompletion(enhancedStep, currentStepIndex, plan, userId, chatId);
-    }, userId, chatId, intensity);
-  } 
-  
-  // Handle writer tool
-  if (enhancedStep.action === "writer") {
-    const summary = await tool.write(
-      `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
-      inputData,
-      userId,
-      chatId
-    );
-    
-    if (summary && summary.error) {
-      console.error(`Writer error: ${summary.error}`, summary.details || '');
-      return { 
-        error: summary.error,
-        success: false,
-        partial: "Writer tool failed to generate content. See logs for details."
-      };
-    }
-    
-    return summary;
-  } 
-  
-  // Handle other tools
-  const summary = await tool.runTask(
-    `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
-    inputData, 
-    (summary) => {
-      emitStepCompletion(enhancedStep, currentStepIndex, plan, userId, chatId);
-      
-      // Handle file system updates
-      if (enhancedStep.action === "fileSystem" && summary && summary.filePath) {
-        io.to(`user:${userId}`).emit('file_updated', { 
-          userId, 
-          chatId,
-          filePath: summary.filePath, 
-          content: summary.content || 'File created/updated'
-        });
-      }
-    },
-    userId,
-    chatId
-  );
-  
-  // Track container files if needed
-  if (["execute", "bash"].includes(enhancedStep.action) && 
-      summary && Array.isArray(summary.createdContainerFiles) && 
-      tools.fileSystem) {
-    for (const containerPath of summary.createdContainerFiles) {
-      try {
-        await tools.fileSystem.trackContainerFile(userId, containerPath, chatId);
-      } catch (trackingError) {
-        console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
-      }
+  if (cacheable) {
+    const cachedResult = responseCache.get(cacheKey);
+    if (cachedResult) {
+      console.log(`Using cached result for ${enhancedStep.action}`);
+      return cachedResult;
     }
   }
   
-  return summary;
+  let result;
+  
+  try {
+    // Handle chat completion tool
+    if (enhancedStep.action === "chatCompletion") {
+      const updatedHistory = contextManager.getHistoryWithChatId(userId, chatId);
+      result = await tool.callAI(enhancedStep.step, inputData, updatedHistory, undefined, true, "auto", userId, chatId);
+      contextManager.addToHistory({
+        role: "assistant", 
+        content: [
+          {type: "text", text: JSON.stringify(result)}
+        ]
+      }, userId, chatId);
+    } 
+    // Handle research tools with improved error handling
+    else if (["deepResearch", "webSearch"].includes(enhancedStep.action)) {
+      const intensity = enhancedStep.intensity || undefined;
+      result = await withTimeout(
+        tool.runTask(enhancedStep.step, inputData, (summary) => {
+          emitStepCompletion(enhancedStep, currentStepIndex, plan, userId, chatId);
+        }, userId, chatId, intensity),
+        120000 // 2 minute timeout for research tools
+      );
+    } 
+    // Handle writer tool
+    else if (enhancedStep.action === "writer") {
+      result = await tool.write(
+        `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
+        inputData,
+        userId,
+        chatId
+      );
+      
+      if (result && result.error) {
+        console.error(`Writer error: ${result.error}`, result.details || '');
+        return { 
+          error: result.error,
+          success: false,
+          partial: "Writer tool failed to generate content. See logs for details."
+        };
+      }
+    } 
+    // Handle other tools with improved timeout management
+    else {
+      result = await withTimeout(
+        tool.runTask(
+          `${enhancedStep.step} Expected output: ${enhancedStep.expectedOutput}`, 
+          inputData, 
+          (summary) => {
+            emitStepCompletion(enhancedStep, currentStepIndex, plan, userId, chatId);
+            
+            // Handle file system updates
+            if (enhancedStep.action === "fileSystem" && summary && summary.filePath) {
+              io.to(`user:${userId}`).emit('file_updated', { 
+                userId, 
+                chatId,
+                filePath: summary.filePath, 
+                content: summary.content || 'File created/updated'
+              });
+            }
+          },
+          userId,
+          chatId
+        ),
+        90000 // 90 second timeout for other tools
+      );
+    }
+    
+    // Cache the result if it's cacheable
+    if (cacheable && result && !result.error) {
+      responseCache.set(cacheKey, result);
+    }
+    
+    // Track container files if needed
+    if (["execute", "bash"].includes(enhancedStep.action) && 
+        result && Array.isArray(result.createdContainerFiles) && 
+        tools.fileSystem) {
+      for (const containerPath of result.createdContainerFiles) {
+        try {
+          await tools.fileSystem.trackContainerFile(userId, containerPath, chatId);
+        } catch (trackingError) {
+          console.warn(`Failed to track container file ${containerPath}: ${trackingError.message}`);
+        }
+      }
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`Tool execution error for ${enhancedStep.action}:`, error.message);
+    return { 
+      error: `Tool execution failed: ${error.message}`,
+      success: false,
+      partial: error.message.includes('timeout') ? 'Operation timed out' : undefined
+    };
+  }
 }
 
 /**
@@ -1003,4 +1303,14 @@ if (require.main === module) {
       }
     });
   });
+}
+
+/**
+ * Gets client IP address for security logging
+ * @returns {string} Client IP address
+ */
+function getClientIP() {
+  // This would be implemented based on your server setup
+  // For now, return a placeholder
+  return 'unknown';
 }
