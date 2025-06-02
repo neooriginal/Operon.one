@@ -575,8 +575,7 @@ async function finalizeAndReturn(question, plan, userId, chatId) {
   
   try {
     const stepsOutput = contextManager.getStepsOutput(userId, chatId);
-    console.log(`[Orchestrator] Steps output for finalization:`, JSON.stringify(stepsOutput, null, 2));
-    
+
     finalOutput = await finalizeTask(question, stepsOutput, userId, chatId);
     
     // Clean up conversation history
