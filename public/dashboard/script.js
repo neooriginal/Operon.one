@@ -961,6 +961,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Add a global flag to track task status
+    let taskInProgress = false;
 
     function handleSendMessage() {
 
@@ -969,12 +971,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = messageInput.value.trim();
         if (!message) return;
 
+        // Prevent double submission
+        if (taskInProgress) {
+            console.log('Task already in progress, preventing double submission');
+            updateStatusDisplay('A task is already running', 'info');
+            return;
+        }
+
+        // Set flag to prevent multiple submissions
+        taskInProgress = true;
 
         const processSendMessage = (chatId) => {
 
             addMessage(message, 'user');
             messageInput.value = '';
-
 
             updateStatusDisplay('Task received', 'loading');
             
@@ -983,7 +993,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 userId: userId,
                 chatId: chatId
             });
-
 
             if (messageInput && sendButton) {
                 messageInput.disabled = true;
@@ -1279,6 +1288,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.userId === userId) {
                 console.log('Task completed:', data);
 
+                // Reset task in progress flag
+                taskInProgress = false;
+
                 const result = extractTextFromObject(data.result) || 'Task completed successfully';
 
                 // Only add the message if it's not a duplicate and not from history loading
@@ -1311,6 +1323,15 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error processing task completion:', error.message);
             updateStatusDisplay('Error completing task', 'error');
+            
+            // Reset task in progress flag even on error
+            taskInProgress = false;
+            
+            // Re-enable input controls
+            if (messageInput && sendButton) {
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+            }
         }
     });
 
@@ -1368,14 +1389,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     socket.on('task_error', (data) => {
-
-        if (data.userId === userId) {
-            console.error('Task error:', data);
-            addActionElement('Error', data.error, 'error');
-            updateStatusDisplay('Task failed', 'error');
+        console.log('Task error received:', data);
+        
+        // Only reset if this is for the current user and chat
+        if (!data.userId || data.userId === userId) {
+            // Reset UI state
+            if (messageInput && sendButton) {
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+            }
             
-            messageInput.disabled = false;
-            sendButton.disabled = false;
+            // Reset the task in progress flag
+            taskInProgress = false;
+            
+            // Show error message to user
+            updateStatusDisplay(data.error || 'Error processing task', 'error');
         }
     });
 
