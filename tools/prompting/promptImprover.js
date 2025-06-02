@@ -2,6 +2,9 @@ const ai = require("../AI/ai");
 const contextManager = require("../../utils/context");
 
 async function improvePrompt(question, userId = 'default'){
+
+  
+   return question;
     
     let userContext = contextManager.getContext(userId);
     if (!userContext.promptImprover) {
