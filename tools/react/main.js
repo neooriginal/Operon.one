@@ -15,10 +15,11 @@ const contextManager = require('../../utils/context');
  * Process a step using the ReAct pattern before execution
  * @param {Object} step - The step to process
  * @param {String} userId - User identifier for multi-user support
+ * @param {Number} chatId - Chat identifier (default: 1)
  * @returns {Object} Enhanced step with reasoning
  */
-async function processStep(step, userId = 'default') {
-  const context = contextManager.getContext(userId);
+async function processStep(step, userId = 'default', chatId = 1) {
+  const context = contextManager.getContext(userId, chatId);
   const stepsOutput = context.stepsOutput || [];
   const plan = context.plan || [];
   const currentStepIndex = context.currentStepIndex || 0;
@@ -86,7 +87,7 @@ Return your reasoning in this JSON format:
     contextManager.addToThoughtChain({
       step: currentStepIndex + 1,
       reasoning: reasoning
-    }, userId);
+    }, userId, chatId);
     
     
     const enhancedStep = {
@@ -111,10 +112,11 @@ Return your reasoning in this JSON format:
  * @param {Object} step - The executed step
  * @param {Object} result - The step result
  * @param {String} userId - User identifier for multi-user support
+ * @param {Number} chatId - Chat identifier (default: 1)
  * @returns {Object} Reflection with potential plan adjustments
  */
-async function reflectOnResult(step, result, userId = 'default') {
-  const context = contextManager.getContext(userId);
+async function reflectOnResult(step, result, userId = 'default', chatId = 1) {
+  const context = contextManager.getContext(userId, chatId);
   const stepsOutput = context.stepsOutput;
   const plan = context.plan;
   const currentStepIndex = context.currentStepIndex;
@@ -160,7 +162,7 @@ Return your reflection in this JSON format:
   
   
   const lastThoughtIndex = thoughtChain.length - 1;
-  contextManager.updateThoughtChain(lastThoughtIndex, { reflection }, userId);
+  contextManager.updateThoughtChain(lastThoughtIndex, { reflection }, userId, chatId);
   
   return reflection;
 }
@@ -169,10 +171,11 @@ Return your reflection in this JSON format:
  * Save the thought chain to a file using the filesystem tool
  * @param {Object} fileSystem - The filesystem tool
  * @param {String} userId - User identifier for multi-user support
+ * @param {Number} chatId - Chat identifier (default: 1)
  */
-async function saveThoughtChain(fileSystem, userId = 'default') {
+async function saveThoughtChain(fileSystem, userId = 'default', chatId = 1) {
   try {
-    const thoughtChain = contextManager.getThoughtChain(userId);
+    const thoughtChain = contextManager.getThoughtChain(userId, chatId);
     const thoughtChainJSON = JSON.stringify(thoughtChain, null, 2);
     
     
@@ -180,7 +183,8 @@ async function saveThoughtChain(fileSystem, userId = 'default') {
       `Save the ReAct thought chain to thought_chain.json. Expected output: thought_chain.json`,
       thoughtChainJSON,
       null,
-      userId
+      userId,
+      chatId
     );
     
     return { success: true };

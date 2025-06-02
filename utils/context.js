@@ -252,18 +252,18 @@ class Context {
   }
 
   
-  addToThoughtChain(thought, userId = 'default') {
-    const context = this.getContext(userId);
+  addToThoughtChain(thought, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     context.thoughtChain.push(thought);
     return context.thoughtChain;
   }
 
-  getThoughtChain(userId = 'default') {
-    return this.getContext(userId).thoughtChain;
+  getThoughtChain(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).thoughtChain;
   }
 
-  updateThoughtChain(index, update, userId = 'default') {
-    const context = this.getContext(userId);
+  updateThoughtChain(index, update, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     if (index >= 0 && index < context.thoughtChain.length) {
       context.thoughtChain[index] = {...context.thoughtChain[index], ...update};
     }
@@ -271,37 +271,37 @@ class Context {
   }
 
   
-  setToolState(toolName, state, userId = 'default') {
-    const context = this.getContext(userId);
+  setToolState(toolName, state, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     context.toolStates.set(toolName, state);
     return state;
   }
 
-  getToolState(toolName, userId = 'default') {
-    const context = this.getContext(userId);
+  getToolState(toolName, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     return context.toolStates.get(toolName);
   }
 
   
-  setVariable(key, value, userId = 'default') {
-    const context = this.getContext(userId);
+  setVariable(key, value, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     context.variables.set(key, value);
     return value;
   }
 
-  getVariable(key, userId = 'default') {
-    const context = this.getContext(userId);
+  getVariable(key, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     return context.variables.get(key);
   }
 
-  getAllVariables(userId = 'default') {
-    const context = this.getContext(userId);
+  getAllVariables(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     return Object.fromEntries(context.variables);
   }
 
   
-  getState(userId = 'default') {
-    const context = this.getContext(userId);
+  getState(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
     return {
       history: context.history,
       stepsOutput: context.stepsOutput,
@@ -316,17 +316,17 @@ class Context {
   }
 
   
-  getStartTime(userId = 'default') {
-    return this.getContext(userId).startTime;
+  getStartTime(userId = 'default', chatId = 1) {
+    return this.getContext(userId, chatId).startTime;
   }
   
-  setStartTime(time = Date.now(), userId = 'default') {
-    this.getContext(userId).startTime = time;
+  setStartTime(time = Date.now(), userId = 'default', chatId = 1) {
+    this.getContext(userId, chatId).startTime = time;
     return time;
   }
   
-  getTaskDuration(userId = 'default') {
-    const startTime = this.getStartTime(userId);
+  getTaskDuration(userId = 'default', chatId = 1) {
+    const startTime = this.getStartTime(userId, chatId);
     return Date.now() - startTime;
   }
 
