@@ -6,8 +6,6 @@
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const contextManager = require('../../utils/context');
-const path = require('path');
-const fs = require('fs');
 
 /**
  * @namespace McpTypes
@@ -758,68 +756,39 @@ class McpClientManager {
     }
 
     /**
-     * Enhanced server configuration loading with auto-discovery
+     * Enhanced server configuration loading from user settings
      * @async
      */
     async loadServerConfigs() {
         try {
-            const configPath = path.join(__dirname, 'servers.json');
+            // Import the settings functions from database
+            const { settingsFunctions } = require('../../database');
             
-            // Create default config if it doesn't exist
-            if (!fs.existsSync(configPath)) {
-                const defaultConfigs = {
-                    "filesystem": {
-                        "command": "npx",
-                        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-                        "timeout": 30000,
-                        "autoRestart": true
-                    },
-                    "git": {
-                        "command": "npx",
-                        "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "."],
-                        "timeout": 30000,
-                        "autoRestart": true
-                    },
-                    "brave-search": {
-                        "command": "npx",
-                        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-                        "env": {
-                            "BRAVE_API_KEY": process.env.BRAVE_API_KEY || ""
-                        },
-                        "timeout": 30000,
-                        "autoRestart": true
-                    },
-                    "github": {
-                        "command": "npx",
-                        "args": ["-y", "@modelcontextprotocol/server-github"],
-                        "env": {
-                            "GITHUB_PERSONAL_ACCESS_TOKEN": process.env.GITHUB_TOKEN || ""
-                        },
-                        "timeout": 30000,
-                        "autoRestart": true
-                    }
-                };
+            // Get MCP servers from user settings
+            const mcpServersJson = await settingsFunctions.getSetting(this.userId, 'mcpServers');
+            
+            if (mcpServersJson) {
+                const configs = JSON.parse(mcpServersJson);
                 
-                fs.writeFileSync(configPath, JSON.stringify(defaultConfigs, null, 2));
-                console.log('Created default MCP server configurations');
-            }
-            
-            const configData = fs.readFileSync(configPath, 'utf8');
-            const configs = JSON.parse(configData);
-            
-            // Load and validate configurations
-            for (const [serverName, config] of Object.entries(configs)) {
-                if (this._validateServerConfig(config)) {
-                    this.serverConfigs.set(serverName, config);
-                } else {
-                    console.warn(`Invalid configuration for MCP server: ${serverName}`);
+                // Load and validate configurations
+                for (const [serverName, config] of Object.entries(configs)) {
+                    if (this._validateServerConfig(config)) {
+                        this.serverConfigs.set(serverName, config);
+                    } else {
+                        console.warn(`Invalid configuration for MCP server: ${serverName} for user ${this.userId}`);
+                    }
                 }
+                
+                console.log(`Loaded ${this.serverConfigs.size} MCP server configurations for user ${this.userId}`);
+            } else {
+                // No user configurations found
+                console.log(`No MCP server configurations found for user ${this.userId}`);
+                this.serverConfigs.clear();
             }
-            
-            console.log(`Loaded ${this.serverConfigs.size} MCP server configurations`);
             
         } catch (error) {
-            console.error('Error loading MCP server configurations:', error.message);
+            console.error(`Error loading MCP server configurations for user ${this.userId}:`, error.message);
+            this.serverConfigs.clear();
         }
     }
 
@@ -840,13 +809,16 @@ class McpClientManager {
      * @async
      */
     async connectToAllServers() {
+        // Load user settings first
+        await this.loadServerConfigs();
+        
         const connectionPromises = [];
         
         for (const [serverName, config] of this.serverConfigs) {
             connectionPromises.push(
                 this.connectToServer(serverName, config)
                     .catch(error => {
-                        console.error(`Failed to connect to ${serverName}:`, error.message);
+                        console.error(`Failed to connect to ${serverName} for user ${this.userId}:`, error.message);
                         return null;
                     })
             );
@@ -855,7 +827,7 @@ class McpClientManager {
         const results = await Promise.allSettled(connectionPromises);
         const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
         
-        console.log(`Connected to ${successCount}/${this.serverConfigs.size} MCP servers`);
+        console.log(`Connected to ${successCount}/${this.serverConfigs.size} MCP servers for user ${this.userId}`);
         
         this._updateContext({ 
             connectedServers: successCount,
