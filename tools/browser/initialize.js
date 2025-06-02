@@ -29,7 +29,7 @@ async function ensurePlaywrightInstalled() {
           error.message.includes('Executable doesn\'t exist')) {
         console.log('Playwright browser not installed. Installing browser...');
         try {
-          execSync('npx playwright install chromium', { stdio: 'inherit' });
+          execSync('npx playwright install chromium', { stdio: 'inherit', shell: true });
           return true;
         } catch (installError) {
           console.error('Failed to install Playwright browser:', installError);

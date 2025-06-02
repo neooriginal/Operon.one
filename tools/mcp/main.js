@@ -168,7 +168,8 @@ class McpClient extends EventEmitter {
                 // Spawn the server process
                 this.serverProcess = spawn(this.config.command, this.config.args, {
                     stdio: ['pipe', 'pipe', 'pipe'],
-                    env: env
+                    env: env,
+                    shell: true
                 });
 
                 // Handle process events
