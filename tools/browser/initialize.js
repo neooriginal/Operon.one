@@ -68,4 +68,4 @@ async function initialize() {
 module.exports = {
   initialize,
   ensurePlaywrightInstalled
-}; 
+};  
