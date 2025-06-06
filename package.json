@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node tester.js",
+    "test": "node tester/tester.js",
     "start": "node index.js",
     "postinstall": "npx playwright install chromium",
     "rebuild-bcrypt": "npm rebuild bcrypt --build-from-source"
