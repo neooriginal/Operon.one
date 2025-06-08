@@ -49,7 +49,7 @@ COPY . .
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/data /app/output /app/.playwright-browsers && \
-    chown -R node:node /app /app/data /app/output /app/.playwright-browsers /home/node/.cache && \
+    chown -R node:node /app && \
     chmod 755 /app/data /app/output /app/.playwright-browsers
 
 # Note: USER directive removed to allow docker-compose to set user
