@@ -22,8 +22,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       # Mount data directory for persistence (create if not exists)
       - data_volume:/app/data
-      # Mount output directory for user files
-      - output_volume:/app/output
     # Set user to root to access docker socket and fix permissions
     user: "0:0"
     networks:
@@ -31,8 +29,6 @@ services:
 
 volumes:
   data_volume:
-    driver: local
-  output_volume:
     driver: local
 
 networks:
