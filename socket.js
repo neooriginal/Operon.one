@@ -13,9 +13,9 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-// Trust proxy for reverse proxy environments like Coolify
+// Trust proxy for reverse proxy environments
 if (process.env.TRUST_PROXY === 'true') {
-  app.set('trust proxy', true);
+  app.set('trust proxy', 1);
 }
 
 app.use(cors());
@@ -27,7 +27,12 @@ const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 500, 
   standardHeaders: true,
-  message: { error: 'Too many requests, please try again later.' }
+  message: { error: 'Too many requests, please try again later.' },
+  // Use proper IP extraction for trusted proxy environments
+  keyGenerator: (req) => {
+    // When behind a reverse proxy, use the real IP from X-Forwarded-For
+    return req.ip || req.connection.remoteAddress;
+  }
 });
 app.use('/api', apiLimiter);
 
