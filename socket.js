@@ -13,6 +13,10 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Trust proxy for reverse proxy environments like Coolify
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', true);
+}
 
 app.use(cors());
 app.use(bodyParser.json());
