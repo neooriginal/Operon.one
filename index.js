@@ -863,26 +863,26 @@ module.exports = {
 // Global cleanup function for process termination
 async function globalCleanup() {
   console.log('\nReceived termination signal, cleaning up...');
-  
+
   try {
-    // Clean up all MCP connections
-    if (tools.mcpClient) {
-      try {
-        const mcpModule = require('./tools/mcp/main.js');
-        console.log('Cleaning up all MCP connections...');
-        // The mcpManagers is a private Map, so we'll need to access it differently
-        // For now, just log that we're attempting cleanup
-        console.log('MCP module cleanup initiated');
-      } catch (error) {
-        console.error('Error during MCP cleanup:', error.message);
-      }
+    // Clean up resources for all known users
+    const userIds = new Set();
+    for (const key of contextManager.contexts.keys()) {
+      userIds.add(key.split('_')[0]);
     }
-    
+    if (userIds.size === 0) {
+      userIds.add('default');
+    }
+
+    for (const id of userIds) {
+      await cleanupUserResources(id);
+    }
+
     console.log('Global cleanup completed');
   } catch (error) {
     console.error('Error during global cleanup:', error.message);
   }
-  
+
   process.exit(0);
 }
 
