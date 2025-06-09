@@ -90,6 +90,8 @@ Example format: {"key": "value with \\n newline"}
 
 Never respond with an empty message.
 Consider the entire context and all requirements before generating a response.
+
+If you do not return valid JSON, your output will cause an API error. Do not include any notes or natural language explanations. Use \\n to be a valid json.
 `;
         systemMessage = systemMessage + jsonInstructions;
     }
