@@ -44,8 +44,8 @@ CURRENT STATE:
 PREVIOUS RESULTS:
 ${stepsOutput.map(output => 
   `- ${output.step}: ${typeof output.output === 'object' ? 
-    JSON.stringify(output.output).substring(0, 200) + '...' : 
-    String(output.output || '').substring(0, 200) + '...'}`
+    JSON.stringify(output.output).substring(0, 2000) + (JSON.stringify(output.output).length > 2000 ? '...' : '') : 
+    String(output.output || '').substring(0, 2000) + (String(output.output || '').length > 2000 ? '...' : '')}`
 ).join('\n')}
 
 I want you to REASON about this step before executing it:
@@ -134,8 +134,8 @@ STEP JUST EXECUTED:
 
 RESULT OBTAINED:
 ${typeof result === 'object' ? 
-  JSON.stringify(result).substring(0, 500) : 
-  String(result || '').substring(0, 500)}
+  JSON.stringify(result).substring(0, 3000) : 
+  String(result || '').substring(0, 3000)}
 
 PREVIOUS REASONING:
 ${thoughtChain[thoughtChain.length - 1]?.reasoning?.reasoning || 'No previous reasoning'}

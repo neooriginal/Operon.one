@@ -34,12 +34,12 @@ RUN usermod -aG docker node
 
 # Set environment variables for Playwright
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
-ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies and Playwright browsers
 RUN npm install --omit=dev && \
     npx playwright install chromium --with-deps && \
     npm cache clean --force
@@ -48,12 +48,12 @@ RUN npm install --omit=dev && \
 COPY . .
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /app/data /app/output && \
-    chown -R node:node /app /app/data /app/output /home/node/.cache && \
-    chmod 755 /app/data /app/output
+RUN mkdir -p /app/data /app/output /app/.playwright-browsers && \
+    chown -R node:node /app && \
+    chmod 755 /app/data /app/output /app/.playwright-browsers
 
-# Switch to node user for security
-USER node
+# Note: USER directive removed to allow docker-compose to set user
+# This enables both regular user mode and root mode for docker socket access
 
 # Expose port
 EXPOSE 3000

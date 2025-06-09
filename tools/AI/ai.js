@@ -90,6 +90,8 @@ Example format: {"key": "value with \\n newline"}
 
 Never respond with an empty message.
 Consider the entire context and all requirements before generating a response.
+
+If you do not return valid JSON, your output will cause an API error. Do not include any notes or natural language explanations. Use \\n to be a valid json.
 `;
         systemMessage = systemMessage + jsonInstructions;
     }
@@ -148,7 +150,7 @@ Consider the entire context and all requirements before generating a response.
                     model: model,
                     messages: messagesForAPI,
                     response_format: jsonResponse ? {type: "json_object"} : undefined,
-                    max_tokens: jsonResponse ? 4096 : 8192, 
+                    max_tokens: jsonResponse ? 4096 : 16384, 
                     temperature: 0.2 
                 });
                 break; 

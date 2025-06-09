@@ -13,6 +13,10 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Trust proxy for reverse proxy environments
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -23,7 +27,12 @@ const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 500, 
   standardHeaders: true,
-  message: { error: 'Too many requests, please try again later.' }
+  message: { error: 'Too many requests, please try again later.' },
+  // Use proper IP extraction for trusted proxy environments
+  keyGenerator: (req) => {
+    // When behind a reverse proxy, use the real IP from X-Forwarded-For
+    return req.ip || req.connection.remoteAddress;
+  }
 });
 app.use('/api', apiLimiter);
 
@@ -51,6 +60,10 @@ app.use('/api', authRoutes);
 
 
 const httpServer = require("http").createServer(app);
+
+// Configure server timeouts
+httpServer.timeout = parseInt(process.env.HTTP_TIMEOUT) || 60000;
+httpServer.keepAliveTimeout = parseInt(process.env.KEEP_ALIVE_TIMEOUT) || 65000;
 
 const io = socket(httpServer, {
     cors: {
@@ -262,12 +275,17 @@ app.get('/api/files/:fileId', isAuthenticated, async (req, res) => {
   const userId = req.userId; 
 
   try {
+    console.log(`Fetching file details for ${fileId} for user ${userId}`);
+    
     const file = await fileFunctions.getTrackedFileById(userId, fileId);
     if (!file) {
+      console.log(`File ${fileId} not found for user ${userId}`);
       return res.status(404).send({ error: 'File not found or access denied' });
     }
     
+    // Remove file content from response (just metadata)
     const { fileContent, ...fileDetails } = file;
+    console.log(`File details found for ${fileId}: ${fileDetails.fileName || fileDetails.path}`);
     res.json(fileDetails);
   } catch (error) {
     console.error(`Error fetching file details for ID ${fileId}:`, error);
@@ -280,45 +298,64 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
   const { fileId } = req.params;
   const userId = req.userId; 
 
+  // Set timeout to prevent gateway timeouts
+  req.setTimeout(30000, () => {
+    if (!res.headersSent) {
+      res.status(408).send({ error: 'Request timeout' });
+    }
+  });
+
   try {
+    console.log(`Attempting to download file ${fileId} for user ${userId}`);
+    
     const file = await fileFunctions.getTrackedFileById(userId, fileId);
-    if (!file || file.fileContent === null || file.fileContent === undefined) {
-      return res.status(404).send({ error: 'File not found, content unavailable, or access denied' });
+    
+    if (!file) {
+      console.log(`File ${fileId} not found for user ${userId}`);
+      return res.status(404).send({ error: 'File not found or access denied' });
+    }
+    
+    if (file.fileContent === null || file.fileContent === undefined) {
+      console.log(`File ${fileId} has no content for user ${userId}`);
+      return res.status(404).send({ error: 'File content unavailable' });
     }
 
     const fileName = file.fileName || (file.path ? file.path.split('/').pop() : `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`);
     const contentType = mime.lookup(fileName) || 'application/octet-stream';
 
+    console.log(`Serving file ${fileName} (${contentType}) for user ${userId}`);
     
     const isBinary = contentType.indexOf('text/') !== 0 && 
                      contentType !== 'application/json' && 
                      contentType !== 'application/javascript';
 
-    
     let fileBuffer;
-    if (isBinary) {
-      
-      try {
+    try {
+      if (isBinary) {
         fileBuffer = Buffer.from(file.fileContent, 'base64');
-      } catch (e) {
-        
+      } else {
         fileBuffer = Buffer.from(file.fileContent, 'utf8');
       }
-    } else {
-      
-      fileBuffer = Buffer.from(file.fileContent, 'utf8');
+    } catch (bufferError) {
+      console.error(`Error creating buffer for file ${fileId}:`, bufferError);
+      return res.status(500).send({ error: 'Error processing file content' });
     }
 
+    // Set appropriate headers
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', fileBuffer.length);
+    res.setHeader('Cache-Control', 'no-cache');
     
-    
+    // Send the file
     res.end(fileBuffer);
+    console.log(`Successfully served file ${fileName} (${fileBuffer.length} bytes) for user ${userId}`);
 
   } catch (error) {
     console.error(`Error downloading file for ID ${fileId}:`, error);
-    res.status(500).send({ error: 'Internal Server Error' });
+    if (!res.headersSent) {
+      res.status(500).send({ error: 'Internal Server Error' });
+    }
   }
 });
 

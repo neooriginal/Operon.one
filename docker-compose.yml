@@ -13,20 +13,22 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DATA_DIR=/app/data
+      - TRUST_PROXY=true
+      - PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
+      - HTTP_TIMEOUT=60000
+      - KEEP_ALIVE_TIMEOUT=65000
     env_file:
       - .env
     volumes:
-      # Mount Docker socket to allow container to use Docker
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Mount data directory for persistence
-      - ./data:/app/data
-      # Mount output directory for user files
-      - ./output:/app/output
-    # Add docker group GID to allow Docker access
-    group_add:
-      - ${DOCKER_GID:-999}
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - data_volume:/app/data
+    user: "0:0"
     networks:
       - operonone-network
+
+volumes:
+  data_volume:
+    driver: local
 
 networks:
   operonone-network:
