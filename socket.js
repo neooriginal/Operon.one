@@ -124,7 +124,7 @@ app.get("/chat", (req, res) => {
 });
 
 app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "landingpage", "index.html"));
+    res.redirect("/dashboard");
 });
 
 app.get("/login", (req, res) => {
