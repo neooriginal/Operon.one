@@ -15,6 +15,9 @@ services:
       - DATA_DIR=/app/data
       - TRUST_PROXY=true
       - PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
+      # Increase timeouts for file operations
+      - HTTP_TIMEOUT=60000
+      - KEEP_ALIVE_TIMEOUT=65000
     env_file:
       - .env
     volumes:
