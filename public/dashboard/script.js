@@ -1416,6 +1416,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    socket.on('clarification_needed', (data) => {
+        if (data.userId === userId) {
+            console.log('Clarification needed:', data);
+            
+            // Reset task in progress flag
+            taskInProgress = false;
+            
+            // Re-enable input controls
+            if (messageInput && sendButton) {
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+            }
+            
+            updateStatusDisplay('Clarification needed', 'status_update');
+            showClarificationForm(data);
+        }
+    });
+
 
 
 
@@ -1661,6 +1679,138 @@ document.addEventListener('DOMContentLoaded', () => {
     async function getMcpServerByName(serverName) {
         const servers = await getMcpServers();
         return servers[serverName] || null;
+    }
+
+    function showClarificationForm(data) {
+        const { originalQuestion, questions, reason, chatId } = data;
+        
+        // Create clarification form HTML
+        const clarificationHtml = `
+            <div class="clarification-request">
+                <div class="clarification-header">
+                    <h3><i class="fas fa-question-circle"></i> I need clarification</h3>
+                    <p class="clarification-reason">${reason}</p>
+                    <p class="clarification-note"><i class="fas fa-info-circle"></i> Answer any questions that are relevant to help me better understand your needs. All questions are optional.</p>
+                </div>
+                <div class="clarification-questions">
+                    ${questions.map((question, index) => `
+                        <div class="clarification-question">
+                            <label for="clarification-${index}">${question} <span class="optional-tag">(optional)</span></label>
+                            <textarea id="clarification-${index}" placeholder="Please provide details if relevant..."></textarea>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="clarification-actions">
+                    <button id="submit-clarification" class="clarification-submit">
+                        <i class="fas fa-paper-plane"></i> Submit
+                    </button>
+                    <button id="cancel-clarification" class="clarification-cancel">
+                        <i class="fas fa-times"></i> Continue with original
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Add clarification form to chat
+        addMessage(clarificationHtml, 'system', 'html');
+        
+        // Add event listeners
+        const submitBtn = document.getElementById('submit-clarification');
+        const cancelBtn = document.getElementById('cancel-clarification');
+        
+        if (submitBtn) {
+            submitBtn.addEventListener('click', () => {
+                submitClarification(originalQuestion, questions, chatId);
+            });
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                cancelClarification();
+            });
+        }
+        
+        // Focus on the first textarea
+        const firstTextarea = document.getElementById('clarification-0');
+        if (firstTextarea) {
+            firstTextarea.focus();
+        }
+    }
+
+    function submitClarification(originalQuestion, questions, chatId) {
+        const answers = [];
+        
+        // Collect answers from all textareas (optional - skip empty ones)
+        questions.forEach((_, index) => {
+            const textarea = document.getElementById(`clarification-${index}`);
+            if (textarea) {
+                const answer = textarea.value.trim();
+                if (answer) {
+                    answers.push(`${questions[index]}: ${answer}`);
+                }
+                // Reset any error styling
+                textarea.style.borderColor = '';
+            }
+        });
+        
+        // Allow submission even if no answers provided (though at least one is recommended)
+        if (answers.length === 0) {
+            if (!confirm('You haven\'t provided any additional details. Are you sure you want to continue with the original request?')) {
+                return;
+            }
+            // If user confirms, we'll just use the original question
+        }
+        
+        // Disable the form
+        const submitBtn = document.getElementById('submit-clarification');
+        const cancelBtn = document.getElementById('cancel-clarification');
+        if (submitBtn) submitBtn.disabled = true;
+        if (cancelBtn) cancelBtn.disabled = true;
+        
+        // Submit clarification via socket
+        socket.emit('submit_clarification', {
+            originalQuestion,
+            answers,
+            chatId
+        });
+        
+        updateStatusDisplay('Clarification submitted', 'status_update');
+        
+        // Properly remove the clarification form and its message container
+        const clarificationElement = document.querySelector('.clarification-request');
+        if (clarificationElement) {
+            // Find the parent message container
+            let messageContainer = clarificationElement.closest('.message');
+            if (messageContainer) {
+                messageContainer.remove();
+            } else {
+                // Fallback: remove the clarification element itself
+                clarificationElement.remove();
+            }
+        }
+        
+        // Add a confirmation message
+        addMessage('Thank you for the clarification. Processing your request...', 'system');
+    }
+
+    function cancelClarification() {
+        // Properly remove the clarification form and its message container
+        const clarificationElement = document.querySelector('.clarification-request');
+        if (clarificationElement) {
+            // Find the parent message container
+            let messageContainer = clarificationElement.closest('.message');
+            if (messageContainer) {
+                messageContainer.remove();
+            } else {
+                // Fallback: remove the clarification element itself
+                clarificationElement.remove();
+            }
+        }
+        
+        updateStatusDisplay('Clarification cancelled', 'status_update');
+        
+        // Add a cancellation message
+        addMessage('Clarification cancelled. Please feel free to ask your question again with more details.', 'system');
     }
 
     // Make functions available in the global scope

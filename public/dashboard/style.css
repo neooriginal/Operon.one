@@ -1457,4 +1457,180 @@ body::before {
         background: var(--gray-dark);
         border-radius: 2px;
     }
+}
+
+/* Clarification Form Styles */
+.clarification-request {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.clarification-header {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.clarification-header h3 {
+    color: var(--accent);
+    margin: 0 0 8px 0;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.clarification-header h3 i {
+    color: var(--accent);
+}
+
+.clarification-reason {
+    color: var(--text-light);
+    margin: 0 0 12px 0;
+    font-style: italic;
+    line-height: 1.4;
+}
+
+.clarification-note {
+    color: var(--accent);
+    margin: 0;
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 6px;
+    border-left: 3px solid var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.clarification-note i {
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+
+.clarification-questions {
+    margin-bottom: 20px;
+}
+
+.clarification-question {
+    margin-bottom: 16px;
+}
+
+.clarification-question label {
+    display: block;
+    color: var(--light);
+    font-weight: 500;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.optional-tag {
+    color: var(--text-light);
+    font-weight: 400;
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.clarification-question textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 12px;
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    color: var(--light);
+    font-family: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+    transition: all 0.3s ease;
+}
+
+.clarification-question textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.clarification-question textarea::placeholder {
+    color: var(--text-light);
+    opacity: 0.7;
+}
+
+.clarification-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.clarification-submit,
+.clarification-cancel {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    min-width: 140px;
+    justify-content: center;
+}
+
+.clarification-submit {
+    background: linear-gradient(135deg, var(--accent), #3b82f6);
+    color: white;
+}
+
+.clarification-submit:hover {
+    background: linear-gradient(135deg, #3b82f6, var(--accent));
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.clarification-cancel {
+    background: rgba(71, 85, 105, 0.8);
+    color: var(--light);
+}
+
+.clarification-cancel:hover {
+    background: rgba(71, 85, 105, 1);
+    transform: translateY(-2px);
+}
+
+.clarification-submit:disabled,
+.clarification-cancel:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@media (max-width: 768px) {
+    .clarification-request {
+        padding: 16px;
+        margin: 12px 0;
+    }
+    
+    .clarification-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .clarification-submit,
+    .clarification-cancel {
+        width: 100%;
+        max-width: 200px;
+    }
+    
+    .clarification-question textarea {
+        min-height: 70px;
+        font-size: 16px; /* Prevent zoom on iOS */
+    }
 } 
