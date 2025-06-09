@@ -2,32 +2,47 @@ version: "3.8"
 
 services:
   operonone:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/neooriginal/operonone:latest
     container_name: operonone-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
-      - NODE_ENV=production
+      # Essential environment variables - these need to be set
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-operon-default-jwt-secret-change-in-production}
+      
+      # Application configuration with sensible defaults
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - DATA_DIR=/app/data
-      - TRUST_PROXY=true
+      - TRUST_PROXY=${TRUST_PROXY:-true}
+      - HTTP_TIMEOUT=${HTTP_TIMEOUT:-60000}
+      - KEEP_ALIVE_TIMEOUT=${KEEP_ALIVE_TIMEOUT:-65000}
+      
+      # Playwright configuration
       - PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
-      - HTTP_TIMEOUT=60000
-      - KEEP_ALIVE_TIMEOUT=65000
-    env_file:
-      - .env
+      - PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      - data_volume:/app/data
+      - operonone_data:/app/data
     user: "0:0"
     networks:
       - operonone-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  data_volume:
+  operonone_data:
     driver: local
 
 networks:
