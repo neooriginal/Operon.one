@@ -15,17 +15,13 @@ services:
       - DATA_DIR=/app/data
       - TRUST_PROXY=true
       - PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
-      # Increase timeouts for file operations
       - HTTP_TIMEOUT=60000
       - KEEP_ALIVE_TIMEOUT=65000
     env_file:
       - .env
     volumes:
-      # Mount Docker socket to allow container to use Docker
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      # Mount data directory for persistence (create if not exists)
       - data_volume:/app/data
-    # Set user to root to access docker socket and fix permissions
     user: "0:0"
     networks:
       - operonone-network
