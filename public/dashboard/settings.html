@@ -76,6 +76,16 @@
             transform: translateY(-2px);
         }
         
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .secondary-button {
+            background: linear-gradient(135deg, #64748b, #94a3b8);
+        }
+        
         .button-group {
             display: flex;
             gap: 1rem;
@@ -205,6 +215,25 @@
         <h1>Settings</h1>
         
         <div class="settings-section">
+            <h2>Custom Instructions</h2>
+            <p>Add personalized instructions that will be included with every AI prompt. These instructions help the AI understand your preferences and context. Maximum 2000 characters.</p>
+            
+            <div class="form-group">
+                <label for="custom-instructions">Custom Instructions</label>
+                <textarea id="custom-instructions" placeholder="Enter custom instructions that will be added to every AI prompt. For example: 'Always provide step-by-step explanations', 'Use simple language', 'Focus on practical solutions', etc."></textarea>
+                <div id="char-count" style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem;">0 / 2000 characters</div>
+            </div>
+            
+            <div class="button-group">
+                <button id="save-custom-instructions" type="button">Save Custom Instructions</button>
+                <button id="clear-custom-instructions" class="secondary-button" type="button">Clear</button>
+            </div>
+            
+            <div id="custom-instructions-success" class="success-message"></div>
+            <div id="custom-instructions-error" class="error-message"></div>
+        </div>
+        
+        <div class="settings-section">
             <h2>MCP Servers</h2>
             <p>Configure model-context-protocol (MCP) servers to extend Operon.one capabilities. Each server should have a unique name and configuration.</p>
             
@@ -271,12 +300,21 @@
             const successMessage = document.getElementById('success-message');
             const errorMessage = document.getElementById('error-message');
             
+            // Custom Instructions Elements
+            const customInstructionsTextarea = document.getElementById('custom-instructions');
+            const charCountDiv = document.getElementById('char-count');
+            const saveCustomInstructionsBtn = document.getElementById('save-custom-instructions');
+            const clearCustomInstructionsBtn = document.getElementById('clear-custom-instructions');
+            const customInstructionsSuccess = document.getElementById('custom-instructions-success');
+            const customInstructionsError = document.getElementById('custom-instructions-error');
+            
             let editMode = false;
             let currentEditName = '';
             let mcpServers = {};
             
-            // Load MCP servers
+            // Load MCP servers and custom instructions
             loadMcpServers();
+            loadCustomInstructions();
             
             // Event Listeners
             addMcpServerBtn.addEventListener('click', () => {
@@ -293,6 +331,11 @@
             });
             
             saveMcpServerBtn.addEventListener('click', saveServer);
+            
+            // Custom Instructions Event Listeners
+            customInstructionsTextarea.addEventListener('input', updateCharCount);
+            saveCustomInstructionsBtn.addEventListener('click', saveCustomInstructions);
+            clearCustomInstructionsBtn.addEventListener('click', clearCustomInstructions);
             
             // Add event listeners for the main save and reset buttons
             document.getElementById('save').addEventListener('click', () => {
@@ -543,6 +586,104 @@
                 errorMessage.textContent = message;
                 errorMessage.style.display = 'block';
                 successMessage.style.display = 'none';
+            }
+            
+            // Custom Instructions Functions
+            function loadCustomInstructions() {
+                fetch('/api/settings/customInstructions', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else if (response.status === 404) {
+                        return { customInstructions: '' };
+                    }
+                    throw new Error('Failed to load custom instructions');
+                })
+                .then(data => {
+                    const instructions = data.customInstructions || '';
+                    customInstructionsTextarea.value = instructions;
+                    updateCharCount();
+                })
+                .catch(error => {
+                    console.error('Error loading custom instructions:', error);
+                    customInstructionsTextarea.value = '';
+                    updateCharCount();
+                });
+            }
+            
+            function updateCharCount() {
+                const currentLength = customInstructionsTextarea.value.length;
+                const maxLength = 2000;
+                charCountDiv.textContent = `${currentLength} / ${maxLength} characters`;
+                
+                if (currentLength > maxLength) {
+                    charCountDiv.style.color = '#ef4444';
+                    saveCustomInstructionsBtn.disabled = true;
+                } else {
+                    charCountDiv.style.color = '#94a3b8';
+                    saveCustomInstructionsBtn.disabled = false;
+                }
+            }
+            
+            function saveCustomInstructions() {
+                const instructions = customInstructionsTextarea.value.trim();
+                
+                if (instructions.length > 2000) {
+                    showCustomInstructionsError('Instructions exceed maximum length of 2000 characters');
+                    return;
+                }
+                
+                fetch('/api/settings/customInstructions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value: instructions })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to save custom instructions');
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    showCustomInstructionsSuccess('Custom instructions saved successfully');
+                })
+                .catch(error => {
+                    console.error('Error saving custom instructions:', error);
+                    showCustomInstructionsError('Failed to save custom instructions: ' + error.message);
+                });
+            }
+            
+            function clearCustomInstructions() {
+                if (confirm('Are you sure you want to clear your custom instructions?')) {
+                    customInstructionsTextarea.value = '';
+                    updateCharCount();
+                    saveCustomInstructions();
+                }
+            }
+            
+            function showCustomInstructionsSuccess(message) {
+                customInstructionsSuccess.textContent = message;
+                customInstructionsSuccess.style.display = 'block';
+                customInstructionsError.style.display = 'none';
+                setTimeout(() => {
+                    customInstructionsSuccess.style.display = 'none';
+                }, 5000);
+            }
+            
+            function showCustomInstructionsError(message) {
+                customInstructionsError.textContent = message;
+                customInstructionsError.style.display = 'block';
+                customInstructionsSuccess.style.display = 'none';
+                setTimeout(() => {
+                    customInstructionsError.style.display = 'none';
+                }, 5000);
             }
             
             // Fix scrolling issues
