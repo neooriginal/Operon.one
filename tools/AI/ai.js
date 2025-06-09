@@ -150,7 +150,7 @@ If you do not return valid JSON, your output will cause an API error. Do not inc
                     model: model,
                     messages: messagesForAPI,
                     response_format: jsonResponse ? {type: "json_object"} : undefined,
-                    max_tokens: jsonResponse ? 4096 : 8192, 
+                    max_tokens: jsonResponse ? 4096 : 16384, 
                     temperature: 0.2 
                 });
                 break; 

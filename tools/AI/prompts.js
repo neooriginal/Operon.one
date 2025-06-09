@@ -221,8 +221,8 @@ function generateProgressAnalysisPrompt(question, plan, stepsOutput, currentStep
       step: output.step,
       action: output.action,
       result: typeof output.output === 'object' ? 
-        JSON.stringify(output.output).substring(0, 500) : 
-        String(output.output || '').substring(0, 500)
+        JSON.stringify(output.output).substring(0, 10000) : 
+        String(output.output || '').substring(0, 10000)
     };
   });
 
@@ -259,8 +259,8 @@ function generateFinalizationPrompt(question, stepsOutput) {
       step: output.step,
       action: output.action,
       result: typeof output.output === 'object' ? 
-        JSON.stringify(output.output).substring(0, 1000) : 
-        String(output.output || '').substring(0, 1000)
+        JSON.stringify(output.output).substring(0, 15000) : 
+        String(output.output || '').substring(0, 15000)
     };
   });
 
