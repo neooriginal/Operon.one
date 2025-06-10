@@ -201,11 +201,6 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
       return await handleDirectAnswer(planObject, question, userId, chatId);
     }
     
-    // Handle clarification requests
-    if (planObject.needsClarification === true && planObject.questions) {
-      return await handleClarificationRequest(planObject, question, userId, chatId);
-    }
-    
     // Process complex tasks with multi-step plan
     return await executeTaskPlan(planObject, question, userId, chatId, isFollowUp);
     
@@ -272,47 +267,6 @@ async function handleDirectAnswer(planObject, question, userId, chatId) {
   
   await cleanupUserResources(userId);
   return planObject.answer;
-}
-
-/**
- * Handles clarification requests when tasks are unclear.
- * @param {Object} planObject - The plan object with needsClarification property.
- * @param {string} question - The user's original question.
- * @param {string} userId - The user ID.
- * @param {number} chatId - The chat ID.
- * @returns {string} Confirmation message.
- */
-async function handleClarificationRequest(planObject, question, userId, chatId) {
-  io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Clarification needed' });
-  
-  // Add to conversation history
-  contextManager.addToHistory({
-    role: "user", 
-    content: [
-      {type: "text", text: question}
-    ]
-  }, userId, chatId);
-  
-  contextManager.addToHistory({
-    role: "assistant", 
-    content: [
-      {type: "text", text: "Clarification requested"}
-    ]
-  }, userId, chatId);
-  
-  // Emit clarification request to client
-  io.to(`user:${userId}`).emit('clarification_needed', { 
-    userId, 
-    chatId,
-    originalQuestion: question,
-    questions: planObject.questions,
-    reason: planObject.reason || "I need more information to complete this task effectively."
-  });
-  
-  // Mark task as no longer running (will be restarted when user provides clarification)
-  contextManager.setTaskRunning(false, userId, chatId);
-  
-  return "Clarification requested from user.";
 }
 
 /**

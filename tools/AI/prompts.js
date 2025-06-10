@@ -116,16 +116,6 @@ For simple questions or chit-chat, return:
   "answer": "Your complete answer to the question"
 }
 
-For unclear or ambiguous tasks that need clarification, return:
-{
-  "needsClarification": true,
-  "questions": [
-    "Specific question about unclear aspect 1",
-    "Specific question about unclear aspect 2"
-  ],
-  "reason": "Brief explanation of why clarification is needed"
-}
-
 ---
 
 ### 🧾 Example Input + Output:
@@ -182,35 +172,6 @@ For unclear or ambiguous tasks that need clarification, return:
   "answer": "I don't have access to current weather information without using a search tool. Would you like me to search for weather information for your location? If so, please provide your city or region."
 }
 
-**User Input (Genuinely Unclear Task):**
-> Build me something
-
-**Expected JSON Output:**
-{
-  "needsClarification": true,
-  "questions": [
-    "What type of project do you want me to build (website, app, script, document, etc.)?",
-    "What should it do or what problem should it solve?",
-    "What technology or format should I use?"
-  ],
-  "reason": "The request is too vague - I need to know what type of project you want and what it should accomplish."
-}
-
-**User Input (Clear Enough - Should NOT Ask):**
-> Build me a todo list website
-
-**Expected JSON Output:**
-{
-  "step1": {
-    "step": "Create the HTML structure for a todo list application",
-    "action": "fileSystem",
-    "expectedOutput": "index.html with basic todo list structure",
-    "usingData": "none",
-    "validations": "Ensure HTML includes form for adding todos and list for displaying them"
-  },
-  ...
-}
-
 `;
 }
 
@@ -232,47 +193,17 @@ async function generatePlanningPrompt(question, history, userId = 'default') {
     - Always analyze the user's intent and context before planning.
     - Break down the problem into manageable, logical steps, and ensure each step is necessary and clearly justified.
     - For each step, specify the tool, expected output, and validation method. Consider edge cases and fallback strategies.
-    - PREFER making reasonable assumptions over asking for clarification when possible.
-    - If the task has enough context to proceed (even with assumptions), do NOT ask for clarification.
+    - If the task is ambiguous, internally clarify requirements and document assumptions in your plan.
     - Use clear, structured, and context-aware language. Avoid unnecessary verbosity or repetition.
     - If the user's request changes or new information emerges, adapt your plan accordingly and document the rationale.
-    
-    CLARIFICATION THRESHOLDS:
-    - Common projects (todo apps, calculators, portfolios, simple websites) = Proceed with standard assumptions
-    - Specific technical requests (scripts, analyses, documents) = Proceed if purpose is clear
-    - Extremely vague requests ("build something", "create stuff", "help me") = Ask for clarification
-    - Missing critical domain knowledge ("build app for my business" without knowing the business) = Ask for clarification
     
     IMPORTANT INSTRUCTIONS:
     1. Follow these instructions EXACTLY and LITERALLY.
     2. For simple informational questions, use the directAnswer format immediately.
-    3. ONLY use needsClarification when the request is genuinely ambiguous and you cannot reasonably proceed without critical missing information.
-    4. For complex tasks requiring multiple steps, break down the solution into clear, sequential steps.
-    5. Each step must have a specific purpose and use a specific tool.
-    6. Do not make assumptions about tool capabilities - use exactly the tools listed above.
-    7. Do not reference external APIs, databases, or resources unless they are included in the tools list.
-    
-    CLARIFICATION GUIDANCE:
-    - DO NOT ask for clarification if you can make reasonable assumptions and proceed successfully
-    - DO NOT ask for clarification on common, well-understood requests
-    - ONLY ask for clarification when missing information would prevent successful completion
-    
-    Examples of when TO ask for clarification:
-    - "Build me something" (no type specified)
-    - "Create an app for my business" (business type unknown)
-    - "Help me" (no specific task)
-    - "Make it better" (no context of what "it" is)
-    
-    Examples of when NOT to ask (proceed with assumptions):
-    - "Create a todo list app" → Assume standard todo features
-    - "Build a calculator" → Assume basic arithmetic calculator
-    - "Write a Python script to sort a list" → Assume numerical/alphabetical sorting
-    - "Create a portfolio website" → Assume standard developer portfolio
-    - "Research artificial intelligence" → Assume general AI overview
-    - "Build a weather app" → Assume current weather display
-    - "Create a blog website" → Assume standard blog functionality
-    
-    When in doubt, prefer proceeding with reasonable assumptions over asking for clarification
+    3. For complex tasks requiring multiple steps, break down the solution into clear, sequential steps.
+    4. Each step must have a specific purpose and use a specific tool.
+    5. Do not make assumptions about tool capabilities - use exactly the tools listed above.
+    6. Do not reference external APIs, databases, or resources unless they are included in the tools list.
     `;
 }
 
