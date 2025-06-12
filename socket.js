@@ -537,7 +537,89 @@ io.on('connection', (socketClient) => {
                  });
              }
          } catch (error) {
-             console.error('Error during disconnect cleanup:', error);
+             console.error(`Error during disconnect cleanup: ${error.message}`);
+         }
+     });
+
+     socketClient.on('check_running_task', async (data) => {
+         if (!socketClient.authenticated) {
+             socketClient.emit('task_status_checked', { 
+                 error: 'Authentication required',
+                 userId: socketClient.id
+             });
+             return;
+         }
+
+         try {
+             const { contextManager } = require('./index');
+             const { chatId = 1 } = data;
+             const numericChatId = parseInt(chatId, 10) || 1;
+             
+             const isRunning = contextManager.isTaskRunning(socketClient.userId, numericChatId);
+             
+             if (isRunning) {
+                 const context = contextManager.getContext(socketClient.userId, numericChatId);
+                 const plan = context.plan || [];
+                 const currentStepIndex = context.currentStepIndex || 0;
+                 const question = context.question || '';
+                 
+                 socketClient.emit('task_status_checked', {
+                     userId: socketClient.userId,
+                     chatId: numericChatId,
+                     isRunning: true,
+                     taskId: context.lastTaskId,
+                     question: question,
+                     plan: plan,
+                     currentStepIndex: currentStepIndex,
+                     startTime: context.taskStartTime
+                 });
+                 
+                 if (plan.length > 0) {
+                     socketClient.emit('steps', {
+                         userId: socketClient.userId,
+                         chatId: numericChatId,
+                         plan: plan,
+                         restoredFromRunning: true
+                     });
+                     
+                     for (let i = 0; i < currentStepIndex && i < plan.length; i++) {
+                         socketClient.emit('step_completed', {
+                             userId: socketClient.userId,
+                             chatId: numericChatId,
+                             step: plan[i].step || `Step ${i + 1}`,
+                             action: plan[i].action || '',
+                             metrics: {
+                                 stepIndex: i,
+                                 stepCount: i + 1,
+                                 totalSteps: plan.length,
+                                 successCount: i + 1
+                             },
+                             restoredFromRunning: true
+                         });
+                     }
+                 }
+                 
+                 socketClient.emit('status_update', {
+                     userId: socketClient.userId,
+                     chatId: numericChatId,
+                     status: currentStepIndex < plan.length ? 
+                         `Resuming: Step ${currentStepIndex + 1}/${plan.length}` : 
+                         'Processing task...',
+                     restoredFromRunning: true
+                 });
+             } else {
+                 socketClient.emit('task_status_checked', {
+                     userId: socketClient.userId,
+                     chatId: numericChatId,
+                     isRunning: false
+                 });
+             }
+         } catch (error) {
+             console.error(`Error checking running task for ${socketClient.userId}:`, error);
+             socketClient.emit('task_status_checked', { 
+                 error: error.message,
+                 userId: socketClient.userId
+             });
          }
      });
  });

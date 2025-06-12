@@ -151,6 +151,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Just load chats for sidebar without initializing chat interface
             loadUserChatsForSidebar();
         }
+
+        // Check for running tasks to restore streaming
+        if (currentChatId && currentChatId !== 'new') {
+            socket.emit('check_running_task', { chatId: currentChatId });
+        }
     });
 
     socket.on('disconnect', () => {
@@ -408,17 +413,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadChatHistory(chatId) {
+        if (!chatId || chatId === 'new') {
+            chatMessages.innerHTML = '';
+            return;
+        }
 
-        if (!chatMessages) return;
+        window.isLoadingHistory = true;
 
         try {
-            // Set a flag to prevent socket events from adding messages during history loading
-            window.isLoadingHistory = true;
-
-            // Clear any existing messages and reset step groups
-            chatMessages.innerHTML = '';
-            stepGroups = {};
-
             const response = await fetch(`/api/chats/${chatId}`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`
@@ -426,85 +428,41 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to load chat history');
+                throw new Error(`Failed to load chat history: ${response.status}`);
             }
 
             const data = await response.json();
-            console.log('Loaded chat history:', data.messages);
-            console.log('Loaded task steps:', data.taskSteps);
+            chatMessages.innerHTML = '';
 
+            if (data.messages && data.messages.length > 0) {
+                data.messages.forEach((message, index) => {
+                    const isLastMessage = index === data.messages.length - 1;
+                    
+                    if (message.role === 'user') {
+                        addMessage(message.content, 'user');
+                    } else if (message.role === 'assistant') {
+                        const content = extractTextFromObject(message.content);
+                        if (content && !isJsonResponse(content)) {
+                            addMessage(content, 'ai');
+                        }
+                    }
+                });
 
-            if (data.messages.length === 0) {
-                window.isLoadingHistory = false;
-                return;
-            }
-
-            // Process messages in chronological order, but handle task visualization specially
-            const processedMessages = [];
-            let hasTaskSteps = data.taskSteps && data.taskSteps.length > 0;
-            let taskVisualizationAdded = false;
-
-            // Keep track of processed message contents to avoid duplicates
-            const processedContents = new Set();
-
-            data.messages.forEach((msg, index) => {
-                const messageContent = extractTextFromObject(msg.content);
-
-                // Skip JSON responses and "Processing your task..." messages
-                if (isJsonResponse(messageContent) ||
-                    messageContent.includes('Processing your task') ||
-                    messageContent.trim() === '') {
-                    return;
-                }
-
-                // Skip if we've already processed this exact content
-                const contentKey = `${msg.role}:${messageContent.trim()}`;
-                if (processedContents.has(contentKey)) {
-                    console.log('Skipping duplicate message during history load:', messageContent.substring(0, 50) + '...');
-                    return;
-                }
-                processedContents.add(contentKey);
-
-                let role = msg.role;
-                if (role === 'assistant') {
-                    role = 'ai';
-                }
-
-                processedMessages.push({ content: messageContent, role: role, originalIndex: index });
-            });
-
-            // Add messages in order, inserting task visualization after the first user message
-            processedMessages.forEach((msg, index) => {
-                addMessage(msg.content, msg.role);
-
-                // Add task visualization after the first user message (if it exists and hasn't been added yet)
-                if (hasTaskSteps && !taskVisualizationAdded && msg.role === 'user' && index === 0) {
+                if (data.taskSteps && data.taskSteps.length > 0) {
                     reconstructTaskVisualization(data.taskSteps);
-                    taskVisualizationAdded = true;
                 }
-            });
 
-            // If no user messages but we have task steps, add them now
-            if (hasTaskSteps && !taskVisualizationAdded) {
-                reconstructTaskVisualization(data.taskSteps);
+                await loadChatFiles(chatId);
             }
 
-            // Load and display files for this chat
-            await loadChatFiles(chatId);
+            // Check for running tasks after loading history
+            socket.emit('check_running_task', { chatId: chatId });
 
-            // Clear the loading flag after a short delay to allow any pending socket events to be ignored
-            setTimeout(() => {
-                window.isLoadingHistory = false;
-            }, 1000);
-
-
-            scrollToBottom();
         } catch (error) {
             console.error('Error loading chat history:', error);
+            chatMessages.innerHTML = '<div class="error-message">Failed to load chat history</div>';
+        } finally {
             window.isLoadingHistory = false;
-            if (chatMessages) {
-                addMessage('Failed to load chat history', 'system');
-            }
         }
     }
 
@@ -1218,7 +1176,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.userId === userId) {
             console.log('Status update:', data);
-            updateStatusDisplay(data.status || 'Processing...', 'status_update');
+            
+            // If this is a status update from a restored running task, adjust the display
+            if (data.restoredFromRunning) {
+                updateStatusDisplay(data.status || 'Processing...', 'status_update');
+            } else {
+                updateStatusDisplay(data.status || 'Processing...', 'status_update');
+            }
         }
     });
 
@@ -1227,20 +1191,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('steps', (data) => {
         // Skip if we're currently loading history (steps will be reconstructed from database)
-        if (window.isLoadingHistory && !data.loadedFromHistory) {
+        if (window.isLoadingHistory && !data.loadedFromHistory && !data.restoredFromRunning) {
             console.log('Skipping steps event during history loading');
             return;
         }
 
-        // Skip if we already have steps for this task
+        // Skip if we already have steps for this task (unless it's being restored)
         const existingStepGroup = chatMessages.querySelector('.step-group');
-        if (existingStepGroup && !data.loadedFromHistory) {
+        if (existingStepGroup && !data.loadedFromHistory && !data.restoredFromRunning) {
             console.log('Steps already exist, skipping duplicate steps event');
             return;
         }
 
         if (data.plan && Array.isArray(data.plan)) {
-            const statusText = data.loadedFromHistory ? 'Plan loaded from history' : 'Plan received';
+            let statusText;
+            if (data.restoredFromRunning) {
+                statusText = 'Task restored - continuing execution';
+            } else if (data.loadedFromHistory) {
+                statusText = 'Plan loaded from history';
+            } else {
+                statusText = 'Plan received';
+            }
+            
             updateStatusDisplay(statusText, 'info');
             stepGroups = {};
             const planGroupContent = addStepGroup(`Plan (${data.plan.length} Steps)`, false);
@@ -1261,14 +1233,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('step_completed', (data) => {
         // Skip if we're currently loading history (step completions will be reconstructed from database)
-        if (window.isLoadingHistory) {
+        if (window.isLoadingHistory && !data.restoredFromRunning) {
             console.log('Skipping step_completed event during history loading');
             return;
         }
 
         if (data.userId === userId) {
             console.log('Step completed:', data);
-            updateStatusDisplay(`Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}`, 'status_update');
+            
+            const statusText = data.restoredFromRunning ? 
+                `Restored: Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}` :
+                `Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}`;
+                
+            updateStatusDisplay(statusText, 'status_update');
+            
             const stepId = `step-${data.metrics.stepIndex}`;
             const stepElement = chatMessages.querySelector(`.action-element[data-step-id="${stepId}"]`);
             if (stepElement) {
@@ -1416,11 +1394,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
-
-
-
-
+    socket.on('task_status_checked', (data) => {
+        if (data.userId === userId && data.isRunning) {
+            console.log('Restoring running task:', data);
+            
+            // Set task in progress state
+            taskInProgress = true;
+            
+            // Disable input controls
+            if (messageInput && sendButton) {
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+            }
+            
+            // Show restoration status
+            updateStatusDisplay('Restoring running task...', 'status_update');
+            
+            // Add the original user message if we have the question
+            if (data.question && !isDuplicateMessage(data.question)) {
+                addMessage(data.question, 'user');
+            }
+        } else if (data.userId === userId && !data.isRunning) {
+            // No running task, keep UI in normal state
+            console.log('No running task found');
+        } else if (data.error) {
+            console.error('Error checking task status:', data.error);
+        }
+    });
 
 
     const logoutButton = document.getElementById('logout-button');

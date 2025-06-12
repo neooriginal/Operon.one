@@ -854,7 +854,8 @@ function cleanJsonResponses(text) {
 module.exports = {
   centralOrchestrator,
   cleanupUserResources,
-  sanitizeFilePath
+  sanitizeFilePath,
+  contextManager
 };
 
 /**

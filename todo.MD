@@ -1,4 +1,3 @@
-- restore streaming when task is still running and page is reloaded
 - only start and run MCP tools when actually called. This should include logic for the functions to be retrieved without it having to be ran.
 - voice mode
 - real-life context system (api for feeding in real-life transcripts)
