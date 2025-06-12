@@ -101,11 +101,7 @@ npm start
 
 Planned functionality includes:
 
-- 📱 Mobile application for on-the-go management
-- ☁️ Cloud deployment options
-- 🚀 General performance improvements and better error handling
-- 🔌 Extended MCP protocol support
-- 🤖 More AI model integrations
+[ToDo](todo.MD)
 
 ---
 
