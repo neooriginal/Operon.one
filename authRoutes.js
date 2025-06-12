@@ -12,11 +12,65 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
 /**
+ * Validate password strength and requirements
+ * @param {string} password - Password to validate
+ * @returns {Object} Validation result with isValid boolean and messages array
+ */
+function validatePassword(password) {
+  const result = {
+    isValid: true,
+    messages: []
+  };
+
+  if (password.length < 8) {
+    result.isValid = false;
+    result.messages.push('Password must be at least 8 characters long');
+  }
+
+  if (password.length > 128) {
+    result.isValid = false;
+    result.messages.push('Password must be less than 128 characters long');
+  }
+
+  if (!/[a-z]/.test(password)) {
+    result.isValid = false;
+    result.messages.push('Password must contain at least one lowercase letter');
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    result.isValid = false;
+    result.messages.push('Password must contain at least one uppercase letter');
+  }
+
+  if (!/[0-9]/.test(password)) {
+    result.isValid = false;
+    result.messages.push('Password must contain at least one number');
+  }
+
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    result.isValid = false;
+    result.messages.push('Password must contain at least one special character');
+  }
+
+  const commonPasswords = [
+    'password', '123456', '123456789', '12345678', '12345', 
+    'qwerty', 'abc123', 'password123', 'admin', 'letmein'
+  ];
+  
+  if (commonPasswords.includes(password.toLowerCase())) {
+    result.isValid = false;
+    result.messages.push('Password is too common, please choose a more secure password');
+  }
+
+  return result;
+}
+
+/**
  * Register a new user
  * @route POST /register
  * @param {Object} req.body - User registration information
  * @param {string} req.body.email - User email
- * @param {string} req.body.password - User password (min 8 characters)
+ * @param {string} req.body.password - User password (min 8 chars, must include uppercase, lowercase, number, special char)
  * @returns {Object} 201 - User object with authentication token
  * @returns {Object} 400 - Email/password validation errors
  * @returns {Object} 409 - Email already in use
@@ -35,8 +89,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
     
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ 
+        error: 'Password requirements not met',
+        details: passwordValidation.messages
+      });
     }
     
     const user = await userFunctions.registerUser(email, password);
