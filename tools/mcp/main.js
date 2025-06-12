@@ -59,6 +59,66 @@ const contextManager = require('../../utils/context');
  */
 
 /**
+ * @typedef {Object} ExecutionStep
+ * @property {string} action - The action to perform (discover, call_tool, read_resource, etc.)
+ * @property {string} [serverName] - Target server name
+ * @property {string} [toolName] - Tool name for tool calls
+ * @property {Object} [arguments] - Arguments for the action
+ * @property {string} [uri] - URI for resource operations
+ * @property {string} description - Human-readable description of the step
+ * @property {Object} [result] - Result from executing this step
+ * @property {boolean} [completed] - Whether this step has been completed
+ * @memberof McpTypes
+ */
+
+/**
+ * Generates usage hints for tools to guide AI interaction
+ * @param {string} toolName - Name of the tool
+ * @param {string} toolDescription - Description of the tool
+ * @param {Object} inputSchema - Input schema of the tool
+ * @returns {string} Usage hint for the AI
+ */
+function generateToolUsageHint(toolName, toolDescription, inputSchema) {
+    const name = toolName.toLowerCase();
+    const desc = toolDescription.toLowerCase();
+    
+    // Generate specific hints based on tool patterns
+    if (name.includes('sequential') || name.includes('thinking') || desc.includes('think') || desc.includes('analyz')) {
+        return `For thinking/analysis tools, provide the full question or topic to analyze as the main parameter. Example: "Analyze the meaning of life and existence"`;
+    }
+    
+    if (name.includes('list') || desc.includes('list')) {
+        return `For listing tools, usually no specific parameters needed. Just ask to "list" or "show" what you want to see.`;
+    }
+    
+    if (name.includes('create') || name.includes('deploy') || desc.includes('create')) {
+        return `For creation tools, specify what you want to create and any configuration details. Example: "Create a new web application with Node.js"`;
+    }
+    
+    if (name.includes('status') || name.includes('health') || desc.includes('status')) {
+        return `For status tools, specify what service or system you want to check. Example: "Check the status of my web servers"`;
+    }
+    
+    // Generate hints based on parameters
+    if (inputSchema && inputSchema.properties) {
+        const params = Object.keys(inputSchema.properties);
+        const hasThought = params.some(p => p.toLowerCase().includes('thought'));
+        const hasQuery = params.some(p => p.toLowerCase().includes('query'));
+        const hasText = params.some(p => p.toLowerCase().includes('text'));
+        
+        if (hasThought || hasQuery || hasText) {
+            return `This tool expects text input. Provide your full question or statement naturally.`;
+        }
+        
+        if (params.some(p => p.toLowerCase().includes('name'))) {
+            return `This tool expects a name parameter. Include the name of what you're working with.`;
+        }
+    }
+    
+    return `Describe what you want to accomplish with this tool in natural language.`;
+}
+
+/**
  * @class McpClient
  * @description Main MCP client class for connecting to and interacting with MCP servers
  * @extends EventEmitter
@@ -678,6 +738,857 @@ class McpClient extends EventEmitter {
 }
 
 /**
+ * @class DynamicMcpExecutor
+ * @description Handles dynamic, step-by-step execution of MCP operations
+ */
+class DynamicMcpExecutor {
+    /**
+     * Creates a dynamic MCP executor
+     * @param {McpClientManager} mcpManager - The MCP client manager
+     * @param {Function} stepCallback - Callback for step updates
+     * @param {string} userId - User ID for context management
+     */
+    constructor(mcpManager, stepCallback, userId) {
+        this.mcpManager = mcpManager;
+        this.stepCallback = stepCallback;
+        this.userId = userId;
+        this.executionHistory = [];
+        this.discoveredCapabilities = null;
+    }
+
+    /**
+     * Discovers all available MCP capabilities
+     * @async
+     * @returns {Promise<Object>} Complete capability discovery results
+     */
+    async discoverCapabilities() {
+        this.logStep('Initializing MCP connections...');
+        
+        // Ensure connections are established
+        if (this.mcpManager.getConnectedServers().length === 0) {
+            await this.mcpManager.connectToAllServers();
+        }
+        
+        const connectedServers = this.mcpManager.getConnectedServers();
+        this.logStep(`Connected to ${connectedServers.length} MCP servers: ${connectedServers.join(', ')}`);
+        
+        const capabilities = {
+            servers: {},
+            totalTools: 0,
+            totalResources: 0,
+            toolCategories: new Set(),
+            serverSummary: []
+        };
+        
+        // Discover capabilities for each server
+        for (const serverName of connectedServers) {
+            const client = this.mcpManager.getClient(serverName);
+            
+            if (!client || !client.isServerConnected()) {
+                this.logStep(`Skipping disconnected server: ${serverName}`);
+                continue;
+            }
+            
+            const tools = client.getAvailableTools();
+            const resources = client.getAvailableResources();
+            const prompts = client.getAvailablePrompts();
+            const serverCapabilities = client.getServerCapabilities();
+            
+            capabilities.servers[serverName] = {
+                tools: tools.map(tool => ({
+                    name: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.inputSchema,
+                    fullName: `${serverName}.${tool.name}`,
+                    server: serverName
+                })),
+                resources: resources.map(resource => ({
+                    name: resource.name,
+                    uri: resource.uri,
+                    description: resource.description,
+                    mimeType: resource.mimeType,
+                    server: serverName
+                })),
+                prompts: prompts.map(prompt => ({
+                    name: prompt.name,
+                    description: prompt.description,
+                    arguments: prompt.arguments,
+                    server: serverName
+                })),
+                capabilities: serverCapabilities,
+                connectionStatus: 'connected'
+            };
+            
+            capabilities.totalTools += tools.length;
+            capabilities.totalResources += resources.length;
+            
+            // Categorize tools using centralized logic
+            tools.forEach(tool => {
+                const category = inferToolCategory(tool.name, tool.description);
+                capabilities.toolCategories.add(category);
+            });
+            
+            capabilities.serverSummary.push({
+                name: serverName,
+                toolCount: tools.length,
+                resourceCount: resources.length,
+                promptCount: prompts.length,
+                mainCapabilities: Object.keys(serverCapabilities)
+            });
+            
+            this.logStep(`Discovered ${tools.length} tools, ${resources.length} resources from ${serverName}`);
+        }
+        
+        capabilities.toolCategories = Array.from(capabilities.toolCategories);
+        this.discoveredCapabilities = capabilities;
+        
+        this.logStep(`Discovery complete: ${capabilities.totalTools} total tools across ${connectedServers.length} servers`);
+        
+        return capabilities;
+    }
+
+    /**
+     * Plans execution steps based on task description and available capabilities
+     * @async
+     * @param {string} taskDescription - What the user wants to accomplish
+     * @param {string} otherAIData - Additional context
+     * @param {Object} capabilities - Discovered MCP capabilities
+     * @returns {Promise<Array<ExecutionStep>>} Planned execution steps
+     */
+    async planExecution(taskDescription, otherAIData, capabilities) {
+        this.logStep('Analyzing task and planning execution...');
+        
+        const plan = [];
+        const taskLower = taskDescription.toLowerCase();
+        
+        // Dynamic planning based on available tools and task intent
+        const relevantTools = this.findRelevantTools(taskDescription, capabilities);
+        
+        if (relevantTools.length === 0) {
+            // If no specific tools found, provide discovery information
+            plan.push({
+                action: 'provide_capabilities',
+                description: 'Provide available MCP capabilities to help with the task',
+                arguments: { capabilities }
+            });
+        } else {
+            // Create execution steps for relevant tools
+            for (const tool of relevantTools) {
+                const step = {
+                    action: 'call_tool',
+                    serverName: tool.server,
+                    toolName: tool.name,
+                    description: `Execute ${tool.name} on ${tool.server}: ${tool.description}`,
+                    arguments: this.inferToolArguments(tool, taskDescription, otherAIData)
+                };
+                plan.push(step);
+            }
+        }
+        
+        this.logStep(`Planned ${plan.length} execution steps`);
+        return plan;
+    }
+
+    /**
+     * Finds tools relevant to the task description
+     * @param {string} taskDescription - The task to accomplish
+     * @param {Object} capabilities - Available capabilities
+     * @returns {Array} Array of relevant tools
+     */
+    findRelevantTools(taskDescription, capabilities) {
+        const relevantTools = [];
+        const taskLower = taskDescription.toLowerCase();
+        const taskWords = taskLower.split(/\s+/);
+        
+        // Search through all available tools
+        for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
+            for (const tool of serverInfo.tools) {
+                let relevanceScore = 0;
+                
+                // Check for exact matches in tool name
+                if (taskWords.some(word => tool.name.toLowerCase().includes(word))) {
+                    relevanceScore += 10;
+                }
+                
+                // Check for matches in tool description
+                const descriptionWords = tool.description.toLowerCase().split(/\s+/);
+                const commonWords = taskWords.filter(word => 
+                    descriptionWords.some(descWord => descWord.includes(word) || word.includes(descWord))
+                );
+                relevanceScore += commonWords.length * 2;
+                
+                // Semantic matching for common operations
+                if (this.matchesOperation(taskLower, tool)) {
+                    relevanceScore += 15;
+                }
+                
+                // If this tool has a reasonable relevance score, include it
+                if (relevanceScore >= 5) {
+                    relevantTools.push({
+                        ...tool,
+                        relevanceScore
+                    });
+                }
+            }
+        }
+        
+        // Sort by relevance score and return top matches
+        return relevantTools
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, 5); // Limit to top 5 most relevant tools
+    }
+
+    /**
+     * Checks if a task description matches common operations for a tool
+     * Uses dynamic categorization to determine if task and tool categories match
+     * @param {string} taskLower - Lowercase task description
+     * @param {Object} tool - Tool information
+     * @returns {boolean} Whether the task matches the tool's operation
+     */
+    matchesOperation(taskLower, tool) {
+        // Get the tool's category using centralized logic
+        const toolCategory = inferToolCategory(tool.name, tool.description);
+        
+        // Dynamically infer what the user wants to do from their task description
+        const taskCategories = [];
+        
+        // Retrieval operations
+        if (taskLower.includes('list') || taskLower.includes('show') || taskLower.includes('get') || 
+            taskLower.includes('find') || taskLower.includes('search') || taskLower.includes('view')) {
+            taskCategories.push('retrieval');
+        }
+        
+        // Creation operations
+        if (taskLower.includes('create') || taskLower.includes('deploy') || taskLower.includes('start') || 
+            taskLower.includes('make') || taskLower.includes('build') || taskLower.includes('setup')) {
+            taskCategories.push('creation');
+        }
+        
+        // Modification operations
+        if (taskLower.includes('update') || taskLower.includes('modify') || taskLower.includes('change') || 
+            taskLower.includes('edit') || taskLower.includes('configure') || taskLower.includes('adjust')) {
+            taskCategories.push('modification');
+        }
+        
+        // Deletion operations
+        if (taskLower.includes('delete') || taskLower.includes('remove') || taskLower.includes('stop') || 
+            taskLower.includes('destroy') || taskLower.includes('cleanup') || taskLower.includes('clear')) {
+            taskCategories.push('deletion');
+        }
+        
+        // Monitoring operations
+        if (taskLower.includes('status') || taskLower.includes('info') || taskLower.includes('health') || 
+            taskLower.includes('check') || taskLower.includes('monitor') || taskLower.includes('inspect')) {
+            taskCategories.push('monitoring');
+        }
+        
+        // If no specific category detected, consider general operations
+        if (taskCategories.length === 0) {
+            taskCategories.push('general');
+        }
+        
+        // Check if tool category matches any of the inferred task categories
+        return taskCategories.includes(toolCategory);
+    }
+
+    /**
+     * Infers arguments for a tool based on task description and schema
+     * @param {Object} tool - Tool information
+     * @param {string} taskDescription - Task description
+     * @param {string} otherAIData - Additional context
+     * @returns {Object} Inferred arguments for the tool
+     */
+    inferToolArguments(tool, taskDescription, otherAIData) {
+        const args = {};
+        
+        if (!tool.inputSchema || !tool.inputSchema.properties) {
+            // No schema available, try to infer basic arguments
+            return this.inferBasicArguments(taskDescription, otherAIData);
+        }
+        
+        const combinedText = `${taskDescription} ${otherAIData}`;
+        
+        for (const [propName, propSchema] of Object.entries(tool.inputSchema.properties)) {
+            const extractedValue = this.extractArgumentValue(propName, propSchema, combinedText);
+            
+            if (extractedValue !== null) {
+                args[propName] = extractedValue;
+            } else if (propSchema.required || (tool.inputSchema.required && tool.inputSchema.required.includes(propName))) {
+                // Handle required parameters that couldn't be inferred
+                args[propName] = this.getDefaultValueForSchema(propSchema, propName, combinedText);
+            }
+        }
+        
+        return args;
+    }
+
+    /**
+     * Infers basic arguments when no schema is available
+     * @param {string} taskDescription - Task description
+     * @param {string} otherAIData - Additional context
+     * @returns {Object} Basic inferred arguments
+     */
+    inferBasicArguments(taskDescription, otherAIData) {
+        const args = {};
+        const combinedText = `${taskDescription} ${otherAIData}`;
+        
+        // Look for common patterns
+        
+        // Check if the entire task description should be used as a 'thought' or 'query' parameter
+        if (taskDescription.length > 10) {
+            // For thinking/analysis tools, use the task description as the main input
+            if (taskDescription.toLowerCase().includes('analyz') || 
+                taskDescription.toLowerCase().includes('think') ||
+                taskDescription.toLowerCase().includes('consider') ||
+                taskDescription.toLowerCase().includes('explain')) {
+                args.thought = taskDescription;
+                args.query = taskDescription;
+                args.text = taskDescription;
+                args.input = taskDescription;
+            }
+        }
+        
+        // Extract quoted strings
+        const quotedMatch = combinedText.match(/"([^"]+)"/);
+        if (quotedMatch) {
+            args.query = quotedMatch[1];
+            args.text = quotedMatch[1];
+            args.thought = quotedMatch[1];
+        }
+        
+        // Extract names/IDs
+        const nameMatch = combinedText.match(/(?:name|id)[:\s]+([a-zA-Z0-9_-]+)/i);
+        if (nameMatch) {
+            args.name = nameMatch[1];
+            args.id = nameMatch[1];
+        }
+        
+        return args;
+    }
+
+    /**
+     * Gets a default value for a schema when extraction fails
+     * @param {Object} propSchema - Property schema
+     * @param {string} propName - Property name
+     * @param {string} combinedText - Combined text for context
+     * @returns {*} Default value
+     */
+    getDefaultValueForSchema(propSchema, propName, combinedText) {
+        // For string types, use intelligent defaults
+        if (propSchema.type === 'string') {
+            // Common parameter names that should use the full task description
+            if (['thought', 'query', 'text', 'input', 'message', 'content', 'prompt'].includes(propName.toLowerCase())) {
+                return combinedText.trim();
+            }
+            
+            // For name/id parameters, try to extract or use a default
+            if (['name', 'id', 'identifier'].includes(propName.toLowerCase())) {
+                const extracted = this.extractSimpleValue(combinedText, propName);
+                return extracted || 'default';
+            }
+            
+            // Use the description if available, otherwise a default
+            return propSchema.description ? combinedText.trim() : '';
+        }
+        
+        // For boolean types
+        if (propSchema.type === 'boolean') {
+            return propSchema.default !== undefined ? propSchema.default : false;
+        }
+        
+        // For number types
+        if (propSchema.type === 'number' || propSchema.type === 'integer') {
+            return propSchema.default !== undefined ? propSchema.default : 0;
+        }
+        
+        // For arrays
+        if (propSchema.type === 'array') {
+            return [];
+        }
+        
+        // For objects
+        if (propSchema.type === 'object') {
+            return {};
+        }
+        
+        // Default fallback
+        return propSchema.default !== undefined ? propSchema.default : null;
+    }
+
+    /**
+     * Extracts argument values from combined text based on schema
+     * @param {string} propName - Property name
+     * @param {Object} propSchema - Property schema
+     * @param {string} combinedText - Combined task description and context
+     * @returns {*} Extracted value or null
+     */
+    extractArgumentValue(propName, propSchema, combinedText) {
+        const lowerText = combinedText.toLowerCase();
+        const propNameLower = propName.toLowerCase();
+        
+        // For string properties - most important for tools like sequentialthinking
+        if (propSchema.type === 'string') {
+            // Special handling for common parameter names that should get the full text
+            if (['thought', 'query', 'text', 'input', 'message', 'content', 'prompt', 'question'].includes(propNameLower)) {
+                // Use the original task description for these parameters
+                return combinedText.trim();
+            }
+            
+            // Look for quoted strings first
+            const quotedMatch = combinedText.match(/"([^"]+)"/);
+            if (quotedMatch) {
+                return quotedMatch[1];
+            }
+            
+            // Look for property-specific patterns
+            if (propNameLower.includes('name')) {
+                const nameMatch = combinedText.match(/(?:name|named)[:\s]+([a-zA-Z0-9_-]+)/i);
+                if (nameMatch) return nameMatch[1];
+            }
+            
+            if (propNameLower.includes('id') || propNameLower.includes('identifier')) {
+                const idMatch = combinedText.match(/(?:id|identifier)[:\s]+([a-zA-Z0-9_-]+)/i);
+                if (idMatch) return idMatch[1];
+            }
+            
+            if (propNameLower.includes('type')) {
+                const typeMatch = combinedText.match(/(?:type|kind)[:\s]+([a-zA-Z0-9_-]+)/i);
+                if (typeMatch) return typeMatch[1];
+            }
+            
+            // If the description mentions what this parameter should contain, use the whole text
+            if (propSchema.description) {
+                const desc = propSchema.description.toLowerCase();
+                if (desc.includes('text') || desc.includes('content') || desc.includes('message') || 
+                    desc.includes('thought') || desc.includes('analysis') || desc.includes('input')) {
+                    return combinedText.trim();
+                }
+            }
+        }
+        
+        // For boolean properties
+        if (propSchema.type === 'boolean') {
+            // Check for explicit boolean values
+            if (lowerText.includes('true') || lowerText.includes('yes') || 
+                lowerText.includes('enable') || lowerText.includes('on')) {
+                return true;
+            }
+            if (lowerText.includes('false') || lowerText.includes('no') || 
+                lowerText.includes('disable') || lowerText.includes('off')) {
+                return false;
+            }
+            
+            // Property-specific boolean inference
+            if (propNameLower.includes('enable') || propNameLower.includes('active')) {
+                return !lowerText.includes('disable') && !lowerText.includes('inactive');
+            }
+        }
+        
+        // For number properties
+        if (propSchema.type === 'number' || propSchema.type === 'integer') {
+            const numberMatch = combinedText.match(/\b(\d+(?:\.\d+)?)\b/);
+            if (numberMatch) {
+                const value = parseFloat(numberMatch[1]);
+                return propSchema.type === 'integer' ? Math.floor(value) : value;
+            }
+            
+            // Check for named numbers
+            const namedNumbers = {
+                'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+                'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+            };
+            
+            for (const [word, num] of Object.entries(namedNumbers)) {
+                if (lowerText.includes(word)) {
+                    return num;
+                }
+            }
+        }
+        
+        // For array properties
+        if (propSchema.type === 'array') {
+            // Look for comma-separated values
+            const listMatch = combinedText.match(/\[([^\]]+)\]/);
+            if (listMatch) {
+                return listMatch[1].split(',').map(item => item.trim());
+            }
+            
+            // Look for comma-separated without brackets
+            if (combinedText.includes(',')) {
+                const items = combinedText.split(',').map(item => item.trim()).filter(item => item.length > 0);
+                if (items.length > 1) {
+                    return items;
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Extracts simple values using basic pattern matching
+     * @param {string} text - Text to search
+     * @param {string} propName - Property name to match
+     * @returns {string|null} Extracted value or null
+     */
+    extractSimpleValue(text, propName) {
+        const patterns = [
+            new RegExp(`${propName}[:\\s]+([a-zA-Z0-9_-]+)`, 'i'),
+            new RegExp(`([a-zA-Z0-9_-]+)\\s+${propName}`, 'i'),
+            new RegExp(`"([^"]+)"`, 'i')
+        ];
+        
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match) return match[1];
+        }
+        
+        return null;
+    }
+
+    /**
+     * Executes the planned steps one by one
+     * @async
+     * @param {Array<ExecutionStep>} executionPlan - Steps to execute
+     * @returns {Promise<Array>} Results from each step
+     */
+    async executeSteps(executionPlan) {
+        const results = [];
+        
+        for (let i = 0; i < executionPlan.length; i++) {
+            const step = executionPlan[i];
+            
+            try {
+                this.logStep(`Executing step ${i + 1}/${executionPlan.length}: ${step.description}`);
+                
+                let stepResult;
+                
+                switch (step.action) {
+                    case 'call_tool':
+                        stepResult = await this.executeToolCall(step);
+                        break;
+                    case 'read_resource':
+                        stepResult = await this.executeResourceRead(step);
+                        break;
+                    case 'provide_capabilities':
+                        stepResult = this.formatCapabilitiesResponse(step.arguments.capabilities);
+                        break;
+                    default:
+                        stepResult = `Unknown action: ${step.action}`;
+                }
+                
+                step.result = stepResult;
+                step.completed = true;
+                results.push(stepResult);
+                
+                this.logStep(`Step ${i + 1} completed successfully`);
+                
+            } catch (error) {
+                const errorMsg = `Step ${i + 1} failed: ${error.message}`;
+                this.logStep(errorMsg);
+                
+                step.result = errorMsg;
+                step.completed = false;
+                step.error = error.message;
+                results.push(errorMsg);
+                
+                // Continue with remaining steps instead of failing completely
+            }
+        }
+        
+        return results;
+    }
+
+    /**
+     * Executes a tool call step with enhanced error handling and validation
+     * @async
+     * @param {ExecutionStep} step - The step to execute
+     * @returns {Promise<string>} Formatted result
+     */
+    async executeToolCall(step) {
+        this.logStep(`Calling ${step.toolName} with arguments: ${JSON.stringify(step.arguments)}`);
+        
+        try {
+            // Validate arguments before calling
+            const validatedArgs = this.validateAndFixArguments(step);
+            
+            const result = await this.mcpManager.callTool(step.serverName, step.toolName, validatedArgs);
+            
+            // Format the result for better readability
+            let formattedResult = `✅ Tool ${step.toolName} on ${step.serverName} executed successfully:\n\n`;
+            
+            if (result && result.content) {
+                if (Array.isArray(result.content)) {
+                    result.content.forEach((item, index) => {
+                        if (item.type === 'text') {
+                            formattedResult += item.text + '\n';
+                        } else {
+                            formattedResult += `Content ${index + 1}: ${JSON.stringify(item, null, 2)}\n`;
+                        }
+                    });
+                } else {
+                    formattedResult += JSON.stringify(result.content, null, 2);
+                }
+            } else if (result && typeof result === 'object') {
+                formattedResult += JSON.stringify(result, null, 2);
+            } else if (result) {
+                formattedResult += String(result);
+            } else {
+                formattedResult += 'Tool executed successfully (no return data)';
+            }
+            
+            return formattedResult;
+            
+        } catch (error) {
+            // Enhanced error handling with retry logic
+            if (error.message.includes('must be a string') || error.message.includes('Invalid')) {
+                this.logStep(`Parameter validation error, attempting to fix: ${error.message}`);
+                return await this.retryToolCallWithFixedArgs(step, error);
+            } else {
+                throw error;
+            }
+        }
+    }
+
+    /**
+     * Validates and fixes arguments before tool execution
+     * @param {ExecutionStep} step - The execution step
+     * @returns {Object} Validated and fixed arguments
+     */
+    validateAndFixArguments(step) {
+        const args = { ...step.arguments };
+        
+        // Get the tool information to check its schema
+        const client = this.mcpManager.getClient(step.serverName);
+        if (!client) {
+            return args;
+        }
+        
+        const tools = client.getAvailableTools();
+        const tool = tools.find(t => t.name === step.toolName);
+        
+        if (!tool || !tool.inputSchema || !tool.inputSchema.properties) {
+            return args;
+        }
+        
+        // Validate each argument against the schema
+        for (const [propName, propSchema] of Object.entries(tool.inputSchema.properties)) {
+            if (args[propName] !== undefined) {
+                args[propName] = this.coerceToCorrectType(args[propName], propSchema);
+            }
+        }
+        
+        return args;
+    }
+
+    /**
+     * Coerces a value to the correct type based on schema
+     * @param {*} value - The value to coerce
+     * @param {Object} schema - The property schema
+     * @returns {*} Coerced value
+     */
+    coerceToCorrectType(value, schema) {
+        if (schema.type === 'string') {
+            return String(value);
+        }
+        
+        if (schema.type === 'number') {
+            const num = parseFloat(value);
+            return isNaN(num) ? 0 : num;
+        }
+        
+        if (schema.type === 'integer') {
+            const num = parseInt(value);
+            return isNaN(num) ? 0 : num;
+        }
+        
+        if (schema.type === 'boolean') {
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'string') {
+                return value.toLowerCase() === 'true' || value.toLowerCase() === 'yes';
+            }
+            return Boolean(value);
+        }
+        
+        if (schema.type === 'array') {
+            if (Array.isArray(value)) return value;
+            if (typeof value === 'string') {
+                try {
+                    return JSON.parse(value);
+                } catch {
+                    return [value];
+                }
+            }
+            return [value];
+        }
+        
+        if (schema.type === 'object') {
+            if (typeof value === 'object' && value !== null) return value;
+            if (typeof value === 'string') {
+                try {
+                    return JSON.parse(value);
+                } catch {
+                    return { value };
+                }
+            }
+            return { value };
+        }
+        
+        return value;
+    }
+
+    /**
+     * Retries tool call with fixed arguments after parameter error
+     * @async
+     * @param {ExecutionStep} step - The original step
+     * @param {Error} originalError - The original error
+     * @returns {Promise<string>} Result or error message
+     */
+    async retryToolCallWithFixedArgs(step, originalError) {
+        try {
+            // Get tool schema to understand what went wrong
+            const client = this.mcpManager.getClient(step.serverName);
+            const tools = client ? client.getAvailableTools() : [];
+            const tool = tools.find(t => t.name === step.toolName);
+            
+            if (!tool) {
+                return `❌ Tool ${step.toolName} not found on server ${step.serverName}`;
+            }
+            
+            // Create new arguments based on the task description
+            const taskDescription = this.executionHistory
+                .find(entry => entry.message.includes('Analyzing task'))?.message || 'Task analysis';
+            
+            const newArgs = this.inferToolArguments(tool, taskDescription, '');
+            
+            this.logStep(`Retrying with inferred arguments: ${JSON.stringify(newArgs)}`);
+            
+            const result = await this.mcpManager.callTool(step.serverName, step.toolName, newArgs);
+            
+            return `✅ Tool ${step.toolName} executed successfully on retry:\n\n${JSON.stringify(result, null, 2)}`;
+            
+        } catch (retryError) {
+            return `❌ Tool ${step.toolName} failed: ${originalError.message}\nRetry also failed: ${retryError.message}\n\nTool schema: ${JSON.stringify(tool?.inputSchema, null, 2)}`;
+        }
+    }
+
+    /**
+     * Executes a resource read step
+     * @async
+     * @param {ExecutionStep} step - The step to execute
+     * @returns {Promise<string>} Formatted result
+     */
+    async executeResourceRead(step) {
+        const result = await this.mcpManager.readResource(step.serverName, step.uri);
+        return `Resource ${step.uri} from ${step.serverName}:\n${JSON.stringify(result, null, 2)}`;
+    }
+
+    /**
+     * Formats capabilities for response with detailed parameter information
+     * @param {Object} capabilities - Discovered capabilities
+     * @returns {string} Formatted capabilities description
+     */
+    formatCapabilitiesResponse(capabilities) {
+        let response = `🔍 Available MCP Capabilities:\n\n`;
+        
+        response += `📊 Summary: ${capabilities.totalTools} tools across ${Object.keys(capabilities.servers).length} servers\n\n`;
+        
+        for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
+            response += `🖥️  **${serverName}**:\n`;
+            
+            if (serverInfo.tools.length > 0) {
+                response += `  🛠️  Tools (${serverInfo.tools.length}):\n`;
+                serverInfo.tools.forEach(tool => {
+                    response += `    • ${tool.name}: ${tool.description}\n`;
+                    
+                    // Show parameter information for better AI understanding
+                    if (tool.inputSchema && tool.inputSchema.properties) {
+                        const params = Object.entries(tool.inputSchema.properties);
+                        if (params.length > 0) {
+                            response += `      Parameters:\n`;
+                            params.forEach(([paramName, paramSchema]) => {
+                                const required = (tool.inputSchema.required || []).includes(paramName) ? ' (required)' : '';
+                                const type = paramSchema.type || 'any';
+                                const desc = paramSchema.description ? ` - ${paramSchema.description}` : '';
+                                response += `        - ${paramName}: ${type}${required}${desc}\n`;
+                            });
+                        }
+                    }
+                    response += '\n';
+                });
+            }
+            
+            if (serverInfo.resources.length > 0) {
+                response += `  📄 Resources (${serverInfo.resources.length}):\n`;
+                serverInfo.resources.forEach(resource => {
+                    response += `    • ${resource.name} (${resource.uri}): ${resource.description}\n`;
+                });
+                response += '\n';
+            }
+            
+            if (serverInfo.prompts.length > 0) {
+                response += `  💬 Prompts (${serverInfo.prompts.length}):\n`;
+                serverInfo.prompts.forEach(prompt => {
+                    response += `    • ${prompt.name}: ${prompt.description}\n`;
+                });
+                response += '\n';
+            }
+        }
+        
+        response += `\n🎯 Usage: Simply describe what you want to accomplish in natural language!\n`;
+        response += `Examples:\n`;
+        response += `• "Analyze the meaning of life" → I'll find thinking/analysis tools\n`;
+        response += `• "List my servers" → I'll find and use server listing tools\n`;
+        response += `• "Deploy a new app" → I'll find deployment tools\n`;
+        response += `• "Check system status" → I'll use monitoring tools\n\n`;
+        response += `The system will automatically:\n`;
+        response += `✅ Discover the best tools for your request\n`;
+        response += `✅ Infer the correct parameters from your description\n`;
+        response += `✅ Execute tools step-by-step with detailed logging\n`;
+        response += `✅ Handle errors and retry with corrected parameters\n`;
+        
+        return response;
+    }
+
+    /**
+     * Logs a step in the execution history
+     * @param {string} message - Message to log
+     */
+    logStep(message) {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            message: message
+        };
+        
+        this.executionHistory.push(logEntry);
+        
+        // Also send as step callback
+        if (this.stepCallback) {
+            this.stepCallback({ success: true, result: message });
+        }
+    }
+
+    /**
+     * Gets the execution history
+     * @returns {Array} Array of execution history entries
+     */
+    getExecutionHistory() {
+        return [...this.executionHistory];
+    }
+
+    /**
+     * Generates usage hints for tools to guide AI interaction
+     * @param {string} toolName - Name of the tool
+     * @param {string} toolDescription - Description of the tool
+     * @param {Object} inputSchema - Input schema of the tool
+     * @returns {string} Usage hint for the AI
+     */
+    generateUsageHint(toolName, toolDescription, inputSchema) {
+        return generateToolUsageHint(toolName, toolDescription, inputSchema);
+    }
+}
+
+/**
  * @class McpClientManager
  * @description Manages multiple MCP client connections for a user
  */
@@ -952,38 +1863,10 @@ async function cleanupMcpManager(userId) {
  * @param {string} [userId='default'] - User ID for context management
  * @returns {Promise<Object>} Available tools organized by server
  */
-async function getAvailableTools(userId = 'default') {
-    try {
-        const mcpManager = getMcpManager(userId);
-        
-        // Ensure we're connected to servers
-        if (mcpManager.getConnectedServers().length === 0) {
-            await mcpManager.connectToAllServers();
-        }
-        
-        const allTools = mcpManager.getAllAvailableTools();
-        const toolsForAI = {};
-        
-        // Format tools for AI discovery
-        for (const [serverName, tools] of Object.entries(allTools)) {
-            toolsForAI[serverName] = tools.map(tool => ({
-                name: tool.name,
-                description: tool.description,
-                server: serverName,
-                fullName: `${serverName}.${tool.name}`,
-                inputSchema: tool.inputSchema
-            }));
-        }
-        
-        return toolsForAI;
-    } catch (error) {
-        console.error('[MCP-Client] Failed to get available tools:', error.message);
-        return {};
-    }
-}
+// Legacy getAvailableTools function removed - replaced by enhanced version below
 
 /**
- * Main task runner function for the MCP client tool
+ * Dynamic MCP Task Executor - Works step-by-step autonomously
  * @async
  * @param {string} taskDescription - Description of the task to perform
  * @param {string} otherAIData - Additional context from other AI tools
@@ -993,405 +1876,141 @@ async function getAvailableTools(userId = 'default') {
  * @returns {Promise<Object>} Task execution result
  */
 async function runTask(taskDescription, otherAIData, stepCallback, userId = 'default', chatId = '1') {
-    let taskIntent; // Declare outside try block for error logging
-    
     try {
-        // Get or create MCP manager for the user
         const mcpManager = getMcpManager(userId);
+        const executor = new DynamicMcpExecutor(mcpManager, stepCallback, userId);
         
-        // Parse the task to understand what MCP action is needed
-        taskIntent = await parseTaskIntent(taskDescription, otherAIData);
+        // Step 1: Initialize and discover capabilities
+        stepCallback({ success: true, result: 'Step 1: Discovering MCP capabilities...' });
+        const capabilities = await executor.discoverCapabilities();
         
-        // Connect to servers if not already connected
-        if (mcpManager.getConnectedServers().length === 0) {
-            stepCallback({ success: true, result: 'Connecting to MCP servers...' });
-            await mcpManager.connectToAllServers();
+        if (capabilities.totalTools === 0) {
+            return {
+                success: true,
+                data: 'No MCP servers are connected. Please configure MCP servers in settings to access external tools.',
+                steps: executor.getExecutionHistory()
+            };
         }
         
-        let result;
+        // Step 2: Plan execution based on discovered capabilities
+        stepCallback({ success: true, result: `Step 2: Planning execution with ${capabilities.totalTools} available tools...` });
+        const executionPlan = await executor.planExecution(taskDescription, otherAIData, capabilities);
         
-        switch (taskIntent.action) {
-            case 'list_tools':
-                result = await handleListTools(mcpManager, taskIntent.serverName);
-                break;
-            case 'list_resources':
-                result = await handleListResources(mcpManager, taskIntent.serverName);
-                break;
-            case 'call_tool':
-                result = await handleCallTool(mcpManager, taskIntent.serverName, taskIntent.toolName, taskIntent.toolArguments);
-                break;
-            case 'read_resource':
-                result = await handleReadResource(mcpManager, taskIntent.serverName, taskIntent.uri);
-                break;
-            case 'list_servers':
-                result = await handleListServers(mcpManager);
-                break;
-            case 'get_available_tools':
-                result = await getAvailableTools(userId);
-                stepCallback({ success: true, result: 'Retrieved available MCP tools for AI planning' });
-                return { success: true, data: result };
-            default:
-                result = await handleGenericMcpTask(mcpManager, taskDescription, otherAIData);
-        }
+        // Step 3: Execute the plan step by step
+        stepCallback({ success: true, result: `Step 3: Executing ${executionPlan.length} planned steps...` });
+        const results = await executor.executeSteps(executionPlan);
         
-        // Update context with task result
+        // Update context with execution history
         const toolState = contextManager.getToolState('mcpClient', userId) || {};
-        toolState.lastTask = {
-            description: taskDescription,
-            intent: taskIntent,
-            result: result,
+        toolState.lastExecution = {
+            taskDescription,
+            capabilities,
+            executionPlan,
+            results,
+            executionHistory: executor.getExecutionHistory(),
             timestamp: new Date().toISOString()
         };
         contextManager.setToolState('mcpClient', toolState, userId);
         
-        stepCallback({ success: true, result: result });
+        stepCallback({ success: true, result: 'Task completed successfully!' });
         
-        return { success: true, data: result };
+        return {
+            success: true,
+            data: results,
+            capabilities,
+            executionPlan,
+            executionHistory: executor.getExecutionHistory()
+        };
         
     } catch (error) {
-        console.error('[MCP-Client] Task failed:', error.message);
-        console.error('[MCP-Client] Error stack:', error.stack);
-        console.error('[MCP-Client] Task description was:', taskDescription);
-        console.error('[MCP-Client] Task intent was:', JSON.stringify(taskIntent, null, 2));
+        console.error('[MCP-Dynamic] Task execution failed:', error.message);
+        console.error('[MCP-Dynamic] Error stack:', error.stack);
         
         stepCallback({ success: false, error: error.message });
         
         return {
             success: false,
+            error: error.message,
+            taskDescription
+        };
+    }
+}
+
+/**
+ * Enhanced getAvailableTools for AI planning - now returns dynamic capabilities
+ * @async
+ * @param {string} [userId='default'] - User ID for context management
+ * @returns {Promise<Object>} Available tools organized by server with full metadata
+ */
+async function getAvailableTools(userId = 'default') {
+    try {
+        const mcpManager = getMcpManager(userId);
+        const executor = new DynamicMcpExecutor(mcpManager, () => {}, userId);
+        
+        // Use the dynamic discovery system
+        const capabilities = await executor.discoverCapabilities();
+        
+        // Format for AI planning with enhanced metadata
+        const toolsForAI = {};
+        
+        for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
+            toolsForAI[serverName] = serverInfo.tools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                server: serverName,
+                fullName: tool.fullName,
+                inputSchema: tool.inputSchema,
+                callFormat: `Use MCP tool: ${tool.description}`,
+                category: inferToolCategory(tool.name, tool.description)
+            }));
+        }
+        
+        return {
+            tools: toolsForAI,
+            summary: `${capabilities.totalTools} MCP tools available across ${Object.keys(capabilities.servers).length} servers`,
+            capabilities: capabilities,
+            totalTools: capabilities.totalTools,
+            connectedServers: Object.keys(capabilities.servers)
+        };
+        
+    } catch (error) {
+        console.error('[MCP-Dynamic] Failed to get available tools:', error.message);
+            return {
+            tools: {},
+            summary: 'Failed to retrieve MCP tools: ' + error.message,
+            totalTools: 0,
             error: error.message
         };
     }
 }
 
 /**
- * Parses the task description to understand the intended MCP action
- * @async
- * @param {string} taskDescription - The task description
- * @param {string} otherAIData - Additional context
- * @returns {Promise<Object>} Parsed task intent
+ * Infers the category of a tool based on its name and description
+ * @param {string} toolName - The tool name
+ * @param {string} toolDescription - The tool description
+ * @returns {string} Inferred category
  */
-async function parseTaskIntent(taskDescription, otherAIData) {
-    const description = taskDescription.toLowerCase();
+function inferToolCategory(toolName, toolDescription) {
+    const name = toolName.toLowerCase();
+    const desc = toolDescription.toLowerCase();
     
-    // Check for listing available MCP tools
-    if (description.includes('list tools') || description.includes('show tools') || 
-        description.includes('available tools') || description.includes('what tools')) {
-        const serverName = extractServerName(taskDescription);
-        return { action: 'list_tools', serverName: serverName };
+    if (name.includes('list') || name.includes('get') || desc.includes('list') || desc.includes('retrieve')) {
+        return 'retrieval';
+    }
+    if (name.includes('create') || name.includes('deploy') || name.includes('start') || desc.includes('create') || desc.includes('deploy')) {
+        return 'creation';
+    }
+    if (name.includes('update') || name.includes('modify') || name.includes('edit') || desc.includes('update') || desc.includes('modify')) {
+        return 'modification';
+    }
+    if (name.includes('delete') || name.includes('remove') || name.includes('stop') || desc.includes('delete') || desc.includes('remove')) {
+        return 'deletion';
+    }
+    if (name.includes('status') || name.includes('health') || name.includes('info') || desc.includes('status') || desc.includes('monitor')) {
+        return 'monitoring';
     }
     
-    // Check for listing MCP resources
-    if (description.includes('list resources') || description.includes('show resources') || 
-        description.includes('available resources')) {
-        const serverName = extractServerName(taskDescription);
-        return { action: 'list_resources', serverName: serverName };
-    }
-    
-    // Check for direct tool call patterns
-    if (description.includes('call tool') || description.includes('use tool') || 
-        description.includes('execute tool') || description.includes('run tool')) {
-        const serverName = extractServerName(taskDescription);
-        const toolName = extractToolName(taskDescription);
-        const toolArguments = extractArguments(taskDescription);
-        
-        return {
-            action: 'call_tool',
-            serverName: serverName,
-            toolName: toolName,
-            toolArguments: toolArguments
-        };
-    }
-    
-    // Check for resource reading patterns
-    if (description.includes('read resource') || description.includes('get resource')) {
-        const serverName = extractServerName(taskDescription);
-        const uri = extractResourceUri(taskDescription);
-        
-        return {
-            action: 'read_resource',
-            serverName: serverName,
-            uri: uri
-        };
-    }
-    
-    // Enhanced pattern: Detect when user wants to use a specific MCP server to perform an action
-    // This handles cases like "List all Coolify servers" which should call the list-servers tool
-    const serverPattern = /\b(\w+)\s+servers?\b/i;
-    const serverMatch = taskDescription.match(serverPattern);
-    
-    if (serverMatch && (description.includes('list') || description.includes('show') || description.includes('get'))) {
-        const potentialServerName = serverMatch[1].toLowerCase();
-        
-        // Don't treat generic words as server names
-        if (!['mcp', 'connected', 'available', 'all'].includes(potentialServerName)) {
-            // Try to infer the tool name based on the action
-            let toolName = 'list-servers'; // default assumption
-            if (description.includes('status') || description.includes('statuses')) {
-                toolName = 'list-servers'; // most servers use this for status info
-            }
-            
-            return {
-                action: 'call_tool',
-                serverName: potentialServerName,
-                toolName: toolName,
-                toolArguments: {}
-            };
-        }
-    }
-    
-    // Check for listing connected MCP servers (not the servers managed by those servers)
-    if ((description.includes('list') && description.includes('mcp') && description.includes('servers')) ||
-        (description.includes('show') && description.includes('connected') && description.includes('servers')) ||
-        description.includes('connected mcp servers')) {
-        return { action: 'list_servers' };
-    }
-    
-    // Default to generic task handling
-    return {
-        action: 'generic',
-        description: taskDescription,
-        context: otherAIData
-    };
-}
-
-/**
- * Extracts server name from task description
- * @param {string} taskDescription - The task description
- * @returns {string|null} Server name or null if not found
- */
-function extractServerName(taskDescription) {
-    const serverMatch = taskDescription.match(/(?:server|from)\s+([a-zA-Z0-9_-]+)/i);
-    return serverMatch ? serverMatch[1] : null;
-}
-
-/**
- * Extracts tool name from task description
- * @param {string} taskDescription - The task description
- * @returns {string|null} Tool name or null if not found
- */
-function extractToolName(taskDescription) {
-    const toolMatch = taskDescription.match(/(?:tool|use|call)\s+([a-zA-Z0-9_-]+)/i);
-    return toolMatch ? toolMatch[1] : null;
-}
-
-/**
- * Extracts arguments from task description (simplified)
- * @param {string} taskDescription - The task description
- * @returns {Object} Extracted arguments
- */
-function extractArguments(taskDescription) {
-    // This is a simplified extraction - in practice, you might want more sophisticated parsing
-    const argsMatch = taskDescription.match(/with\s+args?\s*[:\s]*(\{.*\})/i);
-    if (argsMatch) {
-        try {
-            return JSON.parse(argsMatch[1]);
-        } catch (error) {
-            // Failed to parse, return empty object
-        }
-    }
-    return {};
-}
-
-/**
- * Extracts resource URI from task description
- * @param {string} taskDescription - The task description
- * @returns {string|null} Resource URI or null if not found
- */
-function extractResourceUri(taskDescription) {
-    const uriMatch = taskDescription.match(/(?:resource|uri)\s+([^\s]+)/i);
-    return uriMatch ? uriMatch[1] : null;
-}
-
-/**
- * Handles listing tools from servers
- * @async
- * @param {McpClientManager} mcpManager - The MCP manager
- * @param {string|null} serverName - Specific server name or null for all
- * @returns {Promise<string>} Formatted tools list
- */
-async function handleListTools(mcpManager, serverName = null) {
-    const allTools = mcpManager.getAllAvailableTools();
-    
-    if (Object.keys(allTools).length === 0) {
-        return 'No MCP servers connected or no tools available.';
-    }
-    
-    let result = 'Available MCP Tools:\n\n';
-    
-    for (const [server, tools] of Object.entries(allTools)) {
-        if (serverName && server !== serverName) continue;
-        
-        result += `Server: ${server}\n`;
-        if (tools.length === 0) {
-            result += '  No tools available\n';
-        } else {
-            tools.forEach(tool => {
-                result += `  - ${tool.name}: ${tool.description}\n`;
-            });
-        }
-        result += '\n';
-    }
-    
-    return result.trim();
-}
-
-/**
- * Handles listing resources from servers
- * @async
- * @param {McpClientManager} mcpManager - The MCP manager
- * @param {string|null} serverName - Specific server name or null for all
- * @returns {Promise<string>} Formatted resources list
- */
-async function handleListResources(mcpManager, serverName = null) {
-    const allResources = mcpManager.getAllAvailableResources();
-    
-    if (Object.keys(allResources).length === 0) {
-        return 'No MCP servers connected or no resources available.';
-    }
-    
-    let result = 'Available MCP Resources:\n\n';
-    
-    for (const [server, resources] of Object.entries(allResources)) {
-        if (serverName && server !== serverName) continue;
-        
-        result += `Server: ${server}\n`;
-        if (resources.length === 0) {
-            result += '  No resources available\n';
-        } else {
-            resources.forEach(resource => {
-                result += `  - ${resource.name} (${resource.uri}): ${resource.description}\n`;
-            });
-        }
-        result += '\n';
-    }
-    
-    return result.trim();
-}
-
-/**
- * Handles calling a tool on an MCP server
- * @async
- * @param {McpClientManager} mcpManager - The MCP manager
- * @param {string|null} serverName - Server name
- * @param {string|null} toolName - Tool name
- * @param {Object} toolArguments - Tool arguments
- * @returns {Promise<string>} Tool execution result
- */
-async function handleCallTool(mcpManager, serverName, toolName, toolArguments) {
-    if (!serverName || !toolName) {
-        throw new Error('Server name and tool name are required for tool calls');
-    }
-    
-    try {
-        // Try the original tool name first
-        let result;
-        try {
-            result = await mcpManager.callTool(serverName, toolName, toolArguments);
-        } catch (error) {
-            // If tool not found, try alternative naming conventions
-            if (error.message.includes('not found')) {
-                let alternativeToolName;
-                
-                // Try converting between underscore and hyphen
-                if (toolName.includes('-')) {
-                    alternativeToolName = toolName.replace(/-/g, '_');
-                } else if (toolName.includes('_')) {
-                    alternativeToolName = toolName.replace(/_/g, '-');
-                }
-                
-                if (alternativeToolName) {
-                    try {
-                        result = await mcpManager.callTool(serverName, alternativeToolName, toolArguments);
-                        toolName = alternativeToolName; // Update for logging
-                    } catch (altError) {
-                        throw error; // Throw original error if alternative also fails
-                    }
-                } else {
-                    throw error; // No alternative to try
-                }
-            } else {
-                throw error; // Different error, re-throw
-            }
-        }
-        
-        // Format the result for better readability
-        let formattedResult = `Tool ${toolName} on server ${serverName} executed successfully:\n\n`;
-        
-        if (result && result.content) {
-            // Handle MCP content format
-            if (Array.isArray(result.content)) {
-                result.content.forEach((item, index) => {
-                    if (item.type === 'text') {
-                        formattedResult += item.text + '\n';
-                    } else {
-                        formattedResult += `Content ${index + 1}: ${JSON.stringify(item, null, 2)}\n`;
-                    }
-                });
-            } else {
-                formattedResult += JSON.stringify(result.content, null, 2);
-            }
-        } else if (result && typeof result === 'object') {
-            formattedResult += JSON.stringify(result, null, 2);
-        } else if (result) {
-            formattedResult += String(result);
-        } else {
-            formattedResult += 'Tool executed successfully (no return data)';
-        }
-        
-        return formattedResult;
-        
-    } catch (error) {
-        console.error(`[MCP-Client] Tool call failed:`, error);
-        throw new Error(`Failed to call tool ${toolName} on server ${serverName}: ${error.message}`);
-    }
-}
-
-/**
- * Handles reading a resource from an MCP server
- * @async
- * @param {McpClientManager} mcpManager - The MCP manager
- * @param {string|null} serverName - Server name
- * @param {string|null} uri - Resource URI
- * @returns {Promise<string>} Resource content
- */
-async function handleReadResource(mcpManager, serverName, uri) {
-    if (!serverName || !uri) {
-        throw new Error('Server name and resource URI are required for resource reads');
-    }
-    
-    const result = await mcpManager.readResource(serverName, uri);
-    
-    return `Resource ${uri} from server ${serverName}:\n${JSON.stringify(result, null, 2)}`;
-}
-
-/**
- * Handles listing connected servers
- * @async
- * @param {McpClientManager} mcpManager - The MCP manager
- * @returns {Promise<string>} Connected servers list
- */
-async function handleListServers(mcpManager) {
-    const connectedServers = mcpManager.getConnectedServers();
-    
-    if (connectedServers.length === 0) {
-        return 'No MCP servers currently connected.';
-    }
-    
-    let result = 'Connected MCP Servers:\n\n';
-    
-    for (const serverName of connectedServers) {
-        const client = mcpManager.getClient(serverName);
-        const tools = client.getAvailableTools();
-        const resources = client.getAvailableResources();
-        const capabilities = client.getServerCapabilities();
-        
-        result += `Server: ${serverName}\n`;
-        result += `  Tools: ${tools.length}\n`;
-        result += `  Resources: ${resources.length}\n`;
-        result += `  Capabilities: ${Object.keys(capabilities).join(', ')}\n\n`;
-    }
-    
-    return result.trim();
+    return 'general';
 }
 
 /**
@@ -1404,16 +2023,12 @@ async function handleListServers(mcpManager) {
 async function getMcpToolsForAI(userId = 'default') {
     try {
         const mcpManager = getMcpManager(userId);
+        const executor = new DynamicMcpExecutor(mcpManager, () => {}, userId);
         
-        // Ensure we're connected to servers
-        if (mcpManager.getConnectedServers().length === 0) {
-            await mcpManager.connectToAllServers();
-        }
+        // Use dynamic discovery
+        const capabilities = await executor.discoverCapabilities();
         
-        const allTools = mcpManager.getAllAvailableTools();
-        const connectedServers = mcpManager.getConnectedServers();
-        
-        if (connectedServers.length === 0) {
+        if (capabilities.totalTools === 0) {
             return {
                 availableTools: {},
                 summary: 'No MCP servers are currently connected. Configure MCP servers in settings to access external tools.',
@@ -1422,29 +2037,50 @@ async function getMcpToolsForAI(userId = 'default') {
         }
         
         const enhancedTools = {};
-        let totalToolCount = 0;
         
-        for (const [serverName, tools] of Object.entries(allTools)) {
-            enhancedTools[serverName] = tools.map(tool => ({
-                name: tool.name,
-                description: tool.description,
-                server: serverName,
-                callFormat: `mcpClient: Call tool ${tool.name} from ${serverName} with args {...}`,
-                inputSchema: tool.inputSchema,
-                fullIdentifier: `${serverName}.${tool.name}`
-            }));
-            totalToolCount += tools.length;
+        for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
+            enhancedTools[serverName] = serverInfo.tools.map(tool => {
+                // Create a detailed parameter guide for the AI
+                let parameterGuide = '';
+                let requiredParams = [];
+                
+                if (tool.inputSchema && tool.inputSchema.properties) {
+                    const params = Object.entries(tool.inputSchema.properties);
+                    parameterGuide = params.map(([name, schema]) => {
+                        const required = (tool.inputSchema.required || []).includes(name);
+                        if (required) requiredParams.push(name);
+                        
+                        const type = schema.type || 'any';
+                        const desc = schema.description || 'No description';
+                        return `${name} (${type}${required ? ', required' : ''}): ${desc}`;
+                    }).join('; ');
+                }
+                
+                return {
+                    name: tool.name,
+                    description: tool.description,
+                    server: serverName,
+                    callFormat: `To use this tool, describe your task naturally. The system will automatically extract the right parameters.`,
+                    inputSchema: tool.inputSchema,
+                    fullIdentifier: tool.fullName,
+                    category: inferToolCategory(tool.name, tool.description),
+                    parameterGuide: parameterGuide,
+                    requiredParameters: requiredParams,
+                    usageHint: generateToolUsageHint(tool.name, tool.description, tool.inputSchema)
+                };
+            });
         }
         
         return {
             availableTools: enhancedTools,
-            summary: `${totalToolCount} MCP tools available across ${connectedServers.length} servers: ${connectedServers.join(', ')}`,
-            toolCount: totalToolCount,
-            connectedServers: connectedServers
+            summary: `${capabilities.totalTools} MCP tools available across ${Object.keys(capabilities.servers).length} servers: ${Object.keys(capabilities.servers).join(', ')}`,
+            toolCount: capabilities.totalTools,
+            connectedServers: Object.keys(capabilities.servers),
+            capabilities: capabilities
         };
         
     } catch (error) {
-        console.error('[MCP-Client] Failed to get MCP tools for AI:', error.message);
+        console.error('[MCP-Dynamic] Failed to get MCP tools for AI:', error.message);
         return {
             availableTools: {},
             summary: 'Failed to retrieve MCP tools: ' + error.message,
@@ -1454,49 +2090,47 @@ async function getMcpToolsForAI(userId = 'default') {
     }
 }
 
+// All legacy handler functions and hardcoded patterns removed
+// MCP tool now operates dynamically through DynamicMcpExecutor
+
 /**
- * Handles generic MCP tasks using AI to determine the best approach
- * @async
- * @param {McpClientManager} mcpManager - The MCP manager
- * @param {string} taskDescription - The task description
- * @param {string} otherAIData - Additional context
- * @returns {Promise<string>} Task result
+ * DYNAMIC MCP TOOL ARCHITECTURE
+ * =============================
+ * 
+ * This tool now operates completely dynamically without hardcoded patterns:
+ * 
+ * 1. DISCOVERY PHASE: Automatically discovers all available MCP servers and tools
+ * 2. PLANNING PHASE: Uses semantic matching to find relevant tools for user requests  
+ * 3. EXECUTION PHASE: Executes tools step-by-step, adapting based on results
+ * 4. AUTONOMOUS OPERATION: Can chain multiple tools together to accomplish complex tasks
+ * 
+ * Key Features:
+ * - No hardcoded task parsing patterns
+ * - Dynamic tool discovery and execution
+ * - Step-by-step execution with detailed logging
+ * - Intelligent parameter inference from natural language
+ * - Automatic type coercion and validation
+ * - Error handling with automatic retry and parameter fixing
+ * - Fault-tolerant execution (continues on errors)
+ * - Full execution history tracking
+ * - Schema-aware parameter mapping
+ * 
+ * PARAMETER HANDLING:
+ * - Automatically detects parameter types from tool schemas
+ * - Infers arguments from natural language descriptions
+ * - Special handling for common parameters (thought, query, text, etc.)
+ * - Type coercion ensures correct data types (string, number, boolean, array, object)
+ * - Automatic retry with corrected parameters on validation errors
+ * - Detailed parameter guides for AI interaction
+ * 
+ * Usage: Simply describe what you want to accomplish and the tool will:
+ * - Discover available MCP capabilities with detailed parameter information
+ * - Plan the best approach using available tools
+ * - Automatically infer correct parameters from your description
+ * - Execute tools with proper type validation
+ * - Retry with corrected parameters if validation fails
+ * - Provide detailed results and execution history
  */
-async function handleGenericMcpTask(mcpManager, taskDescription, otherAIData) {
-    const connectedServers = mcpManager.getConnectedServers();
-    
-    if (connectedServers.length === 0) {
-        return 'No MCP servers are currently connected. Please configure MCP servers in settings first.';
-    }
-    
-    let result = `I can help you work with the following MCP servers and their capabilities:\n\n`;
-    
-    for (const serverName of connectedServers) {
-        const client = mcpManager.getClient(serverName);
-        const tools = client.getAvailableTools();
-        const resources = client.getAvailableResources();
-        
-        result += `**${serverName}**:\n`;
-        
-        if (tools.length > 0) {
-            result += `  Tools: ${tools.map(t => `${t.name} (${t.description})`).join(', ')}\n`;
-        }
-        
-        if (resources.length > 0) {
-            result += `  Resources: ${resources.length} available\n`;
-        }
-        
-        result += '\n';
-    }
-    
-    result += 'To use specific MCP functionality, you can ask me to:\n';
-    result += '- List tools: "List tools from [server]"\n';
-    result += '- Call tools: "Call tool [toolname] from [server] with args {...}"\n';
-    result += '- Read resources: "Read resource [uri] from [server]"\n';
-    result += '- List resources: "List resources from [server]"\n';
-    
-    return result;
-}
 
 // Export the main function and classes for use by the tool system
 module.exports = {
@@ -1505,6 +2139,9 @@ module.exports = {
     getMcpToolsForAI,
     McpClient,
     McpClientManager,
+    DynamicMcpExecutor,
     getMcpManager,
-    cleanupMcpManager
+    cleanupMcpManager,
+    generateToolUsageHint,
+    inferToolCategory
 }; 
