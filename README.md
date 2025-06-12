@@ -22,6 +22,7 @@
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/c5b1cb77-f0f6-4eed-8116-b9fe64b48cc1" alt="Operon UI Preview" width="800"/>
+  <img src="https://github.com/user-attachments/assets/ee6169f5-85b5-431c-942d-0e669f2824ff" alt="Operon UI Preview #2" width="800"/>
 </p>
 
 ---
