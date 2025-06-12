@@ -193,8 +193,8 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
     
-    // Get plan from AI
-    let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "auto", userId, chatId);
+    // Get plan from AI using planning model
+    let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "planning", userId, chatId);
     
     // Handle direct answers without complex planning
     if (planObject.directAnswer === true && planObject.answer) {
@@ -439,7 +439,8 @@ async function executeToolAction(enhancedStep, inputData, currentStepIndex, plan
   // Handle chat completion tool
   if (enhancedStep.action === "chatCompletion") {
     const updatedHistory = contextManager.getHistoryWithChatId(userId, chatId);
-    const summary = await tool.callAI(enhancedStep.step, inputData, updatedHistory, undefined, true, "auto", userId, chatId);
+    const modelToUse = enhancedStep.model || "auto";
+    const summary = await tool.callAI(enhancedStep.step, inputData, updatedHistory, undefined, true, modelToUse, userId, chatId);
     contextManager.addToHistory({
       role: "assistant", 
       content: [
@@ -700,7 +701,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "auto", userId, chatId),
+      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "reflection", userId, chatId),
       30000 
     );
     

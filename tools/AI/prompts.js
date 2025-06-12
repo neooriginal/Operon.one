@@ -102,7 +102,8 @@ For complex tasks, return a JSON object structured like this:
     "expectedOutput": "What will be produced",
     "usingData": "List of tools or data sources used (default: all)",
     "validations": "How you will validate the output for correctness",
-    "intensity": "Optional: For deepResearch, specify a number 1-10 to control search depth" 
+    "intensity": "Optional: For deepResearch, specify a number 1-10 to control search depth",
+    "model": "Optional: Choose AI model - 'o4-mini' (fast/cheap), 'gpt-4.1' (balanced/default), or 'gpt-4o' (advanced/expensive). Only use for chatCompletion steps."
   },
   "step2": {
     ...
@@ -137,7 +138,8 @@ For simple questions or chit-chat, return:
     "action": "chatCompletion",
     "expectedOutput": "Brief history and function of the internet",
     "usingData": "none",
-    "validations": "Check for accuracy and coverage of key concepts"
+    "validations": "Check for accuracy and coverage of key concepts",
+    "model": "o4-mini"
   },
   "step3": {
     "step": "Use deepResearch to collect sources on the history of the internet",
@@ -196,6 +198,12 @@ async function generatePlanningPrompt(question, history, userId = 'default') {
     - If the task is ambiguous, internally clarify requirements and document assumptions in your plan.
     - Use clear, structured, and context-aware language. Avoid unnecessary verbosity or repetition.
     - If the user's request changes or new information emerges, adapt your plan accordingly and document the rationale.
+    
+    MODEL SELECTION:
+    - For simple reasoning/analysis tasks, use "o4-mini" (fast and cost-effective)
+    - For complex problem-solving or creative tasks, use "gpt-4o" (most capable but expensive)
+    - Default to "gpt-4.1" for balanced performance (this is the default if no model specified)
+    - Only specify model for chatCompletion steps, other tools use their default configurations
     
     IMPORTANT INSTRUCTIONS:
     1. Follow these instructions EXACTLY and LITERALLY.

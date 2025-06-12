@@ -72,7 +72,7 @@ Return your reasoning in this JSON format:
 
   try {
     
-    const reasoning = await ai.callAI(prompt, "", []);
+    const reasoning = await ai.callAI(prompt, "", [], undefined, true, "reflection", userId, chatId);
     
     
     if (!reasoning || !reasoning.enhancedPrompt) {
@@ -158,7 +158,7 @@ Return your reflection in this JSON format:
 `;
 
   
-  const reflection = await ai.callAI(prompt, "", []);
+  const reflection = await ai.callAI(prompt, "", [], undefined, true, "reflection", userId, chatId);
   
   
   const lastThoughtIndex = thoughtChain.length - 1;

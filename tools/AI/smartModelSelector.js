@@ -1,12 +1,17 @@
+// Model configuration lookup
+const MODEL_CONFIG = {
+    "browser": { model: "openai/gpt-4.1", maxTokens: 120000 },
+    "planning": { model: "openai/o4-mini", maxTokens: 32000 },
+    "reflection": { model: "openai/o4-mini", maxTokens: 32000 },
+    "o4-mini": { model: "openai/o4-mini", maxTokens: 32000 },
+    "gpt-4o": { model: "openai/gpt-4o", maxTokens: 128000 },
+    "gpt-4.1": { model: "openai/gpt-4.1", maxTokens: 120000 }
+};
+
+const DEFAULT_CONFIG = { model: "openai/gpt-4.1", maxTokens: 120000 };
 
 function getModel(prompt, mode) {
-    switch (mode) {
-        case "browser":
-          return {model: "openai/gpt-4.1", maxTokens: 120000};
-        default:
-            return {model: "openai/gpt-4.1", maxTokens: 120000};
-            
-    }
+    return MODEL_CONFIG[mode] || DEFAULT_CONFIG;
 }
 
 const models = [
