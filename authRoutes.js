@@ -47,6 +47,14 @@ router.post('/register', async (req, res) => {
       { expiresIn: '7d' }
     );
     
+    // Set secure HTTP-only cookie
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
     return res.status(201).json({
       id: user.id,
       email: user.email,
@@ -90,6 +98,14 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
     
+    // Set secure HTTP-only cookie
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
     return res.status(200).json({
       id: user.id,
       email: user.email,
@@ -116,6 +132,22 @@ router.post('/login', async (req, res) => {
  */
 router.get('/validate-token', authenticateToken, (req, res) => {
   res.status(200).json({ valid: true, user: req.user });
+});
+
+/**
+ * Logout a user and clear authentication cookie
+ * @route POST /logout
+ * @returns {Object} 200 - Logout success
+ */
+router.post('/logout', (req, res) => {
+  // Clear the authentication cookie
+  res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  });
+  
+  res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 
 /**
@@ -327,13 +359,24 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Authentication token required' });
   }
   
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, async (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
     
-    req.user = user;
-    next();
+    try {
+      // Verify that the user still exists in the database
+      const dbUser = await userFunctions.getUserById(user.id);
+      if (!dbUser) {
+        return res.status(403).json({ error: 'User no longer exists' });
+      }
+      
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error('Database error during token validation:', error);
+      return res.status(500).json({ error: 'Authentication verification failed' });
+    }
   });
 }
 

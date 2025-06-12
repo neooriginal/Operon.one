@@ -282,10 +282,40 @@
     </div>
     
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             const authToken = localStorage.getItem('authToken');
-            if (!authToken) {
-                window.location.href = 'login';
+            const userId = localStorage.getItem('userId');
+            
+            if (!authToken || !userId) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            // Validate token with server on page load
+            try {
+                const tokenValidation = await fetch('/api/validate-token', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (!tokenValidation.ok) {
+                    throw new Error('Token validation failed');
+                }
+                
+                const validationData = await tokenValidation.json();
+                if (!validationData.valid) {
+                    throw new Error('Invalid token');
+                }
+            } catch (error) {
+                console.error('Token validation error:', error);
+                localStorage.removeItem('userId');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('currentChatId');
+                localStorage.removeItem('initialQuery');
+                window.location.href = '/login';
                 return;
             }
             

@@ -285,7 +285,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             const userId = localStorage.getItem('userId');
             const userEmail = localStorage.getItem('userEmail');
             const authToken = localStorage.getItem('authToken');
@@ -295,12 +295,58 @@
                 return;
             }
             
-            document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
-            
-            document.getElementById('logout-button').addEventListener('click', function() {
+            // Validate token with server on page load
+            try {
+                const tokenValidation = await fetch('/api/validate-token', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (!tokenValidation.ok) {
+                    throw new Error('Token validation failed');
+                }
+                
+                const validationData = await tokenValidation.json();
+                if (!validationData.valid) {
+                    throw new Error('Invalid token');
+                }
+            } catch (error) {
+                console.error('Token validation error:', error);
                 localStorage.removeItem('userId');
                 localStorage.removeItem('userEmail');
                 localStorage.removeItem('authToken');
+                localStorage.removeItem('currentChatId');
+                localStorage.removeItem('initialQuery');
+                window.location.href = '/login';
+                return;
+            }
+            
+            document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
+            
+            document.getElementById('logout-button').addEventListener('click', async function() {
+                try {
+                    // Call logout API to clear server-side session
+                    await fetch('/api/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                } catch (error) {
+                    console.error('Logout API error:', error);
+                }
+                
+                // Clear client-side storage
+                localStorage.removeItem('userId');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('currentChatId');
+                localStorage.removeItem('initialQuery');
+                
+                // Redirect to login
                 window.location.href = '/login';
             });
 

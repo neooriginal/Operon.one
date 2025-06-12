@@ -5,3 +5,4 @@
 - cancelling tasks
 - AI asking follow up questions to a task
 - Personality Engine
+- Email verification system

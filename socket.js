@@ -20,7 +20,7 @@ if (process.env.TRUST_PROXY === 'true') {
 
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(require('cookie-parser')());
 
 
 const apiLimiter = rateLimit({
@@ -124,15 +124,85 @@ io.use((socket, next) => {
 });
 
 
-app.get("/dashboard", (req, res) => {
+// Create a middleware for HTML routes that redirects to login if not authenticated
+const requireAuthForHTML = (req, res, next) => {
+  const { userFunctions } = require('./database');
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  // Helper function to verify token and user existence
+  const verifyTokenAndUser = async (tokenToVerify) => {
+    try {
+      const jwt = require('jsonwebtoken');
+      const JWT_SECRET = process.env.JWT_SECRET;
+      
+      return new Promise((resolve, reject) => {
+        jwt.verify(tokenToVerify, JWT_SECRET, async (err, user) => {
+          if (err) {
+            return reject(err);
+          }
+          
+          try {
+            // Verify that the user still exists in the database
+            const dbUser = await userFunctions.getUserById(user.id);
+            if (!dbUser) {
+              return reject(new Error('User no longer exists'));
+            }
+            
+            req.user = user;
+            resolve();
+          } catch (dbError) {
+            console.error('Database error during HTML route authentication:', dbError);
+            reject(dbError);
+          }
+        });
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+  
+  // Check for token in Authorization header
+  if (token) {
+    verifyTokenAndUser(token)
+      .then(() => next())
+      .catch(() => res.redirect('/login'));
+  } else {
+    // Check for token in cookies as backup
+    const tokenFromCookie = req.cookies && req.cookies.authToken;
+    
+    if (tokenFromCookie) {
+      verifyTokenAndUser(tokenFromCookie)
+        .then(() => next())
+        .catch(() => res.redirect('/login'));
+    } else {
+      // No valid authentication found, redirect to login
+      return res.redirect('/login');
+    }
+  }
+};
+
+// Serve static files with authentication protection for sensitive areas
+app.use('/dashboard', requireAuthForHTML, express.static(path.join(__dirname, "public", "dashboard")));
+app.use('/assets', express.static(path.join(__dirname, "public", "assets")));
+app.use('/legal', express.static(path.join(__dirname, "public", "legal")));
+// Serve other public files without authentication (but prevent directory listing and auto-indexing)
+app.use(express.static(path.join(__dirname, "public"), {
+  dotfiles: 'deny',
+  index: false, // Prevent serving index files automatically
+  redirect: false
+}));
+
+// Apply authentication middleware to all dashboard routes
+app.get("/dashboard", requireAuthForHTML, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
-app.get("/dashboard/chat", (req, res) => {
+app.get("/dashboard/chat", requireAuthForHTML, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
-app.get("/chat", (req, res) => {
+app.get("/chat", requireAuthForHTML, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
@@ -148,7 +218,7 @@ app.get("/register", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "register.html"));
 });
 
-app.get("/settings", (req, res) => {
+app.get("/settings", requireAuthForHTML, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "settings.html"));
 });
 
