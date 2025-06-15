@@ -5,6 +5,10 @@
 <h2 align="center">🔥 The Next-Generation Action-AI</h2>
 
 <p align="center">
+  <em>The AI agent that doesn't just think—it acts, adapts, and accelerates across every platform you use.</em>
+</p>
+
+<p align="center">
   <strong>Operon.one</strong> is a powerful, next-generation generative Action-AI to interact with multiple platforms including MCP.
 </p>
 
