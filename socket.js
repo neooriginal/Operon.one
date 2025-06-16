@@ -206,6 +206,11 @@ app.get("/chat", requireAuthForHTML, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
+// Health check endpoint for Docker
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
 app.get("/", (req, res) => {
     res.redirect("/dashboard");
 });
