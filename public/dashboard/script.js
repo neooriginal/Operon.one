@@ -419,6 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         window.isLoadingHistory = true;
+        taskStepsRestored = false;
 
         try {
             const response = await fetch(`/api/chats/${chatId}`, {
@@ -512,6 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         console.log('Reconstructed task visualization with', planSteps.length, 'steps');
+        taskStepsRestored = true;
     }
 
     async function loadChatFiles(chatId) {
@@ -921,6 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Add a global flag to track task status
     let taskInProgress = false;
+    let taskStepsRestored = false;
 
     function handleSendMessage() {
 
@@ -938,6 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Set flag to prevent multiple submissions
         taskInProgress = true;
+        taskStepsRestored = false;
 
         const processSendMessage = (chatId) => {
 
@@ -1023,6 +1027,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.log('Preventing similar duplicate message (similarity:', similarity, '):', cleanMessageText.substring(0, 50) + '...');
                         return true;
                     }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    function isDuplicateUserMessage(messageText, maxMessagesToCheck = 5) {
+        if (!chatMessages) return false;
+
+        const messages = chatMessages.querySelectorAll('.message.user');
+        if (messages.length === 0) return false;
+
+        const cleanMessageText = messageText.trim();
+        if (!cleanMessageText) return false;
+
+        const messagesToCheck = Math.min(messages.length, maxMessagesToCheck);
+        for (let i = messages.length - 1; i >= messages.length - messagesToCheck; i--) {
+            const msgContent = messages[i].querySelector('.message-content');
+            if (msgContent) {
+                const existingText = msgContent.textContent.trim();
+
+                // Check for exact match
+                if (existingText === cleanMessageText) {
+                    console.log('Preventing exact duplicate user message:', cleanMessageText.substring(0, 50) + '...');
+                    return true;
                 }
             }
         }
@@ -1196,10 +1226,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Skip if we already have steps for this task (unless it's being restored)
+        // Skip if we already have steps for this task (including restored tasks)
         const existingStepGroup = chatMessages.querySelector('.step-group');
-        if (existingStepGroup && !data.loadedFromHistory && !data.restoredFromRunning) {
-            console.log('Steps already exist, skipping duplicate steps event');
+        if ((existingStepGroup || taskStepsRestored) && !data.loadedFromHistory) {
+            console.log('Steps already exist, skipping duplicate steps event. restoredFromRunning:', data.restoredFromRunning, 'taskStepsRestored:', taskStepsRestored);
             return;
         }
 
@@ -1241,14 +1271,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.userId === userId) {
             console.log('Step completed:', data);
             
+            const stepId = `step-${data.metrics.stepIndex}`;
+            const stepElement = chatMessages.querySelector(`.action-element[data-step-id="${stepId}"]`);
+            
+            // Skip if step is already marked as completed
+            if (stepElement && stepElement.style.opacity === '0.7') {
+                console.log('Step already marked as completed, skipping duplicate');
+                return;
+            }
+            
             const statusText = data.restoredFromRunning ? 
                 `Restored: Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}` :
                 `Step ${data.metrics.stepIndex + 1}/${data.metrics.totalSteps} completed: ${data.step}`;
                 
             updateStatusDisplay(statusText, 'status_update');
             
-            const stepId = `step-${data.metrics.stepIndex}`;
-            const stepElement = chatMessages.querySelector(`.action-element[data-step-id="${stepId}"]`);
             if (stepElement) {
                 const iconContainer = stepElement.querySelector('.action-icon');
                 if (iconContainer) {
@@ -1411,7 +1448,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatusDisplay('Restoring running task...', 'status_update');
             
             // Add the original user message if we have the question
-            if (data.question && !isDuplicateMessage(data.question)) {
+            if (data.question && !isDuplicateUserMessage(data.question)) {
                 addMessage(data.question, 'user');
             }
         } else if (data.userId === userId && !data.isRunning) {
