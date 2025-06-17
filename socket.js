@@ -182,7 +182,7 @@ const requireAuthForHTML = (req, res, next) => {
   }
 };
 
-// Serve static files with authentication protection for sensitive areas
+// Serve dashboard static files with authentication protection
 app.use('/dashboard', requireAuthForHTML, express.static(path.join(__dirname, "public", "dashboard")));
 app.use('/assets', express.static(path.join(__dirname, "public", "assets")));
 app.use('/legal', express.static(path.join(__dirname, "public", "legal")));
@@ -193,26 +193,18 @@ app.use(express.static(path.join(__dirname, "public"), {
   redirect: false
 }));
 
-// Apply authentication middleware to all dashboard routes
-app.get("/dashboard", requireAuthForHTML, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
-});
-
-app.get("/dashboard/chat", requireAuthForHTML, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
-});
-
-app.get("/chat", requireAuthForHTML, (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
-});
-
 // Health check endpoint for Docker
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 
-app.get("/", (req, res) => {
-    res.redirect("/dashboard");
+// Serve dashboard at root with authentication
+app.get("/", requireAuthForHTML, (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
+});
+
+app.get("/chat", requireAuthForHTML, (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "index.html"));
 });
 
 app.get("/login", (req, res) => {
