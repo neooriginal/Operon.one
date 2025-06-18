@@ -5,3 +5,5 @@
 - AI asking follow up questions to a task
 - Personality Engine
 - Email verification system
+- fix mobile menu bar (only opening when pressing on the edge of the button)
+- add credits system: every user should get a specific amount of starter credits. every ai request makes them go down. it should be nicely displayed in the dashboard with the ability to redeem a one-time-code for more credits. once they run out the AI should stop doing stuff
