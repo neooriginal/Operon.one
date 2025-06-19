@@ -30,6 +30,45 @@
             max-width: 900px;
             margin: 0 auto;
             position: relative;
+            animation: fadeInUp 1s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translate(-50%, -50%) translateY(0px);
+            }
+            50% {
+                transform: translate(-50%, -50%) translateY(-10px);
+            }
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.02);
+            }
+        }
+        
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
         }
         
         .welcome-container::before {
@@ -40,30 +79,58 @@
             transform: translate(-50%, -50%);
             width: 120%;
             height: 120%;
-            background: radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
             border-radius: 50%;
             z-index: -1;
+            animation: float 4s ease-in-out infinite;
+        }
+        
+        .welcome-container::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(236, 72, 153, 0.03) 0%, transparent 80%);
+            border-radius: 50%;
+            z-index: -1;
+            animation: float 6s ease-in-out infinite reverse;
         }
         
         .welcome-container h1 {
             font-size: clamp(2rem, 5vw, 3.5rem);
-            margin-bottom: 1.5rem;
+            margin-bottom: 2.5rem;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 50%, var(--accent) 100%);
+            background-size: 200% 200%;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             font-weight: 800;
             letter-spacing: -0.02em;
             line-height: 1.1;
+            animation: shimmer 3s ease-in-out infinite, pulse 2s ease-in-out infinite;
         }
         
-        .welcome-container p {
-            color: var(--gray-light);
-            margin-bottom: 3rem;
-            font-size: clamp(1rem, 2.5vw, 1.2rem);
-            line-height: 1.7;
-            max-width: 600px;
-            font-weight: 400;
+        @keyframes slideInFromBottom {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes glow {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+            }
+            50% {
+                box-shadow: 0 0 30px rgba(99, 102, 241, 0.2), 0 0 40px rgba(236, 72, 153, 0.1);
+            }
         }
         
         .welcome-input-container {
@@ -71,11 +138,12 @@
             max-width: 650px;
             margin-bottom: 1rem;
             position: relative;
+            animation: slideInFromBottom 1s ease-out 0.3s both;
         }
         
         .welcome-input {
             width: 100%;
-            padding: 18px 24px;
+            padding: 18px 70px 18px 24px;
             border-radius: var(--border-radius-xl);
             border: 2px solid rgba(71, 85, 105, 0.3);
             background: rgba(30, 41, 59, 0.6);
@@ -83,87 +151,77 @@
             -webkit-backdrop-filter: blur(20px);
             color: var(--light);
             font-size: 1.1rem;
-            transition: var(--transition);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: var(--shadow);
             font-weight: 400;
+            position: relative;
+            z-index: 1;
         }
         
         .welcome-input::placeholder {
             color: var(--gray);
             font-weight: 400;
+            transition: all 0.3s ease;
         }
         
         .welcome-input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), var(--shadow-lg);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 
+                        0 0 20px rgba(99, 102, 241, 0.1),
+                        var(--shadow-lg);
             background: rgba(30, 41, 59, 0.8);
-        }
-        
-        .welcome-buttons {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1.5rem;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        
-        .welcome-button {
-            padding: 14px 28px;
-            border-radius: var(--border-radius-lg);
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
-            font-size: 1rem;
-            position: relative;
-            overflow: hidden;
-            min-width: 140px;
-        }
-        
-        .primary-button {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            border: none;
-            box-shadow: var(--shadow);
-        }
-        
-        .primary-button::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
-        
-        .primary-button:hover::before {
-            left: 100%;
-        }
-        
-        .primary-button:hover {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
             transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
+            animation: glow 2s ease-in-out infinite;
         }
         
-        .secondary-button {
-            background: rgba(30, 41, 59, 0.6);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            color: var(--gray-light);
-            border: 2px solid rgba(71, 85, 105, 0.3);
-            box-shadow: var(--shadow);
-        }
-        
-        .secondary-button:hover {
-            background: rgba(51, 65, 85, 0.8);
-            color: white;
+        .welcome-input:hover:not(:focus) {
             border-color: rgba(99, 102, 241, 0.5);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
+            transform: translateY(-1px);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.05), var(--shadow-lg);
         }
+        
+        .welcome-send-button {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border: none;
+            border-radius: var(--border-radius-lg);
+            color: white;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            z-index: 2;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        .welcome-send-button:hover {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+            transform: translateY(-50%) scale(1.05);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+        
+        .welcome-send-button:active {
+            transform: translateY(-50%) scale(0.95);
+            transition-duration: 0.1s;
+        }
+        
+        .welcome-send-button i {
+            transition: transform 0.3s ease;
+        }
+        
+        .welcome-send-button:hover i {
+            transform: translateX(2px);
+        }
+        
+
 
         .chat-interface {
             display: none;
@@ -191,29 +249,29 @@
             }
             
             .welcome-container h1 {
-                margin-bottom: 1rem;
-            }
-            
-            .welcome-container p {
                 margin-bottom: 2rem;
-                font-size: 1rem;
             }
             
             .welcome-input {
-                padding: 16px 20px;
+                padding: 16px 60px 16px 20px;
                 font-size: 1rem;
             }
             
-            .welcome-buttons {
-                flex-direction: column;
-                align-items: center;
-                gap: 0.75rem;
+            .welcome-send-button {
+                width: 42px;
+                height: 42px;
+                right: 6px;
+                font-size: 0.9rem;
             }
             
-            .welcome-button {
-                width: 100%;
-                max-width: 280px;
-                padding: 12px 24px;
+            .welcome-container::before {
+                width: 150%;
+                height: 150%;
+            }
+            
+            .welcome-container::after {
+                width: 120%;
+                height: 120%;
             }
         }
     </style>
@@ -262,15 +320,12 @@
             <div class="welcome-screen" id="welcome-screen">
                 <div class="welcome-container">
                     <h1>Welcome to Operon.one</h1>
-                    <p>Enter your task or question to get started with AI-powered assistance. Our system can help you with complex questions, data analysis, and specialized tasks.</p>
                     
                     <div class="welcome-input-container">
                         <input type="text" class="welcome-input" id="welcome-input" placeholder="What would you like to accomplish today?">
-                        
-                        <div class="welcome-buttons">
-                            <button class="welcome-button primary-button" id="start-button">Begin Task</button>
-                            <button class="welcome-button secondary-button" id="browse-button">Browse Templates</button>
-                        </div>
+                        <button class="welcome-send-button" id="start-button">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -561,9 +616,7 @@
                 }
             });
             
-            document.getElementById('browse-button').addEventListener('click', function() {
-                alert('Template browsing feature coming soon!');
-            });
+
             
             document.getElementById('new-task-button').addEventListener('click', function() {
                 localStorage.removeItem('initialQuery');
