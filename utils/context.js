@@ -198,7 +198,11 @@ class Context {
 
   getFilteredStepsOutput(filter, userId = 'default', chatId = 1) {
     const context = this.getContext(userId, chatId);
-    if (!filter || filter === 'none') return [];
+    
+    // Handle cases where filter is not a string
+    if (!filter || filter === 'none' || typeof filter !== 'string') {
+      return [];
+    }
     
     const requestedTools = filter.split(',').map(tool => tool.trim());
     if (requestedTools.includes('all')) {

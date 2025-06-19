@@ -5,3 +5,4 @@
 - AI asking follow up questions to a task
 - Personality Engine
 - memory system for storing info
+- improve task creation page
