@@ -193,6 +193,52 @@ router.get('/validate-token', authenticateToken, (req, res) => {
 });
 
 /**
+ * Get user's remaining credits
+ * @route GET /credits
+ * @returns {Object} 200 - Credits information
+ */
+router.get('/credits', authenticateToken, async (req, res) => {
+  try {
+    const remainingCredits = await userFunctions.getRemainingCredits(req.user.id);
+    res.status(200).json({ credits: remainingCredits });
+  } catch (error) {
+    console.error('Error fetching credits:', error);
+    res.status(500).json({ error: 'Failed to fetch credits' });
+  }
+});
+
+/**
+ * Redeem a credits code
+ * @route POST /redeem-code
+ * @param {Object} req.body - Code information
+ * @param {string} req.body.code - Redemption code
+ * @returns {Object} 200 - Credits added
+ * @returns {Object} 400 - Invalid code
+ * @returns {Object} 500 - Server error
+ */
+router.post('/redeem-code', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.body;
+    
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Valid code is required' });
+    }
+    
+    const result = await userFunctions.redeemCode(req.user.id, code.trim().toUpperCase());
+    res.status(200).json({ 
+      message: `Successfully redeemed ${result.creditsAdded} credits!`,
+      creditsAdded: result.creditsAdded 
+    });
+  } catch (error) {
+    console.error('Error redeeming code:', error);
+    if (error.message.includes('Invalid or already used')) {
+      return res.status(400).json({ error: 'Invalid or already used code' });
+    }
+    res.status(500).json({ error: 'Failed to redeem code' });
+  }
+});
+
+/**
  * Logout a user and clear authentication cookie
  * @route POST /logout
  * @returns {Object} 200 - Logout success

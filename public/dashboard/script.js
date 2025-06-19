@@ -186,6 +186,118 @@ document.addEventListener('DOMContentLoaded', () => {
     // Expose functions globally for the combined interface
     window.loadChatHistory = loadChatHistory;
     window.loadUserChats = loadUserChats;
+    
+    // Credits management functions
+    async function loadCredits() {
+        try {
+            const response = await fetch('/api/credits', {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const creditsElement = document.getElementById('credits-count');
+                if (creditsElement) {
+                    creditsElement.textContent = data.credits.toLocaleString();
+                }
+            }
+        } catch (error) {
+            console.error('Error loading credits:', error);
+        }
+    }
+    
+    // Load credits on page load
+    loadCredits();
+    
+    // Refresh credits every 10 seconds for more responsive updates
+    setInterval(loadCredits, 10000);
+    
+    // Global functions for redeem modal
+    window.showRedeemModal = function() {
+        const modal = document.getElementById('redeem-modal');
+        const input = document.getElementById('redeem-code-input');
+        const message = document.getElementById('redeem-message');
+        
+        modal.style.display = 'flex';
+        input.value = '';
+        input.focus();
+        message.style.display = 'none';
+        message.className = 'redeem-message';
+    };
+    
+    window.hideRedeemModal = function() {
+        const modal = document.getElementById('redeem-modal');
+        modal.style.display = 'none';
+    };
+    
+    window.redeemCode = async function() {
+        const input = document.getElementById('redeem-code-input');
+        const message = document.getElementById('redeem-message');
+        const submitBtn = document.getElementById('redeem-submit-btn');
+        
+        const code = input.value.trim();
+        if (!code) {
+            showRedeemMessage('Please enter a code', 'error');
+            return;
+        }
+        
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Redeeming...';
+        
+        try {
+            const response = await fetch('/api/redeem-code', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ code: code })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                showRedeemMessage(data.message, 'success');
+                loadCredits(); // Refresh credits display
+                setTimeout(() => {
+                    hideRedeemModal();
+                }, 2000);
+            } else {
+                showRedeemMessage(data.error || 'Failed to redeem code', 'error');
+            }
+        } catch (error) {
+            console.error('Error redeeming code:', error);
+            showRedeemMessage('Network error. Please try again.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Redeem';
+        }
+    };
+    
+    function showRedeemMessage(text, type) {
+        const message = document.getElementById('redeem-message');
+        message.textContent = text;
+        message.className = `redeem-message ${type}`;
+        message.style.display = 'block';
+    }
+    
+    // Handle Enter key in redeem input
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            const modal = document.getElementById('redeem-modal');
+            if (modal && modal.style.display === 'flex') {
+                redeemCode();
+            }
+        }
+        if (event.key === 'Escape') {
+            const modal = document.getElementById('redeem-modal');
+            if (modal && modal.style.display === 'flex') {
+                hideRedeemModal();
+            }
+        }
+    });
 
     // Function to handle initial query when chat interface becomes active
     window.handleInitialQuery = function () {
@@ -1286,6 +1398,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 
             updateStatusDisplay(statusText, 'status_update');
             
+            // Refresh credits when AI steps complete (not for restored steps)
+            if (!data.restoredFromRunning && data.step.includes('ai')) {
+                loadCredits();
+            }
+            
             if (stepElement) {
                 const iconContainer = stepElement.querySelector('.action-icon');
                 if (iconContainer) {
@@ -1331,6 +1448,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const statusText = data.loadedFromHistory ? 'History loaded' : 'Task completed';
                 updateStatusDisplay(statusText, 'completed');
+                
+                // Refresh credits after task completion
+                if (!data.loadedFromHistory) {
+                    loadCredits();
+                }
                 
                 messageInput.disabled = false;
                 sendButton.disabled = false;

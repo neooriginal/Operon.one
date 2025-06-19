@@ -44,8 +44,10 @@ function initDatabase() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    credits INTEGER DEFAULT 5000,
     creditsUsed INTEGER DEFAULT 0,
     paymentPlan TEXT DEFAULT 'free',
+    isAdmin INTEGER DEFAULT 0,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     lastLogin DATETIME
   )`, (err) => {
@@ -191,6 +193,22 @@ function initDatabase() {
       console.log('Task steps table ready');
     }
   });
+
+  db.run(`CREATE TABLE IF NOT EXISTS redemption_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    credits INTEGER NOT NULL,
+    isUsed INTEGER DEFAULT 0,
+    usedBy TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    usedAt DATETIME
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating redemption_codes table:', err.message);
+    } else {
+      console.log('Redemption codes table ready');
+    }
+  });
 }
 
 /**
@@ -292,6 +310,155 @@ const userFunctions = {
       db.run(
         'UPDATE users SET creditsUsed = creditsUsed + ? WHERE id = ?',
         [credits, userId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ changes: this.changes });
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Get user's remaining credits
+   * @param {number|string} userId - User ID
+   * @returns {Promise<number>} Remaining credits
+   */
+  getRemainingCredits(userId) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT (credits - creditsUsed) as remaining FROM users WHERE id = ?',
+        [userId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row ? Math.max(0, row.remaining) : 0);
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Redeem a code for credits
+   * @param {number|string} userId - User ID
+   * @param {string} code - Redemption code
+   * @returns {Promise<Object>} Result with credits added
+   */
+  redeemCode(userId, code) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM redemption_codes WHERE code = ? AND isUsed = 0',
+        [code],
+        (err, codeRow) => {
+          if (err) {
+            reject(err);
+          } else if (!codeRow) {
+            reject(new Error('Invalid or already used code'));
+          } else {
+            // Mark code as used and add credits
+            db.serialize(() => {
+              db.run(
+                'UPDATE redemption_codes SET isUsed = 1, usedBy = ?, usedAt = CURRENT_TIMESTAMP WHERE code = ?',
+                [userId, code]
+              );
+              db.run(
+                'UPDATE users SET credits = credits + ? WHERE id = ?',
+                [codeRow.credits, userId],
+                function(err) {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve({ creditsAdded: codeRow.credits });
+                  }
+                }
+              );
+            });
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Check if user is admin
+   * @param {number|string} userId - User ID
+   * @returns {Promise<boolean>} Whether user is admin
+   */
+  isAdmin(userId) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT isAdmin FROM users WHERE id = ?',
+        [userId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row ? Boolean(row.isAdmin) : false);
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Get all redemption codes (admin only)
+   * @returns {Promise<Array>} Array of redemption codes
+   */
+  getAllRedemptionCodes() {
+    return new Promise((resolve, reject) => {
+      db.all(
+        `SELECT r.*, u.email as usedByEmail 
+         FROM redemption_codes r 
+         LEFT JOIN users u ON r.usedBy = u.id 
+         ORDER BY r.createdAt DESC`,
+        [],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Create redemption code (admin only)
+   * @param {string} code - Code string
+   * @param {number} credits - Credit amount
+   * @returns {Promise<Object>} Created code object
+   */
+  createRedemptionCode(code, credits) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO redemption_codes (code, credits) VALUES (?, ?)',
+        [code.toUpperCase(), credits],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ id: this.lastID, code: code.toUpperCase(), credits });
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Delete redemption code (admin only)
+   * @param {number} codeId - Code ID
+   * @returns {Promise<Object>} Result with changes count
+   */
+  deleteRedemptionCode(codeId) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'DELETE FROM redemption_codes WHERE id = ?',
+        [codeId],
         function(err) {
           if (err) {
             reject(err);

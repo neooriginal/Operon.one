@@ -6,7 +6,9 @@
     "test": "node tester/tester.js",
     "start": "node index.js",
     "postinstall": "npx playwright install chromium",
-    "rebuild-bcrypt": "npm rebuild bcrypt --build-from-source"
+    "rebuild-bcrypt": "npm rebuild bcrypt --build-from-source",
+    "admin:make": "node utils/makeAdmin.js",
+    "admin:list": "node utils/makeAdmin.js list"
   },
   "keywords": [],
   "author": "",

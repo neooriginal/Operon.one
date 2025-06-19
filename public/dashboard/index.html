@@ -233,11 +233,25 @@
             <div class="sidebar-footer">
                 <!-- User Info -->
                 <div class="user-profile-section">
-                     <span id="user-info">User: Loading...</span>
-                     <!-- Settings Button/Link -->
-                     <a href="/settings" id="settings-link" title="Settings"><i class="fas fa-cog"></i></a>
-                     <!-- Logout Button -->
-                     <button id="logout-button" class="icon-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+                     <div class="user-details">
+                         <span id="user-info">User: Loading...</span>
+                         <!-- Credits Section -->
+                         <div class="credits-display">
+                             <div class="credits-info">
+                                 <i class="fas fa-coins"></i>
+                                 <span id="credits-count">0</span> credits
+                             </div>
+                             <button class="redeem-button" onclick="showRedeemModal()" title="Redeem Code">
+                                 <i class="fas fa-plus"></i>
+                             </button>
+                         </div>
+                     </div>
+                     <div class="user-actions">
+                         <!-- Settings Button/Link -->
+                         <a href="/settings" id="settings-link" title="Settings"><i class="fas fa-cog"></i></a>
+                         <!-- Logout Button -->
+                         <button id="logout-button" class="icon-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+                     </div>
                 </div>
             </div>
         </nav>
@@ -274,6 +288,23 @@
                     <input type="text" id="message-input" placeholder="Enter your task or question...">
                     <button id="send-button">Send</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Redeem Code Modal -->
+    <div id="redeem-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Redeem Credits Code</h3>
+                <button class="modal-close" onclick="hideRedeemModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="redeem-form">
+                    <input type="text" id="redeem-code-input" placeholder="Enter your code" maxlength="20">
+                    <button id="redeem-submit-btn" onclick="redeemCode()">Redeem</button>
+                </div>
+                <div id="redeem-message" class="redeem-message"></div>
             </div>
         </div>
     </div>
@@ -324,6 +355,9 @@
             }
             
             document.getElementById('user-info').textContent = `User: ${userEmail || 'Authenticated'}`;
+            
+            // Load user credits
+            loadUserCredits();
             
             document.getElementById('logout-button').addEventListener('click', async function() {
                 try {
@@ -379,6 +413,30 @@
                 if (window.handleInitialQuery) {
                     window.handleInitialQuery();
                 }
+            }
+            
+            function loadUserCredits() {
+                fetch('/api/credits', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    }
+                })
+                .then(data => {
+                    if (data && data.credits !== undefined) {
+                        const creditsElement = document.getElementById('credits-count');
+                        if (creditsElement) {
+                            creditsElement.textContent = data.credits.toLocaleString();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading credits:', error);
+                });
             }
             
             function loadWelcomePageChats() {

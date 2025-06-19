@@ -4,6 +4,7 @@ const smartModelSelector = require('./smartModelSelector');
 const tokenCalculation = require('./tokenCalculation');
 const contextManager = require('../../utils/context');
 const { getPersonalityPrompt } = require('../personalityEngine/getPersonalityPrompt');
+const { userFunctions } = require('../../database');
 const io = require('../../socket');
 dotenv.config();
 
@@ -49,6 +50,25 @@ async function generateImage(prompt, userId = 'default'){
 }
 
 async function callAI(systemMessage, prompt, messages, image=undefined, jsonResponse=true, model="auto", userId = 'default', chatId = 1){
+    
+    if (userId && userId !== 'default') {
+        try {
+            const remainingCredits = await userFunctions.getRemainingCredits(userId);
+            const estimatedCost = Math.ceil(prompt.length * 1.2); // Rough estimate: 1.2 tokens per character
+            
+            if (remainingCredits < estimatedCost) {
+                return {
+                    error: true,
+                    message: "Insufficient credits. Please redeem a code or contact support.",
+                    creditsNeeded: estimatedCost,
+                    creditsRemaining: remainingCredits,
+                    fallback: true
+                };
+            }
+        } catch (error) {
+            console.error('Error checking credits:', error);
+        }
+    }
     
     const toolState = contextManager.getToolState('ai', userId, chatId) || { 
         history: [],
@@ -186,6 +206,16 @@ If you do not return valid JSON, your output will cause an API error. Do not inc
         }
 
         const responseContent = response.choices[0].message.content;
+        
+        // Deduct credits after successful response
+        if (userId && userId !== 'default') {
+            try {
+                const actualCost = Math.ceil((prompt.length + responseContent.length) * 1.0); // 1 token per character
+                await userFunctions.updateCredits(userId, actualCost);
+            } catch (error) {
+                console.error('Error updating credits:', error);
+            }
+        }
         
         
         toolState.responses.push({

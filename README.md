@@ -102,6 +102,70 @@ cp .env.example .env
 npm start
 ```
 
+## 👑 Admin Panel Setup
+
+Operon.one includes a comprehensive admin panel for managing redemption codes and user credits. The admin system provides secure access to:
+
+- **Redemption Code Management**: Create, view, and delete credit codes
+- **Usage Analytics**: Track code usage and credit distribution
+- **User Administration**: Manage admin privileges
+
+Here's how to set it up:
+
+#### Option 1: Using the Admin Utility Script (Recommended)
+
+We've included a convenient utility script to manage admin users:
+
+```bash
+# Make a user admin (replace with actual email)
+node utils/makeAdmin.js user@example.com
+# OR using npm scripts:
+npm run admin:make user@example.com
+
+# List all current admin users
+node utils/makeAdmin.js list
+# OR using npm scripts:
+npm run admin:list
+
+# Show help
+node utils/makeAdmin.js help
+```
+
+**Example usage:**
+```bash
+$ node utils/makeAdmin.js john@company.com
+
+🔧 Operon.one Admin Setup Utility
+
+Target user: john@company.com
+
+🔍 Looking up user...
+
+❓ Make "john@company.com" an admin? (y/N): y
+
+⚡ Granting admin privileges...
+✅ Successfully granted admin privileges to "john@company.com"
+
+📋 Admin Panel Access:
+   🌐 URL: http://localhost:3001/admin
+   📧 Login with: john@company.com
+
+🔐 Admin Capabilities:
+   • Create and manage redemption codes
+   • View usage statistics
+   • Delete unused codes
+```
+
+### Accessing the Admin Panel
+
+Once you have admin privileges:
+
+1. **Login** to your Operon.one account normally
+2. **Navigate** to the admin panel: `http://localhost:3000/admin`
+3. **Manage** redemption codes, view statistics, and more
+
+---
+
 ## 🗺️ Roadmap
 
 Planned functionality includes:

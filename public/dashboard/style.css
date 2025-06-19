@@ -334,12 +334,7 @@ body::before {
     background: rgba(15, 23, 42, 0.3);
 }
 
-.user-profile-section {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
+/* Removed old user-profile-section styles to use new layout */
 
 #user-info {
     font-size: 0.9rem;
@@ -374,6 +369,136 @@ body::before {
     box-shadow: var(--shadow);
 }
 
+/* User Profile Section Updates */
+.user-profile-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* Credits Section Styles */
+.credits-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(30, 41, 59, 0.6);
+    border-radius: var(--border-radius);
+    padding: 6px 10px;
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    margin-top: 4px;
+}
+
+.credits-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--gray-light);
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.credits-info i {
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+#credits-count {
+    color: var(--light);
+    font-weight: 600;
+}
+
+.redeem-button {
+    background: var(--primary);
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 3px 6px;
+    color: white;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+}
+
+.redeem-button:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.redeem-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.redeem-form input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    border-radius: var(--border-radius);
+    background: rgba(30, 41, 59, 0.6);
+    color: var(--light);
+    font-size: 0.9rem;
+}
+
+.redeem-form input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.redeem-form button {
+    padding: 8px 16px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.redeem-form button:hover {
+    background: var(--primary-dark);
+}
+
+.redeem-message {
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    font-size: 0.85rem;
+    text-align: center;
+    display: none;
+}
+
+.redeem-message.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.redeem-message.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
 @media (max-width: 768px) {
     .sidebar-footer {
         max-height: 0;
@@ -385,8 +510,33 @@ body::before {
         border-top: none;
     }
     
+    .user-details {
+        gap: 6px;
+    }
+    
     #user-info {
         font-size: 0.85rem;
+    }
+    
+    .credits-display {
+        padding: 4px 8px;
+        margin-top: 2px;
+    }
+    
+    .credits-info {
+        font-size: 0.75rem;
+        gap: 4px;
+    }
+    
+    .credits-info i {
+        font-size: 0.7rem;
+    }
+    
+    .redeem-button {
+        padding: 2px 5px;
+        min-width: 18px;
+        height: 18px;
+        font-size: 0.65rem;
     }
     
     .icon-button, #settings-link {

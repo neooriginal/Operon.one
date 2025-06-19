@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Admin Panel - Redemption Codes</title>
+    <link rel="icon" type="image/png" href="/assets/logo.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --accent: #f59e0b;
+            --dark: #0f172a;
+            --darker: #020617;
+            --light: #f8fafc;
+            --dark-light: #1e293b;
+            --dark-lighter: #334155;
+            --gray: #94a3b8;
+            --gray-light: #cbd5e1;
+            --gray-dark: #475569;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --border-radius: 8px;
+            --border-radius-lg: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--darker) 100%);
+            color: var(--light);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .admin-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--light);
+            margin: 0;
+        }
+
+        .admin-subtitle {
+            color: var(--gray-light);
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 8px 16px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: var(--border-radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: var(--gray-light);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .admin-section {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: var(--border-radius-lg);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--light);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: end;
+        }
+
+        .form-field {
+            flex: 1;
+        }
+
+        .form-label {
+            display: block;
+            color: var(--gray-light);
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: var(--border-radius);
+            color: var(--light);
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border-radius: var(--border-radius);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background: rgba(71, 85, 105, 0.3);
+            color: var(--gray-light);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(71, 85, 105, 0.5);
+            color: var(--light);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .codes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .codes-table th,
+        .codes-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+        }
+
+        .codes-table th {
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--gray-light);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .codes-table tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        .code-text {
+            font-family: 'Courier New', monospace;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--primary);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-used {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .status-unused {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: var(--border-radius);
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .message.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .message.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        @media (max-width: 768px) {
+            .admin-container {
+                padding: 16px;
+            }
+
+            .admin-header {
+                flex-direction: column;
+                align-items: start;
+                gap: 12px;
+            }
+
+            .form-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .codes-table {
+                font-size: 0.8rem;
+            }
+
+            .codes-table th,
+            .codes-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <div>
+                <h1 class="admin-title">Admin Panel</h1>
+                <p class="admin-subtitle">Redemption Codes Management</p>
+            </div>
+            <button class="logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+            <!-- Stats will be loaded here -->
+        </div>
+
+        <div class="admin-section">
+            <h2 class="section-title">
+                <i class="fas fa-plus-circle"></i>
+                Create New Code
+            </h2>
+            
+            <div id="create-message" class="message"></div>
+            
+            <div class="form-group">
+                <div class="form-field">
+                    <label class="form-label">Code</label>
+                    <input type="text" id="code-input" class="form-input" placeholder="Enter code or generate">
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Credits</label>
+                    <input type="number" id="credits-input" class="form-input" placeholder="1000" min="1" max="50000">
+                </div>
+                <button class="btn btn-secondary" onclick="generateCode()">
+                    <i class="fas fa-random"></i> Generate
+                </button>
+                <button class="btn btn-primary" onclick="createCode()">
+                    <i class="fas fa-plus"></i> Create
+                </button>
+            </div>
+        </div>
+
+        <div class="admin-section">
+            <h2 class="section-title">
+                <i class="fas fa-list"></i>
+                Redemption Codes
+            </h2>
+            
+            <div id="codes-message" class="message"></div>
+            
+            <div id="codes-container">
+                <!-- Codes table will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = localStorage.getItem('authToken');
+        
+        // Check authentication on page load
+        if (!authToken) {
+            window.location.href = '/login';
+        }
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCodes();
+        });
+
+        async function loadCodes() {
+            try {
+                const response = await fetch('/api/admin/codes', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.status === 401 || response.status === 403) {
+                    showMessage('codes-message', 'Access denied. Admin privileges required.', 'error');
+                    setTimeout(() => window.location.href = '/login', 2000);
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to load codes');
+                }
+
+                const data = await response.json();
+                renderStats(data.stats);
+                renderCodesTable(data.codes);
+            } catch (error) {
+                console.error('Error loading codes:', error);
+                showMessage('codes-message', 'Failed to load redemption codes', 'error');
+            }
+        }
+
+        function renderStats(stats) {
+            const statsGrid = document.getElementById('stats-grid');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.total}</div>
+                    <div class="stat-label">Total Codes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.unused}</div>
+                    <div class="stat-label">Available</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.used}</div>
+                    <div class="stat-label">Used</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.totalCreditsIssued.toLocaleString()}</div>
+                    <div class="stat-label">Credits Issued</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.creditsRedeemed.toLocaleString()}</div>
+                    <div class="stat-label">Credits Redeemed</div>
+                </div>
+            `;
+        }
+
+        function renderCodesTable(codes) {
+            const container = document.getElementById('codes-container');
+            
+            if (codes.length === 0) {
+                container.innerHTML = '<p style="color: var(--gray); text-align: center; padding: 32px;">No redemption codes found.</p>';
+                return;
+            }
+
+            const table = `
+                <table class="codes-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Credits</th>
+                            <th>Status</th>
+                            <th>Used By</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${codes.map(code => `
+                            <tr>
+                                <td><span class="code-text">${code.code}</span></td>
+                                <td>${code.credits.toLocaleString()}</td>
+                                <td>
+                                    <span class="status-badge ${code.isUsed ? 'status-used' : 'status-unused'}">
+                                        ${code.isUsed ? 'Used' : 'Available'}
+                                    </span>
+                                </td>
+                                <td>${code.usedByEmail || '-'}</td>
+                                <td>${new Date(code.createdAt).toLocaleDateString()}</td>
+                                <td>
+                                    <button class="btn btn-danger" onclick="deleteCode(${code.id})" 
+                                            ${code.isUsed ? 'disabled title="Cannot delete used codes"' : ''}>
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = table;
+        }
+
+        async function generateCode() {
+            try {
+                const response = await fetch('/api/admin/generate-code', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('code-input').value = data.suggestedCode;
+                }
+            } catch (error) {
+                console.error('Error generating code:', error);
+            }
+        }
+
+        async function createCode() {
+            const codeInput = document.getElementById('code-input');
+            const creditsInput = document.getElementById('credits-input');
+            const code = codeInput.value.trim().toUpperCase();
+            const credits = parseInt(creditsInput.value);
+
+            if (!code || !credits) {
+                showMessage('create-message', 'Please enter both code and credits', 'error');
+                return;
+            }
+
+            try {
+                setLoading(true);
+                const response = await fetch('/api/admin/codes', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code, credits })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('create-message', data.message, 'success');
+                    codeInput.value = '';
+                    creditsInput.value = '';
+                    loadCodes(); // Refresh the table
+                } else {
+                    showMessage('create-message', data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error creating code:', error);
+                showMessage('create-message', 'Network error. Please try again.', 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function deleteCode(codeId) {
+            if (!confirm('Are you sure you want to delete this redemption code?')) {
+                return;
+            }
+
+            try {
+                setLoading(true);
+                const response = await fetch(`/api/admin/codes/${codeId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('codes-message', data.message, 'success');
+                    loadCodes(); // Refresh the table
+                } else {
+                    showMessage('codes-message', data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting code:', error);
+                showMessage('codes-message', 'Network error. Please try again.', 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function showMessage(elementId, text, type) {
+            const messageEl = document.getElementById(elementId);
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 5000);
+        }
+
+        function setLoading(loading) {
+            document.body.classList.toggle('loading', loading);
+        }
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userId');
+            localStorage.removeItem('userEmail');
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html> 

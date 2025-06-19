@@ -6,6 +6,7 @@ const fs = require('fs');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { router: authRoutes, authenticateToken } = require('./authRoutes');
+const adminRoutes = require('./adminRoutes');
 const { chatFunctions, fileFunctions, taskStepFunctions } = require('./database');
 const mime = require('mime-types');
 const rateLimit = require('express-rate-limit');
@@ -57,6 +58,7 @@ const isAuthenticated = (req, res, next) => {
 
 
 app.use('/api', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 
 const httpServer = require("http").createServer(app);
@@ -184,6 +186,73 @@ const requireAuthForHTML = (req, res, next) => {
 
 // Serve dashboard static files with authentication protection
 app.use('/dashboard', requireAuthForHTML, express.static(path.join(__dirname, "public", "dashboard")));
+
+// Admin panel protection with admin role verification
+const requireAdminForHTML = async (req, res, next) => {
+  const { userFunctions } = require('./database');
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  const verifyAdminToken = async (tokenToVerify) => {
+    try {
+      const jwt = require('jsonwebtoken');
+      const JWT_SECRET = process.env.JWT_SECRET;
+      
+      return new Promise((resolve, reject) => {
+        jwt.verify(tokenToVerify, JWT_SECRET, async (err, user) => {
+          if (err) {
+            return reject(err);
+          }
+          
+          try {
+            // Check if user exists and is admin
+            const dbUser = await userFunctions.getUserById(user.id);
+            if (!dbUser) {
+              return reject(new Error('User no longer exists'));
+            }
+            
+            const isAdmin = await userFunctions.isAdmin(user.id);
+            if (!isAdmin) {
+              return reject(new Error('Admin access required'));
+            }
+            
+            req.user = user;
+            resolve();
+          } catch (dbError) {
+            console.error('Database error during admin authentication:', dbError);
+            reject(dbError);
+          }
+        });
+      });
+    } catch (error) {
+      throw error;
+    }
+  };
+  
+  if (token) {
+    try {
+      await verifyAdminToken(token);
+      next();
+    } catch {
+      res.status(403).send('Access denied. Admin privileges required.');
+    }
+  } else {
+    const tokenFromCookie = req.cookies && req.cookies.authToken;
+    
+    if (tokenFromCookie) {
+      try {
+        await verifyAdminToken(tokenFromCookie);
+        next();
+      } catch {
+        res.status(403).send('Access denied. Admin privileges required.');
+      }
+    } else {
+      res.redirect('/login');
+    }
+  }
+};
+
+app.use('/admin', requireAdminForHTML, express.static(path.join(__dirname, "public", "admin")));
 app.use('/assets', express.static(path.join(__dirname, "public", "assets")));
 app.use('/legal', express.static(path.join(__dirname, "public", "legal")));
 // Serve other public files without authentication (but prevent directory listing and auto-indexing)
