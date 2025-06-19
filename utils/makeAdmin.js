@@ -12,6 +12,10 @@ function question(query) {
   return new Promise(resolve => rl.question(query, resolve));
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function makeAdmin() {
   console.log('\n🔧 Operon.one Admin Setup Utility\n');
 
@@ -52,6 +56,7 @@ async function makeAdmin() {
       process.exit(0);
     }
 
+    await sleep(1000);
     const confirm = await question(`\n❓ Make "${targetEmail}" an admin? (y/N): `);
     
     if (confirm.toLowerCase() !== 'y' && confirm.toLowerCase() !== 'yes') {
@@ -71,12 +76,8 @@ async function makeAdmin() {
 
     console.log(`✅ Successfully granted admin privileges to "${targetEmail}"`);
     console.log('\n📋 Admin Panel Access:');
-    console.log(`   🌐 URL: http://localhost:3001/admin`);
+    console.log(`   🌐 URL: http://localhost:3000/admin`);
     console.log(`   📧 Login with: ${targetEmail}`);
-    console.log('\n🔐 Admin Capabilities:');
-    console.log('   • Create and manage redemption codes');
-    console.log('   • View usage statistics');
-    console.log('   • Delete unused codes');
     
   } catch (error) {
     console.error('\n❌ Error:', error.message);
