@@ -215,6 +215,25 @@
                 font-size: 2rem;
             }
         }
+
+        .legal-note {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        
+        .legal-note a {
+            color: #38bdf8;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .legal-note a:hover {
+            color: #0ea5e9;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -242,6 +261,12 @@
         
         <div class="register-link">
             Don't have an account? <a href="register">Create Account</a>
+        </div>
+        
+        <div class="legal-note">
+            By using this service, you agree to our <a href="/legal/terms-of-service.html" target="_blank">Terms of Service</a>, 
+            <a href="/legal/privacy-policy.html" target="_blank">Privacy Policy</a>, and 
+            <a href="/legal/cookie-policy.html" target="_blank">Cookie Policy</a>.
         </div>
     </div>
     
@@ -283,7 +308,11 @@
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ email, password })
+                        body: JSON.stringify({ 
+                            email, 
+                            password,
+                            legalAcknowledged: true // User has seen the legal notice at the bottom of the login page
+                        })
                     });
                     
                     const data = await response.json();

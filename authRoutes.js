@@ -72,17 +72,25 @@ function validatePassword(password) {
  * @param {Object} req.body - User registration information
  * @param {string} req.body.email - User email
  * @param {string} req.body.password - User password (min 8 chars, must include uppercase, lowercase, number, special char)
+ * @param {boolean} req.body.legalAgreement - Agreement to Terms of Service and Privacy Policy
  * @returns {Object} 201 - User object with authentication token (if email verification disabled) or verification required message
- * @returns {Object} 400 - Email/password validation errors
+ * @returns {Object} 400 - Email/password validation errors or missing legal agreement
  * @returns {Object} 409 - Email already in use
  * @returns {Object} 500 - Server error
  */
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, legalAgreement } = req.body;
     
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
+    // Check for legal agreement acceptance
+    if (!legalAgreement) {
+      return res.status(400).json({ 
+        error: 'You must accept the Terms of Service and Privacy Policy to register' 
+      });
     }
     
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -265,6 +273,7 @@ router.post('/resend-verification', async (req, res) => {
  * @param {Object} req.body - User login credentials
  * @param {string} req.body.email - User email
  * @param {string} req.body.password - User password
+ * @param {boolean} req.body.legalAcknowledged - Flag indicating user has seen legal terms
  * @returns {Object} 200 - User object with authentication token
  * @returns {Object} 400 - Missing email/password
  * @returns {Object} 401 - Invalid credentials or unverified email
@@ -272,10 +281,15 @@ router.post('/resend-verification', async (req, res) => {
  */
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, legalAcknowledged } = req.body;
     
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
+    // While we don't require explicit acceptance during login, we log that the user has seen the terms
+    if (legalAcknowledged) {
+      console.log(`User ${email} acknowledged legal terms during login`);
     }
     
     const user = await userFunctions.loginUser(email, password);
@@ -586,6 +600,7 @@ router.delete('/settings/mcpServers', authenticateToken, async (req, res) => {
     console.error('Error deleting MCP servers:', error);
     res.status(500).json({ error: 'Failed to delete MCP servers configuration' });
   }
+
 });
 
 /**

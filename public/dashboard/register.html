@@ -305,6 +305,39 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .agreement-group {
+            margin: 1.5rem 0;
+        }
+        
+        .checkbox-container {
+            display: flex;
+            align-items: flex-start;
+        }
+        
+        .checkbox-container input[type="checkbox"] {
+            margin-top: 0.25rem;
+            margin-right: 0.75rem;
+            width: 1rem;
+            height: 1rem;
+        }
+        
+        .checkbox-label {
+            font-size: 0.875rem;
+            line-height: 1.5;
+            color: #cbd5e1;
+        }
+        
+        .checkbox-label a {
+            color: #38bdf8;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .checkbox-label a:hover {
+            color: #0ea5e9;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -356,6 +389,17 @@
             <div class="form-group">
                 <label for="confirm-password">Confirm Password</label>
                 <input type="password" id="confirm-password" name="confirm-password" required autocomplete="new-password">
+            </div>
+            
+            <div class="form-group agreement-group">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="legal-agreement" name="legal-agreement" required>
+                    <label for="legal-agreement" class="checkbox-label">
+                        I agree to the <a href="/legal/terms-of-service.html" target="_blank">Terms of Service</a>, 
+                        <a href="/legal/privacy-policy.html" target="_blank">Privacy Policy</a>, and 
+                        <a href="/legal/cookie-policy.html" target="_blank">Cookie Policy</a>
+                    </label>
+                </div>
             </div>
             
             <button type="submit" id="submit-btn">Create Account</button>
@@ -513,8 +557,9 @@
                 const passwordsMatch = passwordInput.value === confirmPasswordInput.value;
                 const hasPassword = passwordInput.value.length > 0;
                 const hasConfirmPassword = confirmPasswordInput.value.length > 0;
+                const legalAgreed = document.getElementById('legal-agreement').checked;
                 
-                submitBtn.disabled = !isPasswordValid || !passwordsMatch || !hasPassword || !hasConfirmPassword;
+                submitBtn.disabled = !isPasswordValid || !passwordsMatch || !hasPassword || !hasConfirmPassword || !legalAgreed;
             }
 
             // Registration form submission
@@ -526,6 +571,7 @@
                 const email = formData.get('email');
                 const password = formData.get('password');
                 const confirmPassword = formData.get('confirm-password');
+                const legalAgreement = formData.get('legal-agreement') === 'on';
                 
                 if (password !== confirmPassword) {
                     showMessage('Passwords do not match');
@@ -534,6 +580,11 @@
 
                 if (!isPasswordValid) {
                     showMessage('Please meet all password requirements');
+                    return;
+                }
+                
+                if (!legalAgreement) {
+                    showMessage('You must accept the Terms of Service and Privacy Policy to register');
                     return;
                 }
                 
@@ -546,7 +597,7 @@
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ email, password })
+                        body: JSON.stringify({ email, password, legalAgreement })
                     });
                     
                     const data = await response.json();
@@ -668,6 +719,9 @@
                     resendBtn.disabled = false;
                 }
             });
+
+            // Add event listener for the checkbox
+            document.getElementById('legal-agreement').addEventListener('change', updateSubmitButton);
         });
     </script>
 </body>
