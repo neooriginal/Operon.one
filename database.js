@@ -307,14 +307,29 @@ const userFunctions = {
    */
   updateCredits(userId, credits) {
     return new Promise((resolve, reject) => {
-      db.run(
-        'UPDATE users SET creditsUsed = creditsUsed + ? WHERE id = ?',
-        [credits, userId],
-        function(err) {
+      // First check if user is admin
+      db.get(
+        'SELECT isAdmin FROM users WHERE id = ?',
+        [userId],
+        (err, row) => {
           if (err) {
             reject(err);
+          } else if (row && row.isAdmin) {
+            // Admins have infinite credits, so no need to update
+            resolve({ changes: 0 });
           } else {
-            resolve({ changes: this.changes });
+            // Regular user - update credits as normal
+            db.run(
+              'UPDATE users SET creditsUsed = creditsUsed + ? WHERE id = ?',
+              [credits, userId],
+              function(err) {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve({ changes: this.changes });
+                }
+              }
+            );
           }
         }
       );
@@ -329,13 +344,18 @@ const userFunctions = {
   getRemainingCredits(userId) {
     return new Promise((resolve, reject) => {
       db.get(
-        'SELECT (credits - creditsUsed) as remaining FROM users WHERE id = ?',
+        'SELECT (credits - creditsUsed) as remaining, isAdmin FROM users WHERE id = ?',
         [userId],
         (err, row) => {
           if (err) {
             reject(err);
           } else {
-            resolve(row ? Math.max(0, row.remaining) : 0);
+            if (row && row.isAdmin) {
+              // Admins have infinite credits
+              resolve(999999999);
+            } else {
+              resolve(row ? Math.max(0, row.remaining) : 0);
+            }
           }
         }
       );
