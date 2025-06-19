@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://github.com/user-attachments/assets/dab2bc2d-bc0d-4122-a68a-a6a770dc0b8a" alt="Operon Logo" width="150"/>
-</p> 
+</p>
 
 <h2 align="center">🔥 The Next-Generation Action-AI</h2>
 
@@ -44,31 +44,48 @@
 The easiest way to get Operon.one running is with Docker:
 
 ### Prerequisites
+
 - Docker and Docker Compose installed
 - An [OpenRouter API key](https://openrouter.ai/) for AI functionality
 
 #### 1. Download the Docker Compose file
+
 ```bash
 curl -O https://raw.githubusercontent.com/neooriginal/Operon.one/main/docker-compose.yml
 ```
 
 #### 2. Set your environment variables
+
 ```bash
 OPENROUTER_API_KEY="your_openrouter_api_key_here"
 JWT_SECRET="your_secure_jwt_secret_here"
 ```
 
+#### Optional: Email Verification Setup
+
+```bash
+# Add these to enable email verification for user registration
+SMTP_HOST="your_smtp_host"
+SMTP_PORT="your_smtp_port"
+SMTP_USER="your_smtp_username"
+SMTP_PASS="your_smtp_password"
+SMTP_FROM="noreply@yourdomain.com"
+```
+
 #### 3. Start Operon.one
+
 ```bash
 docker-compose up -d
 ```
 
 #### 4. Access the application
+
 Open your browser and navigate to: `http://localhost:3000`
 
 That's it! 🎉 Operon.one is now running and ready to use.
 
 ### Managing the service
+
 ```bash
 # Stop the service
 docker-compose down
@@ -132,6 +149,7 @@ node utils/makeAdmin.js help
 ```
 
 **Example usage:**
+
 ```bash
 $ node utils/makeAdmin.js john@company.com
 

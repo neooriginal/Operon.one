@@ -231,7 +231,7 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Enter your password">
                 <div class="forgot-password">
-                    <a href="#" onclick="alert('Password reset functionality coming soon!')">Forgot password?</a>
+                    <a href="reset-password">Forgot password?</a>
                 </div>
             </div>
             
@@ -295,8 +295,14 @@
                         
                         window.location.href = 'chat';
                     } else {
-                        errorMessage.style.display = 'block';
-                        errorMessage.textContent = data.error || 'Login failed';
+                        if (data.requiresVerification) {
+                            // Redirect to register page with verification step
+                            localStorage.setItem('pendingVerificationEmail', data.email);
+                            window.location.href = 'register?verify=' + encodeURIComponent(data.email);
+                        } else {
+                            errorMessage.style.display = 'block';
+                            errorMessage.textContent = data.error || 'Login failed';
+                        }
                     }
                 } catch (error) {
                     errorMessage.style.display = 'block';

@@ -28,6 +28,7 @@
     "figlet": "^1.8.0",
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^2.6.9",
+    "nodemailer": "^6.10.1",
     "openai": "^4.90.0",
     "playwright": "^1.52.0",
     "rimraf": "^5.0.5",

@@ -8,18 +8,21 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     environment:
-      # Essential environment variables - these need to be set
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # Required environment variables
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - JWT_SECRET=${JWT_SECRET:-operon-default-jwt-secret-change-in-production}
-      
-      # Application configuration with sensible defaults
-      - NODE_ENV=${NODE_ENV:-production}
+
+      # Application configuration
       - PORT=3000
       - DATA_DIR=/app/data
-      - TRUST_PROXY=${TRUST_PROXY:-true}
-      - HTTP_TIMEOUT=${HTTP_TIMEOUT:-60000}
-      - KEEP_ALIVE_TIMEOUT=${KEEP_ALIVE_TIMEOUT:-65000}
-      
+
+      # Optional: Email verification (if not set, email verification will be skipped)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+
       # Playwright configuration
       - PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
       - PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
@@ -30,7 +33,13 @@ services:
     networks:
       - operonone-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))",
+        ]
       interval: 30s
       timeout: 10s
       start_period: 40s

@@ -76,7 +76,8 @@
         }
         
         input[type="email"],
-        input[type="password"] {
+        input[type="password"],
+        input[type="text"] {
             width: 100%;
             padding: 0.875rem 1rem;
             border-radius: 12px;
@@ -89,18 +90,50 @@
         }
         
         input[type="email"]:focus,
-        input[type="password"]:focus {
+        input[type="password"]:focus,
+        input[type="text"]:focus {
             border-color: #38bdf8;
             box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
             transform: translateY(-1px);
         }
 
         input[type="email"]:valid,
-        input[type="password"]:valid {
+        input[type="password"]:valid,
+        input[type="text"]:valid {
             border-color: #10b981;
         }
 
+        #verification-code {
+            text-align: center;
+            font-size: 1.2rem;
+            letter-spacing: 0.3rem;
+            font-weight: 600;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
 
+        #verification-code:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15);
+            transform: translateY(-2px);
+            background-color: rgba(30, 41, 59, 0.8);
+        }
+        
+        #verification-code:hover:not(:focus) {
+            border-color: #475569;
+            transform: translateY(-1px);
+        }
+        
+        #verification-code.valid {
+            border-color: #10b981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+        }
+        
+        #verification-code::placeholder {
+            color: #64748b;
+            opacity: 0.7;
+            letter-spacing: normal;
+        }
 
         .password-strength {
             margin-top: 0.5rem;
@@ -326,10 +359,34 @@
             </div>
             
             <button type="submit" id="submit-btn">Create Account</button>
-            
-            <div id="error-message" class="error-message"></div>
-            <div id="success-message" class="success-message"></div>
         </form>
+
+        <!-- Email Verification Step -->
+        <div id="verification-step" style="display: none;">
+            <h2 style="text-align: center; margin-bottom: 1rem; font-size: 1.5rem; color: #38bdf8;">Verify Your Email</h2>
+            <p style="text-align: center; margin-bottom: 2rem; color: #cbd5e1;">
+                We've sent a 6-digit verification code to <strong id="verification-email"></strong>
+            </p>
+            
+            <form id="verification-form">
+                <div class="form-group">
+                    <label for="verification-code">Verification Code</label>
+                    <input type="text" id="verification-code" name="code" required 
+                           maxlength="6" pattern="[0-9]{6}" placeholder="Enter 6-digit code">
+                </div>
+                
+                <button type="submit" id="verify-btn">Verify Email</button>
+            </form>
+            
+            <div style="text-align: center; margin-top: 1rem;">
+                <button type="button" id="resend-btn" style="background: transparent; border: none; color: #38bdf8; cursor: pointer; text-decoration: underline; font-size: 0.875rem; padding: 0.5rem;">
+                    Didn't receive the code? Resend
+                </button>
+            </div>
+        </div>
+        
+        <div id="error-message" class="error-message"></div>
+        <div id="success-message" class="success-message"></div>
         
         <div class="login-link">
             Already have an account? <a href="login">Sign In</a>
@@ -341,6 +398,8 @@
             'password', '123456', '123456789', '12345678', '12345', 
             'qwerty', 'abc123', 'password123', 'admin', 'letmein'
         ];
+
+        let pendingVerificationEmail = '';
 
         function validatePassword(password) {
             const requirements = {
@@ -385,12 +444,52 @@
             return Object.values(requirements).every(Boolean);
         }
 
+        function showVerificationStep(email) {
+            pendingVerificationEmail = email;
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('verification-step').style.display = 'block';
+            document.getElementById('verification-email').textContent = email;
+            document.getElementById('verification-code').focus();
+        }
+
+        function showRegistrationStep() {
+            document.getElementById('register-form').style.display = 'block';
+            document.getElementById('verification-step').style.display = 'none';
+            pendingVerificationEmail = '';
+        }
+
+        function showMessage(text, type = 'error') {
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+            
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            
+            if (type === 'success') {
+                successMessage.style.display = 'block';
+                successMessage.textContent = text;
+            } else {
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = text;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const passwordInput = document.getElementById('password');
             const confirmPasswordInput = document.getElementById('confirm-password');
             const submitBtn = document.getElementById('submit-btn');
+            const verificationCodeInput = document.getElementById('verification-code');
 
             let isPasswordValid = false;
+
+            // Check if we're redirected here for email verification
+            const urlParams = new URLSearchParams(window.location.search);
+            const verifyEmail = urlParams.get('verify');
+            if (verifyEmail) {
+                // Show verification step immediately
+                showVerificationStep(verifyEmail);
+                showMessage('Please verify your email to complete login.', 'success');
+            }
 
             passwordInput.addEventListener('input', (e) => {
                 isPasswordValid = updatePasswordStrength(e.target.value);
@@ -398,6 +497,17 @@
             });
 
             confirmPasswordInput.addEventListener('input', updateSubmitButton);
+
+            // Auto-format verification code input
+            verificationCodeInput.addEventListener('input', (e) => {
+                e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                // Add valid class when we have all 6 digits
+                if (e.target.value.length === 6) {
+                    e.target.classList.add('valid');
+                } else {
+                    e.target.classList.remove('valid');
+                }
+            });
 
             function updateSubmitButton() {
                 const passwordsMatch = passwordInput.value === confirmPasswordInput.value;
@@ -407,6 +517,7 @@
                 submitBtn.disabled = !isPasswordValid || !passwordsMatch || !hasPassword || !hasConfirmPassword;
             }
 
+            // Registration form submission
             document.getElementById('register-form').addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
@@ -415,21 +526,14 @@
                 const email = formData.get('email');
                 const password = formData.get('password');
                 const confirmPassword = formData.get('confirm-password');
-                const errorMessage = document.getElementById('error-message');
-                const successMessage = document.getElementById('success-message');
-                
-                errorMessage.style.display = 'none';
-                successMessage.style.display = 'none';
                 
                 if (password !== confirmPassword) {
-                    errorMessage.style.display = 'block';
-                    errorMessage.textContent = 'Passwords do not match';
+                    showMessage('Passwords do not match');
                     return;
                 }
 
                 if (!isPasswordValid) {
-                    errorMessage.style.display = 'block';
-                    errorMessage.textContent = 'Please meet all password requirements';
+                    showMessage('Please meet all password requirements');
                     return;
                 }
                 
@@ -448,30 +552,120 @@
                     const data = await response.json();
                     
                     if (response.ok) {
-                        successMessage.style.display = 'block';
-                        successMessage.textContent = 'Account created successfully! Redirecting...';
-                        
-                        form.reset();
-                        updatePasswordStrength('');
-                        
-                        setTimeout(() => {
-                            window.location.href = 'login';
-                        }, 2000);
+                        if (data.requiresVerification) {
+                            showVerificationStep(email);
+                            showMessage('Please check your email for the verification code.', 'success');
+                        } else {
+                            // Direct login without verification
+                            if (data.token) {
+                                localStorage.setItem('authToken', data.token);
+                                localStorage.setItem('userId', data.id);
+                                localStorage.setItem('userEmail', data.email);
+                            }
+                            
+                            showMessage('Account created successfully! Redirecting...', 'success');
+                            setTimeout(() => {
+                                window.location.href = '/dashboard';
+                            }, 2000);
+                        }
                     } else {
                         let errorText = data.error || 'Registration failed';
                         if (data.details && Array.isArray(data.details)) {
                             errorText += ': ' + data.details.join(', ');
                         }
-                        errorMessage.style.display = 'block';
-                        errorMessage.textContent = errorText;
+                        showMessage(errorText);
                     }
                 } catch (error) {
-                    errorMessage.style.display = 'block';
-                    errorMessage.textContent = 'Network error occurred. Please try again.';
+                    showMessage('Network error occurred. Please try again.');
                     console.error('Registration error:', error);
                 } finally {
                     document.body.classList.remove('loading');
                     submitBtn.textContent = 'Create Account';
+                }
+            });
+
+            // Email verification form submission
+            document.getElementById('verification-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(e.target);
+                const code = formData.get('code');
+                
+                if (!code || code.length !== 6) {
+                    showMessage('Please enter a valid 6-digit verification code');
+                    return;
+                }
+                
+                const verifyBtn = document.getElementById('verify-btn');
+                verifyBtn.textContent = '';
+                verifyBtn.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/verify-email', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            email: pendingVerificationEmail, 
+                            code: code 
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Store auth data and redirect
+                        localStorage.setItem('authToken', data.token);
+                        localStorage.setItem('userId', data.id);
+                        localStorage.setItem('userEmail', data.email);
+                        
+                        showMessage('Email verified successfully! Redirecting...', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/dashboard';
+                        }, 2000);
+                    } else {
+                        showMessage(data.error || 'Verification failed');
+                    }
+                } catch (error) {
+                    showMessage('Network error occurred. Please try again.');
+                    console.error('Verification error:', error);
+                } finally {
+                    verifyBtn.textContent = 'Verify Email';
+                    verifyBtn.disabled = false;
+                }
+            });
+
+            // Resend verification code
+            document.getElementById('resend-btn').addEventListener('click', async function() {
+                if (!pendingVerificationEmail) return;
+                
+                const resendBtn = this;
+                resendBtn.textContent = 'Sending...';
+                resendBtn.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/resend-verification', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email: pendingVerificationEmail })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showMessage('Verification code sent!', 'success');
+                    } else {
+                        showMessage(data.error || 'Failed to resend code');
+                    }
+                } catch (error) {
+                    showMessage('Network error occurred. Please try again.');
+                    console.error('Resend error:', error);
+                } finally {
+                    resendBtn.textContent = 'Didn\'t receive the code? Resend';
+                    resendBtn.disabled = false;
                 }
             });
         });

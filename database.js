@@ -48,6 +48,7 @@ function initDatabase() {
     creditsUsed INTEGER DEFAULT 0,
     paymentPlan TEXT DEFAULT 'free',
     isAdmin INTEGER DEFAULT 0,
+    emailVerified INTEGER DEFAULT 0,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     lastLogin DATETIME
   )`, (err) => {
@@ -55,6 +56,43 @@ function initDatabase() {
       console.error('Error creating users table:', err.message);
     } else {
       console.log('Users table ready');
+      
+      // Add emailVerified column if it doesn't exist (migration for existing databases)
+      db.run(`ALTER TABLE users ADD COLUMN emailVerified INTEGER DEFAULT 0`, (err) => {
+        if (err && !err.message.includes('duplicate column')) {
+          console.error('Error adding emailVerified column:', err.message);
+        }
+      });
+    }
+  });
+
+  db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expiresAt DATETIME NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    verified INTEGER DEFAULT 0
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating email_verifications table:', err.message);
+    } else {
+      console.log('Email verifications table ready');
+    }
+  });
+
+  db.run(`CREATE TABLE IF NOT EXISTS password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expiresAt DATETIME NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    used INTEGER DEFAULT 0
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating password_resets table:', err.message);
+    } else {
+      console.log('Password resets table ready');
     }
   });
 
@@ -300,6 +338,27 @@ const userFunctions = {
   },
 
   /**
+   * Get user by email
+   * @param {string} email - User email
+   * @returns {Promise<Object>} User data (excluding password)
+   */
+  getUserByEmail(email) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT id, email, creditsUsed, paymentPlan, emailVerified, createdAt, lastLogin FROM users WHERE email = ?',
+        [email],
+        (err, user) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(user);
+          }
+        }
+      );
+    });
+  },
+
+  /**
    * Update user's credits
    * @param {number|string} userId - User ID
    * @param {number} credits - Number of credits to add (can be negative)
@@ -488,7 +547,216 @@ const userFunctions = {
         }
       );
     });
-  }
+  },
+
+  /**
+   * Store email verification code
+   * @param {string} email - User's email address
+   * @param {string} code - Verification code
+   * @returns {Promise<Object>} Result with verification ID
+   */
+  async storeEmailVerification(email, code) {
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+    
+    return new Promise((resolve, reject) => {
+      // First, clean up any old verification codes for this email
+      db.run(
+        'DELETE FROM email_verifications WHERE email = ? AND verified = 0',
+        [email],
+        (err) => {
+          if (err) {
+            console.error('Error cleaning old verification codes:', err);
+          }
+          
+          // Insert new verification code
+          db.run(
+            'INSERT INTO email_verifications (email, code, expiresAt) VALUES (?, ?, ?)',
+            [email, code, expiresAt.toISOString()],
+            function(err) {
+              if (err) {
+                reject(err);
+              } else {
+                resolve({ id: this.lastID });
+              }
+            }
+          );
+        }
+      );
+    });
+  },
+
+  /**
+   * Verify email with code
+   * @param {string} email - User's email address
+   * @param {string} code - Verification code
+   * @returns {Promise<boolean>} Whether verification was successful
+   */
+  async verifyEmailCode(email, code) {
+    return new Promise((resolve, reject) => {
+      // Handle skip verification case when email service is not available
+      if (code === 'skip-verification') {
+        db.run(
+          'UPDATE users SET emailVerified = 1 WHERE email = ?',
+          [email],
+          function(err) {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(true);
+            }
+          }
+        );
+        return;
+      }
+      
+      db.get(
+        'SELECT * FROM email_verifications WHERE email = ? AND code = ? AND verified = 0 AND datetime(expiresAt) > datetime("now")',
+        [email, code],
+        (err, verification) => {
+          if (err) {
+            reject(err);
+          } else if (!verification) {
+            resolve(false);
+          } else {
+            // Mark verification as used and update user
+            db.serialize(() => {
+              db.run(
+                'UPDATE email_verifications SET verified = 1 WHERE id = ?',
+                [verification.id]
+              );
+              db.run(
+                'UPDATE users SET emailVerified = 1 WHERE email = ?',
+                [email],
+                function(err) {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve(true);
+                  }
+                }
+              );
+            });
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Check if user's email is verified
+   * @param {string} email - User's email address
+   * @returns {Promise<boolean>} Whether email is verified
+   */
+  async isEmailVerified(email) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT emailVerified FROM users WHERE email = ?',
+        [email],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row ? Boolean(row.emailVerified) : false);
+          }
+        }
+      );
+    });
+  },
+  
+  /**
+   * Store password reset code
+   * @param {string} email - User's email address
+   * @param {string} code - Reset code
+   * @returns {Promise<Object>} Result with reset ID
+   */
+  async storePasswordResetCode(email, code) {
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+    
+    return new Promise((resolve, reject) => {
+      // First, clean up any old reset codes for this email
+      db.run(
+        'DELETE FROM password_resets WHERE email = ? AND used = 0',
+        [email],
+        (err) => {
+          if (err) {
+            console.error('Error cleaning old reset codes:', err);
+          }
+          
+          // Insert new reset code
+          db.run(
+            'INSERT INTO password_resets (email, code, expiresAt) VALUES (?, ?, ?)',
+            [email, code, expiresAt.toISOString()],
+            function(err) {
+              if (err) {
+                reject(err);
+              } else {
+                resolve({ id: this.lastID });
+              }
+            }
+          );
+        }
+      );
+    });
+  },
+
+  /**
+   * Verify password reset code
+   * @param {string} email - User's email address
+   * @param {string} code - Reset code
+   * @returns {Promise<boolean>} Whether the code is valid
+   */
+  async verifyPasswordResetCode(email, code) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM password_resets WHERE email = ? AND code = ? AND used = 0 AND datetime(expiresAt) > datetime("now")',
+        [email, code],
+        (err, reset) => {
+          if (err) {
+            reject(err);
+          } else if (!reset) {
+            resolve(false);
+          } else {
+            // Mark reset code as used
+            db.run(
+              'UPDATE password_resets SET used = 1 WHERE id = ?',
+              [reset.id],
+              function(err) {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve(true);
+                }
+              }
+            );
+          }
+        }
+      );
+    });
+  },
+
+  /**
+   * Update user's password
+   * @param {string} email - User's email address
+   * @param {string} newPassword - New password
+   * @returns {Promise<boolean>} Whether the update was successful
+   */
+  async updatePassword(email, newPassword) {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    return new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE users SET password = ? WHERE email = ?',
+        [hashedPassword, email],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(this.changes > 0);
+          }
+        }
+      );
+    });
+  },
 };
 
 /**

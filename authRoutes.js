@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { userFunctions, settingsFunctions } = require('./database');
+const emailService = require('./utils/emailService');
 require('dotenv').config();
 
 /**
@@ -71,7 +72,7 @@ function validatePassword(password) {
  * @param {Object} req.body - User registration information
  * @param {string} req.body.email - User email
  * @param {string} req.body.password - User password (min 8 chars, must include uppercase, lowercase, number, special char)
- * @returns {Object} 201 - User object with authentication token
+ * @returns {Object} 201 - User object with authentication token (if email verification disabled) or verification required message
  * @returns {Object} 400 - Email/password validation errors
  * @returns {Object} 409 - Email already in use
  * @returns {Object} 500 - Server error
@@ -99,6 +100,28 @@ router.post('/register', async (req, res) => {
     
     const user = await userFunctions.registerUser(email, password);
     
+    // If email service is available, send verification code
+    if (emailService.isEmailServiceAvailable()) {
+      const verificationCode = emailService.generateVerificationCode(true); // Use alphanumeric code
+      await userFunctions.storeEmailVerification(email, verificationCode);
+      
+      const emailSent = await emailService.sendVerificationEmail(email, verificationCode);
+      
+      if (emailSent) {
+        return res.status(201).json({
+          message: 'Registration successful. Please check your email for verification code.',
+          requiresVerification: true,
+          email: email
+        });
+      } else {
+        // If email fails, allow registration to proceed without verification
+        console.warn('Email verification failed, allowing registration without verification');
+      }
+    }
+    
+    // If email service is not available or email sending failed, complete registration immediately
+    await userFunctions.verifyEmailCode(email, 'skip-verification');
+    
     const token = jwt.sign(
       { id: user.id, email: user.email },
       JWT_SECRET,
@@ -116,7 +139,8 @@ router.post('/register', async (req, res) => {
     return res.status(201).json({
       id: user.id,
       email: user.email,
-      token
+      token,
+      emailVerified: true
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -130,6 +154,112 @@ router.post('/register', async (req, res) => {
 });
 
 /**
+ * Verify email with verification code
+ * @route POST /verify-email
+ * @param {Object} req.body - Email verification information
+ * @param {string} req.body.email - User email
+ * @param {string} req.body.code - Verification code
+ * @returns {Object} 200 - User object with authentication token
+ * @returns {Object} 400 - Missing email/code or invalid code
+ * @returns {Object} 500 - Server error
+ */
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+    
+    const isValid = await userFunctions.verifyEmailCode(email, code);
+    
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid or expired verification code' });
+    }
+    
+    // Get user data
+    const user = await userFunctions.getUserByEmail(email);
+    if (!user) {
+      return res.status(400).json({ error: 'User not found' });
+    }
+    
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // Set secure HTTP-only cookie
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
+    // Send welcome email
+    if (emailService.isEmailServiceAvailable()) {
+      emailService.sendWelcomeEmail(email).catch(err => {
+        console.error('Error sending welcome email:', err);
+      });
+    }
+    
+    return res.status(200).json({
+      id: user.id,
+      email: user.email,
+      token,
+      emailVerified: true
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    return res.status(500).json({ error: 'Email verification failed' });
+  }
+});
+
+/**
+ * Resend verification email
+ * @route POST /resend-verification
+ * @param {Object} req.body - Resend verification information
+ * @param {string} req.body.email - User email
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 400 - Missing email or email service unavailable
+ * @returns {Object} 500 - Server error
+ */
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    if (!emailService.isEmailServiceAvailable()) {
+      return res.status(400).json({ error: 'Email service is not available' });
+    }
+    
+    // Check if user exists and is not already verified
+    const isVerified = await userFunctions.isEmailVerified(email);
+    if (isVerified) {
+      return res.status(400).json({ error: 'Email is already verified' });
+    }
+    
+    const verificationCode = emailService.generateVerificationCode();
+    await userFunctions.storeEmailVerification(email, verificationCode);
+    
+    const emailSent = await emailService.sendVerificationEmail(email, verificationCode);
+    
+    if (emailSent) {
+      return res.status(200).json({ message: 'Verification email sent successfully' });
+    } else {
+      return res.status(500).json({ error: 'Failed to send verification email' });
+    }
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    return res.status(500).json({ error: 'Failed to resend verification email' });
+  }
+});
+
+/**
  * Authenticate a user
  * @route POST /login
  * @param {Object} req.body - User login credentials
@@ -137,7 +267,7 @@ router.post('/register', async (req, res) => {
  * @param {string} req.body.password - User password
  * @returns {Object} 200 - User object with authentication token
  * @returns {Object} 400 - Missing email/password
- * @returns {Object} 401 - Invalid credentials
+ * @returns {Object} 401 - Invalid credentials or unverified email
  * @returns {Object} 500 - Server error
  */
 router.post('/login', async (req, res) => {
@@ -149,6 +279,15 @@ router.post('/login', async (req, res) => {
     }
     
     const user = await userFunctions.loginUser(email, password);
+    
+    // Check if email verification is required and if user's email is verified
+    if (emailService.isEmailServiceAvailable() && !user.emailVerified) {
+      return res.status(401).json({ 
+        error: 'Email not verified. Please check your email for the verification code.',
+        requiresVerification: true,
+        email: user.email
+      });
+    }
     
     const token = jwt.sign(
       { id: user.id, email: user.email },
@@ -167,7 +306,8 @@ router.post('/login', async (req, res) => {
     return res.status(200).json({
       id: user.id,
       email: user.email,
-      token
+      token,
+      emailVerified: Boolean(user.emailVerified)
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -445,6 +585,125 @@ router.delete('/settings/mcpServers', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting MCP servers:', error);
     res.status(500).json({ error: 'Failed to delete MCP servers configuration' });
+  }
+});
+
+/**
+ * Request password reset
+ * @route POST /reset-password
+ * @param {Object} req.body - Reset request information
+ * @param {string} req.body.email - User email
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 400 - Email required or email service unavailable
+ * @returns {Object} 404 - User not found
+ * @returns {Object} 500 - Server error
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    // Check if email service is available
+    if (!emailService.isEmailServiceAvailable()) {
+      return res.status(400).json({ error: 'Password reset is not available - email service not configured' });
+    }
+    
+    // Check if user exists
+    const user = await userFunctions.getUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with that email address' });
+    }
+    
+    // Generate and store reset code
+    const resetCode = emailService.generateVerificationCode(true); // Use alphanumeric code
+    await userFunctions.storePasswordResetCode(email, resetCode);
+    
+    // Send reset email
+    const emailSent = await emailService.sendPasswordResetEmail(email, resetCode);
+    
+    if (emailSent) {
+      return res.status(200).json({ 
+        message: 'Password reset instructions sent to your email',
+        email: email
+      });
+    } else {
+      return res.status(500).json({ error: 'Failed to send reset email' });
+    }
+  } catch (error) {
+    console.error('Password reset request error:', error);
+    return res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+/**
+ * Verify reset code and update password
+ * @route POST /verify-reset
+ * @param {Object} req.body - Reset verification information
+ * @param {string} req.body.email - User email
+ * @param {string} req.body.code - Reset code
+ * @param {string} req.body.newPassword - New password
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 400 - Missing fields or invalid password
+ * @returns {Object} 401 - Invalid or expired reset code
+ * @returns {Object} 500 - Server error
+ */
+router.post('/verify-reset', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Email, reset code and new password are required' });
+    }
+    
+    // Validate new password
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ 
+        error: 'Password requirements not met',
+        details: passwordValidation.messages
+      });
+    }
+    
+    // Verify reset code
+    const isValid = await userFunctions.verifyPasswordResetCode(email, code);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid or expired reset code' });
+    }
+    
+    // Update password
+    await userFunctions.updatePassword(email, newPassword);
+    
+    // Get user data for login
+    const user = await userFunctions.getUserByEmail(email);
+    
+    // Create new token
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // Set secure HTTP-only cookie
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
+    return res.status(200).json({
+      message: 'Password reset successful',
+      id: user.id,
+      email: user.email,
+      token,
+      emailVerified: Boolean(user.emailVerified)
+    });
+  } catch (error) {
+    console.error('Password reset verification error:', error);
+    return res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

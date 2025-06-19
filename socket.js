@@ -284,6 +284,10 @@ app.get("/register", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "register.html"));
 });
 
+app.get("/reset-password", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "dashboard", "reset-password.html"));
+});
+
 app.get("/settings", requireAuthForHTML, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard", "settings.html"));
 });
