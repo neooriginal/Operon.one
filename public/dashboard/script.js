@@ -33,20 +33,34 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleButton.setAttribute('aria-label', 'Toggle sidebar');
         sidebarHeader.appendChild(toggleButton);
 
-        // Handle sidebar toggle
-        toggleButton.addEventListener('click', () => {
+        // Handle sidebar toggle with improved touch support
+        const handleToggle = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
             sidebar.classList.toggle('expanded');
             toggleButton.innerHTML = sidebar.classList.contains('expanded') ?
                 '<i class="fas fa-times"></i>' :
                 '<i class="fas fa-bars"></i>';
-        });
+        };
 
-        // Close sidebar when clicking outside
+        toggleButton.addEventListener('click', handleToggle);
+        toggleButton.addEventListener('touchend', handleToggle);
+
+        // Close sidebar when clicking outside or on overlay
         document.addEventListener('click', (event) => {
             const isClickInside = sidebar.contains(event.target);
-            if (!isClickInside && window.innerWidth <= 768 && sidebar.classList.contains('expanded')) {
+            const isToggleButton = toggleButton.contains(event.target);
+            
+            if (!isClickInside && !isToggleButton && window.innerWidth <= 768 && sidebar.classList.contains('expanded')) {
                 sidebar.classList.remove('expanded');
                 toggleButton.innerHTML = '<i class="fas fa-bars"></i>';
+            }
+        });
+
+        // Prevent sidebar from closing when clicking inside the sidebar content
+        sidebar.addEventListener('click', (event) => {
+            if (sidebar.classList.contains('expanded')) {
+                event.stopPropagation();
             }
         });
     }
