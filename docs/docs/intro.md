@@ -8,6 +8,8 @@ sidebar_position: 1
 
 Operon.one is a powerful, next-generation generative Action-AI designed to interact with multiple platforms including MCP (Model Context Protocol). Unlike traditional AI that just responds, Operon.one takes action - it can browse the web, execute code, manage files, and interact with external services.
 
+![Operon.one Main Interface](../static/img/main.png)
+
 ## ✨ Key Features
 
 ### 🎯 Action-Oriented AI

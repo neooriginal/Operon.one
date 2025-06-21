@@ -130,6 +130,8 @@ npm run admin:list
    - "Create a simple Python script to calculate factorial"
    - "Generate an image of a sunset"
 
+![AI Task Example](../static/img/task.png)
+
 ## Production Configuration (Docker)
 
 ### Docker Compose Override
