@@ -2,50 +2,12 @@
 
 This guide will help you set up and run Operon.one on your system.
 
-## Quick Start with Docker (Recommended)
+## Installation Options
 
-The fastest way to get Operon.one running is using Docker Compose.
+Choose the method that best fits your needs:
 
-### 1. Download Docker Compose File
-
-```bash
-curl -O https://raw.githubusercontent.com/neooriginal/Operon.one/main/docker-compose.yml
-```
-
-### 2. Configure Environment
-
-Create a `.env` file in the same directory:
-
-```env
-# AI Configuration
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-
-# Security
-JWT_SECRET=your_secure_jwt_secret_here
-
-# Database
-DATABASE_PATH=./data/operon.db
-
-# Email Configuration (Optional)
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM=noreply@yourdomain.com
-```
-
-### 3. Start the Application
-
-```bash
-docker-compose up -d
-```
-
-### 4. Access Your Instance
-
-Open your browser and navigate to:
-
-- **Main Application**: `http://localhost:3000`
-- **Admin Panel**: `http://localhost:3000/admin`
+- **🐳 [Docker Setup](./docker-setup.md)** (Recommended) - Production-ready deployment
+- **💻 Development Setup** (Below) - For development or source installation
 
 ## Development Setup
 
@@ -72,17 +34,33 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Edit `.env` with your configuration (same format as above).
+Edit `.env` with your configuration:
 
-### 4. Initialize the Database
+```env
+# AI Configuration
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-The database will be created automatically on first run.
+# Security
+JWT_SECRET=your_secure_jwt_secret_here
 
-### 5. Start the Development Server
+# Database
+DATABASE_PATH=./data/operon.db
+
+# Email Configuration (Optional)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=noreply@yourdomain.com
+```
+
+### 4. Start the Development Server
 
 ```bash
 npm start
 ```
+
+The database will be created automatically on first run.
 
 ## First Steps
 
@@ -118,7 +96,7 @@ npm run admin:list
    - "Create a simple Python script to calculate factorial"
    - "Generate an image of a sunset"
 
-## Configuration Options
+## Configuration Reference
 
 ### Environment Variables
 
@@ -155,14 +133,6 @@ kill -9 <PID>
 # Remove and recreate database
 rm ./data/operon.db
 npm start
-```
-
-#### Docker Issues
-
-```bash
-# Clean up Docker resources
-docker-compose down -v
-docker system prune
 ```
 
 ### Getting Help

@@ -8,16 +8,6 @@ sidebar_position: 1
 
 Operon.one is a powerful, next-generation generative Action-AI designed to interact with multiple platforms including MCP (Model Context Protocol). Unlike traditional AI that just responds, Operon.one takes action - it can browse the web, execute code, manage files, and interact with external services.
 
-## 🚀 Quick Start
-
-Get started with Operon.one in just a few commands:
-
-```bash
-# Using Docker (Recommended)
-curl -O https://raw.githubusercontent.com/neooriginal/Operon.one/main/docker-compose.yml
-docker-compose up -d
-```
-
 ## ✨ Key Features
 
 ### 🎯 Action-Oriented AI
@@ -47,8 +37,8 @@ Includes user management, admin panels, rate limiting, and security features out
 ## 📚 What's Next?
 
 - [**Getting Started**](./getting-started.md) - Complete setup guide
-- [**Docker Setup**](docker-setup) - Production deployment
-- [**Tools Overview**](./tools/index.md) - Available AI tools
+- [**Docker Setup**](docker-setup) - Production deployment with Docker
+- [**Tools Overview**](./tools/index.md) - Available AI tools and architecture
 - [**API Reference**](./api/index.md) - Complete API documentation
 
 ## 🚧 Development Status

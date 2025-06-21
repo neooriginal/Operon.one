@@ -46,6 +46,7 @@ const config: Config = {
           // Remove this to remove the "edit this page" links.
           editUrl:
             'https://github.com/neooriginal/Operon.one/tree/main/docs/',
+          routeBasePath: '/', // Serve docs at the root
         },
         blog: false, // Blog disabled
         theme: {
@@ -63,66 +64,61 @@ const config: Config = {
               logo: {
           alt: 'Operon.one Logo',
           src: 'img/logo.png',
+          href: '/intro',
         },
-      items: [
-        {
-          type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
-          position: 'left',
-          label: 'Documentation',
-        },
-        {
-          href: 'https://github.com/neooriginal/Operon.one',
-          label: 'GitHub',
-          position: 'right',
-        },
-      ],
+              items: [
+          {
+            href: 'https://github.com/neooriginal/Operon.one',
+            label: 'GitHub',
+            position: 'right',
+          },
+        ],
     },
-    footer: {
-      style: 'dark',
-      links: [
-        {
-          title: 'Documentation',
-          items: [
-            {
-              label: 'Getting Started',
-              to: '/docs/getting-started',
-            },
-            {
-              label: 'Docker Setup',
-              to: '/docs/docker-setup',
-            },
-            {
-              label: 'API Reference',
-              to: '/docs/api',
-            },
-          ],
-        },
-        {
-          title: 'Tools',
-          items: [
-            {
-              label: 'Available Tools',
-              to: '/docs/tools',
-            },
-            {
-              label: 'Creating Tools',
-              to: '/docs/tools/creating-tools',
-            },
-          ],
-        },
-        {
-          title: 'More',
-          items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/neooriginal/Operon.one',
-            },
-          ],
-        },
-      ],
-      copyright: `Copyright © ${new Date().getFullYear()} Operon.one. Built with Docusaurus.`,
-    },
+          footer: {
+        style: 'dark',
+        links: [
+          {
+            title: 'Documentation',
+            items: [
+              {
+                label: 'Getting Started',
+                to: '/getting-started',
+              },
+              {
+                label: 'Docker Setup',
+                to: '/docker-setup',
+              },
+              {
+                label: 'API Reference',
+                to: '/api',
+              },
+            ],
+          },
+          {
+            title: 'Tools',
+            items: [
+              {
+                label: 'Available Tools',
+                to: '/tools',
+              },
+              {
+                label: 'Creating Tools',
+                to: '/tools/creating-tools',
+              },
+            ],
+          },
+          {
+            title: 'More',
+            items: [
+              {
+                label: 'GitHub',
+                href: 'https://github.com/neooriginal/Operon.one',
+              },
+            ],
+          },
+        ],
+        copyright: `Copyright © ${new Date().getFullYear()} Operon.one. Built with Docusaurus.`,
+      },
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
