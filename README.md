@@ -31,6 +31,21 @@
 
 ---
 
+## 📚 Documentation
+
+**📖 [Complete Documentation & Setup Guide](https://neooriginal.github.io/OperonOne/)**
+
+Visit our comprehensive documentation website for:
+
+- **🚀 Quick Start Guide** - Get up and running in minutes
+- **🐳 Docker Setup** - Production deployment with Docker
+- **⚡ Development Setup** - Contributing and local development
+- **🔧 Tool Development** - Creating custom AI tools
+- **📊 API Reference** - Complete API documentation
+- **👑 Admin Panel** - User and credit management
+
+---
+
 ## 🚧 Work in Progress
 
 > **Note:** Operon.one is currently under active development.
@@ -39,150 +54,35 @@
 
 ---
 
-## 🚀 Quick Start with Docker (Recommended)
+## ✨ What Makes Operon.one Different?
 
-The easiest way to get Operon.one running is with Docker:
+### 🎯 Action-Oriented AI
 
-### Prerequisites
+Unlike traditional AI that just responds, Operon.one takes action. It can browse the web, execute code, manage files, and interact with external services.
 
-- Docker and Docker Compose installed
-- An [OpenRouter API key](https://openrouter.ai/) for AI functionality
+### 🔧 Extensible Tool System
 
-#### 1. Download the Docker Compose file
+Built with a modular architecture that allows you to add custom tools and integrations easily.
+
+### 🌐 Multi-Platform Support
+
+Works across different platforms and services, providing a unified AI experience.
+
+### 🛡️ Enterprise Ready
+
+Includes user management, admin panels, rate limiting, and security features out of the box.
+
+## 🚀 Quick Start
+
+Get started with Operon.one in just a few commands:
 
 ```bash
+# Using Docker (Recommended)
 curl -O https://raw.githubusercontent.com/neooriginal/Operon.one/main/docker-compose.yml
-```
-
-#### 2. Set your environment variables
-
-```bash
-OPENROUTER_API_KEY="your_openrouter_api_key_here"
-JWT_SECRET="your_secure_jwt_secret_here"
-```
-
-#### Optional: Email Verification Setup
-
-```bash
-# Add these to enable email verification for user registration
-SMTP_HOST="your_smtp_host"
-SMTP_PORT="your_smtp_port"
-SMTP_USER="your_smtp_username"
-SMTP_PASS="your_smtp_password"
-SMTP_FROM="noreply@yourdomain.com"
-```
-
-#### 3. Start Operon.one
-
-```bash
 docker-compose up -d
 ```
 
-#### 4. Access the application
-
-Open your browser and navigate to: `http://localhost:3000`
-
-That's it! 🎉 Operon.one is now running and ready to use.
-
-### Managing the service
-
-```bash
-# Stop the service
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Update to latest version
-docker-compose pull && docker-compose up -d
-```
-
----
-
-## ⚡ Development Setup
-
-For development or if you prefer to run from source:
-
-```bash
-# Clone the repository
-git clone https://github.com/neooriginal/Operon.one.git
-cd Operon.one
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your API keys and configuration
-
-# Start the development server
-npm start
-```
-
-## 👑 Admin Panel Setup
-
-Operon.one includes a comprehensive admin panel for managing redemption codes and user credits. The admin system provides secure access to:
-
-- **Redemption Code Management**: Create, view, and delete credit codes
-- **Usage Analytics**: Track code usage and credit distribution
-- **User Administration**: Manage admin privileges
-
-Here's how to set it up:
-
-#### Option 1: Using the Admin Utility Script (Recommended)
-
-We've included a convenient utility script to manage admin users:
-
-```bash
-# Make a user admin (replace with actual email)
-node utils/makeAdmin.js user@example.com
-# OR using npm scripts:
-npm run admin:make user@example.com
-
-# List all current admin users
-node utils/makeAdmin.js list
-# OR using npm scripts:
-npm run admin:list
-
-# Show help
-node utils/makeAdmin.js help
-```
-
-**Example usage:**
-
-```bash
-$ node utils/makeAdmin.js john@company.com
-
-🔧 Operon.one Admin Setup Utility
-
-Target user: john@company.com
-
-🔍 Looking up user...
-
-❓ Make "john@company.com" an admin? (y/N): y
-
-⚡ Granting admin privileges...
-✅ Successfully granted admin privileges to "john@company.com"
-
-📋 Admin Panel Access:
-   🌐 URL: http://localhost:3001/admin
-   📧 Login with: john@company.com
-
-🔐 Admin Capabilities:
-   • Create and manage redemption codes
-   • View usage statistics
-   • Delete unused codes
-```
-
-### Accessing the Admin Panel
-
-Once you have admin privileges:
-
-1. **Login** to your Operon.one account normally
-2. **Navigate** to the admin panel: `http://localhost:3000/admin`
-3. **Manage** redemption codes, view statistics, and more
-
----
+**📖 [View Complete Setup Instructions](https://neooriginal.github.io/OperonOne/guide/getting-started)**
 
 ## 🗺️ Roadmap
 
@@ -194,7 +94,7 @@ Planned functionality includes:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please feel free to submit issues and pull requests.
+We welcome contributions! Please check our [development guide](https://neooriginal.github.io/OperonOne/guide/development) for setup instructions and contributing guidelines.
 
 ---
 
