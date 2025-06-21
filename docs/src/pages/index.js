@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
-import { useHistory } from '@docusaurus/router';
-import useBaseUrl from '@docusaurus/useBaseUrl';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 export default function Home() {
-  const history = useHistory();
-  const baseUrl = useBaseUrl('/intro');
+  const { siteConfig } = useDocusaurusContext();
 
   useEffect(() => {
-    history.replace(baseUrl);
-  }, [history, baseUrl]);
+    // Force redirect using window.location to ensure proper base path
+    const redirectUrl = `${siteConfig.baseUrl}intro`;
+    window.location.replace(redirectUrl);
+  }, [siteConfig.baseUrl]);
 
   return null;
 } 
