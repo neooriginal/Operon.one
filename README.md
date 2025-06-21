@@ -35,15 +35,6 @@
 
 **📖 [Complete Documentation & Setup Guide](https://neooriginal.github.io/Operon.one/)**
 
-Visit our comprehensive documentation website for:
-
-- **🚀 Quick Start Guide** - Get up and running in minutes
-- **🐳 Docker Setup** - Production deployment with Docker
-- **⚡ Development Setup** - Contributing and local development
-- **🔧 Tool Development** - Creating custom AI tools
-- **📊 API Reference** - Complete API documentation
-- **👑 Admin Panel** - User and credit management
-
 ---
 
 ## 🚧 Work in Progress
@@ -71,18 +62,6 @@ Works across different platforms and services, providing a unified AI experience
 ### 🛡️ Enterprise Ready
 
 Includes user management, admin panels, rate limiting, and security features out of the box.
-
-## 🚀 Quick Start
-
-Get started with Operon.one in just a few commands:
-
-```bash
-# Using Docker (Recommended)
-curl -O https://raw.githubusercontent.com/neooriginal/Operon.one/main/docker-compose.yml
-docker-compose up -d
-```
-
-**📖 [View Complete Setup Instructions](https://neooriginal.github.io/Operon.one/guide/getting-started)**
 
 ## 🗺️ Roadmap
 
