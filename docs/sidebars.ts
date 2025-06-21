@@ -15,11 +15,7 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     'intro',
-    {
-      type: 'category',
-      label: 'Getting Started',
-      items: ['getting-started', 'docker-setup'],
-    },
+    'getting-started',
     {
       type: 'category',
       label: 'Tools',
@@ -28,11 +24,6 @@ const sidebars: SidebarsConfig = {
         'tools/creating-tools',
         'tools/examples',
       ],
-    },
-    {
-      type: 'category',
-      label: 'API Reference',
-      items: ['api/index', 'api/examples'],
     },
   ],
 };

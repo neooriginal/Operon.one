@@ -36,10 +36,9 @@ Includes user management, admin panels, rate limiting, and security features out
 
 ## 📚 What's Next?
 
-- [**Getting Started**](./getting-started.md) - Complete setup guide
-- [**Docker Setup**](docker-setup) - Production deployment with Docker
+- [**Getting Started**](./getting-started.md) - Complete setup guide (Docker & Development)
 - [**Tools Overview**](./tools/index.md) - Available AI tools and architecture
-- [**API Reference**](./api/index.md) - Complete API documentation
+- [**Creating Tools**](./tools/creating-tools.md) - Build your own AI tools
 
 ## 🚧 Development Status
 

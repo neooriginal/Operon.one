@@ -166,5 +166,5 @@ Want to extend Operon.one with your own tools? Check out our [Tool Development G
 ## Next Steps
 
 - [**Creating Tools**](./creating-tools.md) - Build your own custom tools
-- [**API Reference**](../api/index.md) - Tool execution API documentation
+- [**Getting Started**](../getting-started.md) - Setup and configuration
 - [**Examples**](examples) - Real-world tool usage examples

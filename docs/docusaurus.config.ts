@@ -85,12 +85,8 @@ const config: Config = {
                 to: '/getting-started',
               },
               {
-                label: 'Docker Setup',
-                to: '/docker-setup',
-              },
-              {
-                label: 'API Reference',
-                to: '/api',
+                label: 'Available Tools',
+                to: '/tools',
               },
             ],
           },
