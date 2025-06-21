@@ -4,8 +4,6 @@ export default defineConfig({
   title: 'Operon.one',
   description: 'Next-Generation Action-AI Documentation',
   base: '/OperonOne/',
-  
-  // Ignore dead links to allow build completion
   ignoreDeadLinks: true,
   
   head: [
@@ -45,16 +43,13 @@ export default defineConfig({
           text: 'Configuration',
           items: [
             { text: 'Environment Variables', link: '/guide/configuration/environment' },
-            { text: 'Admin Panel', link: '/guide/configuration/admin-panel' },
-            { text: 'Email Setup', link: '/guide/configuration/email' }
+            { text: 'Admin Panel', link: '/guide/configuration/admin-panel' }
           ]
         },
         {
-          text: 'Features',
+          text: 'Monitoring',
           items: [
-            { text: 'AI Tools', link: '/guide/features/ai-tools' },
-            { text: 'MCP Integration', link: '/guide/features/mcp' },
-            { text: 'User Management', link: '/guide/features/user-management' }
+            { text: 'Overview', link: '/guide/monitoring/' }
           ]
         }
       ],
@@ -78,7 +73,8 @@ export default defineConfig({
           items: [
             { text: 'Creating Tools', link: '/tools/development/creating-tools' },
             { text: 'Tool Structure', link: '/tools/development/structure' },
-            { text: 'Testing Tools', link: '/tools/development/testing' }
+            { text: 'Testing Tools', link: '/tools/development/testing' },
+            { text: 'Deployment', link: '/tools/development/deployment' }
           ]
         }
       ],
@@ -86,11 +82,15 @@ export default defineConfig({
         {
           text: 'API Reference',
           items: [
-            { text: 'Overview', link: '/api/' },
-            { text: 'Authentication', link: '/api/authentication' },
-            { text: 'Users', link: '/api/users' },
-            { text: 'Tools', link: '/api/tools' },
-            { text: 'Admin', link: '/api/admin' }
+            { text: 'Overview', link: '/api/' }
+          ]
+        }
+      ],
+      '/contributing/': [
+        {
+          text: 'Contributing',
+          items: [
+            { text: 'Tools', link: '/contributing/tools' }
           ]
         }
       ]

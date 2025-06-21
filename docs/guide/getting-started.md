@@ -47,8 +47,8 @@ docker-compose up -d
 
 Open your browser and navigate to:
 
-- **Main Application**: http://localhost:3000
-- **Admin Panel**: http://localhost:3000/admin
+- **Main Application**: `http://localhost:3000`
+- **Admin Panel**: `http://localhost:3000/admin`
 
 ## Development Setup
 
@@ -113,7 +113,7 @@ npm start
 
 ### 1. Create Your Account
 
-1. Navigate to http://localhost:3000
+1. Navigate to `http://localhost:3000`
 2. Click "Register" to create your account
 3. If email is configured, verify your email address
 
@@ -131,7 +131,7 @@ npm run admin:list
 
 ### 3. Access the Admin Panel
 
-1. Navigate to http://localhost:3000/admin
+1. Navigate to `http://localhost:3000/admin`
 2. Login with your admin account
 3. Create redemption codes for credit management
 
