@@ -88,7 +88,7 @@ In development, the SQLite database is created automatically in `./data/operon.d
 ## Project Structure
 
 ```
-OperonOne/
+Operon.one/
 ├── index.js              # Main server entry point
 ├── package.json          # Dependencies and scripts
 ├── database.js           # Database configuration

@@ -33,7 +33,7 @@
 
 ## 📚 Documentation
 
-**📖 [Complete Documentation & Setup Guide](https://neooriginal.github.io/OperonOne/)**
+**📖 [Complete Documentation & Setup Guide](https://neooriginal.github.io/Operon.one/)**
 
 Visit our comprehensive documentation website for:
 
@@ -82,7 +82,7 @@ curl -O https://raw.githubusercontent.com/neooriginal/Operon.one/main/docker-com
 docker-compose up -d
 ```
 
-**📖 [View Complete Setup Instructions](https://neooriginal.github.io/OperonOne/guide/getting-started)**
+**📖 [View Complete Setup Instructions](https://neooriginal.github.io/Operon.one/guide/getting-started)**
 
 ## 🗺️ Roadmap
 
@@ -94,7 +94,7 @@ Planned functionality includes:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please check our [development guide](https://neooriginal.github.io/OperonOne/guide/development) for setup instructions and contributing guidelines.
+We welcome contributions! Please check our [development guide](https://neooriginal.github.io/Operon.one/guide/development) for setup instructions and contributing guidelines.
 
 ---
 

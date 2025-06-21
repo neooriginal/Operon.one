@@ -3,18 +3,18 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Operon.one',
   description: 'Next-Generation Action-AI Documentation',
-  base: '/OperonOne/',
+  base: '/Operon.one/',
   ignoreDeadLinks: true,
   
   head: [
-    ['link', { rel: 'icon', href: '/OperonOne/favicon.ico' }],
+    ['link', { rel: 'icon', href: '/Operon.one/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#3c82f6' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:locale', content: 'en' }],
     ['meta', { property: 'og:title', content: 'Operon.one | Next-Generation Action-AI' }],
     ['meta', { property: 'og:site_name', content: 'Operon.one' }],
-    ['meta', { property: 'og:image', content: 'https://neooriginal.github.io/OperonOne/og-image.png' }],
-    ['meta', { property: 'og:url', content: 'https://neooriginal.github.io/OperonOne/' }]
+    ['meta', { property: 'og:image', content: 'https://neooriginal.github.io/Operon.one/og-image.png' }],
+    ['meta', { property: 'og:url', content: 'https://neooriginal.github.io/Operon.one/' }]
   ],
 
   themeConfig: {
