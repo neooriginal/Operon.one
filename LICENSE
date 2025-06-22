@@ -1,32 +1,38 @@
-OPERON.ONE PROPRIETARY LICENSE
+OPERON.ONE RESTRICTIVE OPEN SOURCE LICENSE
 Version 1.0, 08.05.2025
 
 Copyright (c) 2025-present Operon.one. All rights reserved.
 
 TERMS AND CONDITIONS
 
-1. PRIVATE USE ONLY
-   This software and associated documentation files (the "Software") may be used privately by individuals or organizations solely for their internal use.
+1. GRANT OF RIGHTS
+   Subject to the terms and conditions of this License, the Licensor hereby grants to any person obtaining a copy of this software and associated documentation files (the "Software") the following minimal rights:
+   a. To use the Software for personal, educational, or non-commercial research purposes only
+   b. To study the source code
+   c. To modify the Software solely for personal use or to submit contributions back to the original project
+   d. To redistribute the Software only in its original, unmodified form and only to other individuals for the same limited purposes
 
-2. RESTRICTIONS
-   Except as expressly permitted herein, you may NOT:
-   a. Use the Software for any commercial purpose
-   b. Distribute the Software to any third party
-   c. Modify the Software for any purpose other than contributing to the parent project
-   d. Create derivative works based on the Software
-   e. Sublicense, sell, rent, lease, or transfer the Software
-   f. Remove any copyright or proprietary notices from the Software
+2. RESTRICTIONS AND CONDITIONS
+   The above rights are granted subject to the following strict conditions:
+   a. COMMERCIAL USE PROHIBITED: No commercial use, including but not limited to use in any commercial product, service, or business operation
+   b. NO DERIVATIVE DISTRIBUTION: Modified versions may not be distributed under any circumstances
+   c. ATTRIBUTION REQUIRED: All redistributions must include this license and copyright notice
+   d. CONTRIBUTIONS ONLY: Any modifications must be offered back to the original project maintainer
+   e. NO SUBLICENSING: You may not sublicense the Software under different terms
+   f. PUBLIC HOSTING ALLOWED: The Software may be deployed on public servers or cloud platforms for non-commercial purposes only
 
-3. CONTRIBUTIONS
-   Contributions to the parent project are permitted under the following conditions:
-   a. All contributions must be submitted to the original author/maintainer
-   b. Contributors grant the original author/maintainer an irrevocable, worldwide, royalty-free license to use their contributions
-   c. The original author/maintainer has sole discretion to accept or reject contributions
+3. CONTRIBUTION TERMS
+   If you contribute modifications back to the project:
+   a. Your contributions become subject to the maintainer's sole discretion for inclusion
+   b. Contributors retain rights to their contributions while granting the project maintainer license to use them
 
-4. NO WARRANTY
+4. TERMINATION
+   This license automatically terminates if you violate any of its terms. Upon termination, you must destroy all copies of the Software.
+
+5. NO WARRANTY
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
-5. LIMITATION OF LIABILITY
+6. LIMITATION OF LIABILITY
    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 BY USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ THIS LICENSE, UNDERSTAND IT, AND AGREE TO BE BOUND BY ITS TERMS AND CONDITIONS. 
