@@ -212,6 +212,9 @@ async function generatePlanningPrompt(question, history, userId = 'default') {
     4. Each step must have a specific purpose and use a specific tool.
     5. Do not make assumptions about tool capabilities - use exactly the tools listed above.
     6. Do not reference external APIs, databases, or resources unless they are included in the tools list.
+    
+    
+    NEVER create compound action names like "toolName.action" - always use the exact tool name (in this case "toolName")!
     `;
 }
 
