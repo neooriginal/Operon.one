@@ -11,6 +11,7 @@ const contextManager = require('./utils/context');
 const io = require('./socket');
 const sanitize = require('sanitize-filename');
 const prompts = require('./tools/AI/prompts');
+const ai = require('./tools/AI/ai');
 const { taskStepFunctions } = require('./database');
 require('dotenv').config();
 
@@ -194,7 +195,7 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
     
     // Get plan from AI using planning model
-    let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "planning", userId, chatId);
+    let planObject = await ai.callAI(prompt, question, history, undefined, true, "planning", userId, chatId);
     
     // Handle direct answers without complex planning
     if (planObject.directAnswer === true && planObject.answer) {
@@ -701,7 +702,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "reflection", userId, chatId),
+      ai.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "reflection", userId, chatId),
       30000 
     );
     
@@ -738,7 +739,7 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Generate final response", history, undefined, false, "auto", userId, chatId),
+      ai.callAI(prompt, "Generate final response", history, undefined, false, "auto", userId, chatId),
       60000 
     );
     

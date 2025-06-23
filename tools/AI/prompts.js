@@ -52,7 +52,6 @@ ${toolsList}
 - **Planning**: Plan extensively before each action, and reflect extensively on the outcomes of previous actions. This will improve your ability to solve problems effectively.
 - **Do not ask the user for confirmation** at any point.
 - **Do not pause execution** unless a required tool is unavailable.
-- Use the chatCompletion tool to **self-evaluate**, plan tasks, and analyze intermediate results as needed.
 - Always **complete tasks end-to-end**, writing full outputs to files using fileSystem.
 - Save important intermediate thoughts, todos, or plans using fileSystem for reference or final review.
 - Structure your execution as **a series of clear, defined steps** in JSON format (see below).
@@ -76,8 +75,8 @@ ${toolsList}
 
 #### Research
 - Conduct comprehensive research on a given topic.
-- Use deepResearch, webSearch, and chatCompletion for information gathering and synthesis.
-- Use writer to produce a structured research paper.
+- Use deepResearch, webSearch for information gathering and synthesis.
+- Use writer to produce a structured research paper. This is not needed for short and simple answers.
 - Save the final paper and any useful intermediate notes to the output folder.
 - **Ensure your research is accurate, comprehensive, and properly validated.**
 
@@ -98,12 +97,12 @@ For complex tasks, return a JSON object structured like this:
 {
   "step1": {
     "step": "Brief explanation of what the step does",
-    "action": "Tool to use (e.g., chatCompletion, fileSystem, etc.)",
+    "action": "Tool to use (e.g., fileSystem, etc.)",
     "expectedOutput": "What will be produced",
     "usingData": "List of tools or data sources used (default: all)",
     "validations": "How you will validate the output for correctness",
     "intensity": "Optional: For deepResearch, specify a number 1-10 to control search depth",
-    "model": "Optional: Choose AI model - 'o4-mini' (fast/cheap), 'gpt-4.1' (balanced/default), or 'gpt-4o' (advanced/expensive). Only use for chatCompletion steps."
+    "model": "Optional: Choose AI model - 'o4-mini' (fast/cheap), 'gpt-4.1' (balanced/default), or 'gpt-4o' (advanced/expensive)."
   },
   "step2": {
     ...
@@ -134,8 +133,8 @@ For simple questions or chit-chat, return:
     "validations": "Ensure plan covers all major aspects of internet history"
   },
   "step2": {
-    "step": "Ask chatCompletion to explain 'What is the internet?' as a base",
-    "action": "chatCompletion",
+    "step": "Explain 'What is the internet?' as a base",
+    "action": "directAnswer",
     "expectedOutput": "Brief history and function of the internet",
     "usingData": "none",
     "validations": "Check for accuracy and coverage of key concepts",
@@ -153,7 +152,7 @@ For simple questions or chit-chat, return:
     "step": "Write a structured research paper using writer based on the gathered material",
     "action": "writer",
     "expectedOutput": "research_paper.txt",
-    "usingData": "deepResearch,chatCompletion",
+    "usingData": "deepResearch",
     "validations": "Review for factual accuracy, source citation, and completeness"
   },
   "step5": {
@@ -203,7 +202,7 @@ async function generatePlanningPrompt(question, history, userId = 'default') {
     - For simple reasoning/analysis tasks, use "o4-mini" (fast and cost-effective)
     - For complex problem-solving or creative tasks, use "gpt-4o" (most capable but expensive)
     - Default to "gpt-4.1" for balanced performance (this is the default if no model specified)
-    - Only specify model for chatCompletion steps, other tools use their default configurations
+    - Only specify model for directAnswer steps, other tools use their default configurations
     
     IMPORTANT INSTRUCTIONS:
     1. Follow these instructions EXACTLY and LITERALLY.
