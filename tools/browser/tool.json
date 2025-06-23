@@ -3,5 +3,6 @@
   "description": "For complex web browsing tasks that require interaction. Only needs to be called once, it will automatically complete the steps.",
   "example": "webBrowser: To a specific task",
   "enabled": true,
-  "main": "main.js"
+  "main": "main.js",
+  "skipReasoning": false
 } 

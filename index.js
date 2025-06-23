@@ -11,6 +11,7 @@ const contextManager = require('./utils/context');
 const io = require('./socket');
 const sanitize = require('sanitize-filename');
 const prompts = require('./tools/AI/prompts');
+const ai = require('./tools/AI/ai');
 const { taskStepFunctions } = require('./database');
 require('dotenv').config();
 
@@ -66,6 +67,7 @@ function sanitizeFilePath(unsafePath, userId) {
 const toolsDirectory = path.join(__dirname, 'tools');
 const tools = {};
 const toolDescriptions = [];
+const toolConfigs = {};
 
 /**
  * Loads all enabled tools from the tools directory.
@@ -97,6 +99,7 @@ function loadTools() {
           
           const toolModule = require(path.join(toolsDirectory, folder, mainFile));
           tools[toolConfig.title] = toolModule;
+          toolConfigs[toolConfig.title] = toolConfig;
           
           toolDescriptions.push({
             title: toolConfig.title,
@@ -194,7 +197,7 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
     
     // Get plan from AI using planning model
-    let planObject = await tools.chatCompletion.callAI(prompt, question, history, undefined, true, "planning", userId, chatId);
+    let planObject = await ai.callAI(prompt, question, history, undefined, true, "planning", userId, chatId);
     
     // Handle direct answers without complex planning
     if (planObject.directAnswer === true && planObject.answer) {
@@ -362,12 +365,23 @@ async function executeSteps(plan, question, userId, chatId) {
     const currentStepIndex = contextManager.getCurrentStepIndex(userId, chatId);
     const step = plan[currentStepIndex];
 
-    // Reason about the step
-    io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
-    const enhancedStep = await tools.react.processStep(step, userId, chatId);
-
-    // Execute the step
-    io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
+    // Check if reasoning should be skipped for this tool
+    const toolConfig = toolConfigs[step.action];
+    const shouldSkipReasoning = toolConfig?.skipReasoning === true;
+    
+    let enhancedStep;
+    if (shouldSkipReasoning) {
+      // Skip reasoning, use step as-is
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Executing: ${step.step} using ${step.action}` });
+      enhancedStep = step;
+    } else {
+      // Reason about the step
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reasoning about: ${step.step}` });
+      enhancedStep = await tools.react.processStep(step, userId, chatId);
+      
+      // Execute the step
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Executing: ${enhancedStep.step} using ${enhancedStep.action}` });
+    }
     
     // Get filtered step outputs based on data dependencies
     const filteredStepsOutput = contextManager.getFilteredStepsOutput(enhancedStep.usingData, userId, chatId);
@@ -396,20 +410,22 @@ async function executeSteps(plan, question, userId, chatId) {
 
     contextManager.addStepOutput(stepOutput, userId, chatId);
     
-    // Reflect on result
-    io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
-    const reflection = await tools.react.reflectOnResult(enhancedStep, summary, userId, chatId);
-    
-    // Check if plan needs to be updated
-    if (reflection && reflection.changePlan === true) {
-      await updatePlanIfNeeded(question, userId, chatId);
+    // Reflect on result (only if reasoning wasn't skipped)
+    if (!shouldSkipReasoning) {
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: `Reflecting on: ${enhancedStep.step}` });
+      const reflection = await tools.react.reflectOnResult(enhancedStep, summary, userId, chatId);
+      
+      // Check if plan needs to be updated
+      if (reflection && reflection.changePlan === true) {
+        await updatePlanIfNeeded(question, userId, chatId);
+      }
     }
     
     // Move to next step
     contextManager.incrementStepIndex(userId, chatId);
     
-    // Periodically save thought chain
-    if (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1) {
+    // Periodically save thought chain (only if reasoning was used)
+    if (!shouldSkipReasoning && (currentStepIndex % 3 === 0 || currentStepIndex === plan.length - 1)) {
       await tools.react.saveThoughtChain(tools.fileSystem, userId, chatId);
     }
   }
@@ -701,7 +717,7 @@ async function checkProgress(question, plan, stepsOutput, currentStepIndex, user
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "reflection", userId, chatId),
+      ai.callAI(prompt, "Analyze task progress and suggest plan changes", history, undefined, true, "reflection", userId, chatId),
       30000 
     );
     
@@ -738,7 +754,7 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     
     const response = await withTimeout(
-      tools.chatCompletion.callAI(prompt, "Generate final response", history, undefined, false, "auto", userId, chatId),
+      ai.callAI(prompt, "Generate final response", history, undefined, false, "auto", userId, chatId),
       60000 
     );
     
