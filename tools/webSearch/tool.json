@@ -3,5 +3,6 @@
   "description": "Quick web search using DuckDuckGo with Bing fallback for real-time information gathering",
   "example": "webSearch: Find current price of ETH in USD",
   "enabled": true,
-  "main": "main.js"
+  "main": "main.js",
+  "skipReasoning": true
 } 
