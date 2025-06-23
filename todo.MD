@@ -5,5 +5,5 @@
 - AI asking follow up questions to a task
 - Personality Engine
 - memory system for storing info
-- live browser view 
 - option to send completion emails if a task is more then 2 steps
+- API

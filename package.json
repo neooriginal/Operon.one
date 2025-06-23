@@ -27,6 +27,8 @@
     "express-rate-limit": "^7.5.0",
     "figlet": "^1.8.0",
     "jsonwebtoken": "^9.0.2",
+    "mime-types": "^3.0.1",
+    "multer": "^2.0.1",
     "node-fetch": "^2.6.9",
     "nodemailer": "^6.10.1",
     "openai": "^4.90.0",

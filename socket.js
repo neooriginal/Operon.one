@@ -67,6 +67,16 @@ const httpServer = require("http").createServer(app);
 httpServer.timeout = parseInt(process.env.HTTP_TIMEOUT) || 60000;
 httpServer.keepAliveTimeout = parseInt(process.env.KEEP_ALIVE_TIMEOUT) || 65000;
 
+// Global function to update sidebar for specific users
+global.updateSidebar = (userId, toolName, data) => {
+    if (io) {
+        io.to(`user:${userId}`).emit('sidebar_update', {
+            toolName,
+            data
+        });
+    }
+};
+
 const io = socket(httpServer, {
     cors: {
         origin: ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000", "http://127.0.0.1:3000"],
@@ -592,6 +602,16 @@ io.on('connection', (socketClient) => {
                  userId: taskUserId
              });
          }
+     });
+
+     // Handle tool sidebar updates
+     socketClient.on('request_sidebar_info', (data) => {
+         if (!socketClient.authenticated) {
+             return;
+         }
+         const { toolName } = data;
+         // Emit request to get current sidebar info for the specific tool
+         socketClient.emit('sidebar_info_requested', { toolName, userId: socketClient.userId });
      });
 
      socketClient.on('disconnect', () => {

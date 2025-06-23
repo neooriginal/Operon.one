@@ -13,6 +13,31 @@ const MAX_HISTORY_LENGTH = 3;
 const browserInstances = new Map();
 const pageInstances = new Map();
 
+// Sidebar management
+function updateBrowserSidebar(userId, page = null) {
+    if (typeof global.updateSidebar === 'function' && page) {
+        try {
+            // Get current page info and screenshot
+            Promise.all([
+                page.url(),
+                page.title(),
+                takeScreenshot(userId)
+            ]).then(([currentUrl, pageTitle, screenshot]) => {
+                global.updateSidebar(userId, 'browser', {
+                    currentUrl,
+                    pageTitle,
+                    screenshot,
+                    timestamp: Date.now()
+                });
+            }).catch(error => {
+                console.warn('Failed to update browser sidebar:', error.message);
+            });
+        } catch (error) {
+            console.warn('Error updating browser sidebar:', error.message);
+        }
+    }
+}
+
 async function initialize(userId = 'default'){
     if(browserInstances.has(userId)){
         return browserInstances.get(userId);
@@ -189,12 +214,32 @@ async function taskFunction(task, data, image, websiteTextContent, userId = 'def
     
     if(result.action === "goToPage"){
         await goToPage(result.url, userId);
+        // Update sidebar after navigation
+        const page = pageInstances.get(userId);
+        if (page) {
+            setTimeout(() => updateBrowserSidebar(userId, page), 1000); // Wait for page to load
+        }
     }else if(result.action === "click"){
         await click(result.element, userId);
+        // Update sidebar after interaction
+        const page = pageInstances.get(userId);
+        if (page) {
+            setTimeout(() => updateBrowserSidebar(userId, page), 500);
+        }
     }else if(result.action === "input"){
         await input(result.element, result.text, userId);
+        // Update sidebar after input
+        const page = pageInstances.get(userId);
+        if (page) {
+            setTimeout(() => updateBrowserSidebar(userId, page), 500);
+        }
     }else if(result.action === "scroll"){
         await scroll(result.direction, userId);
+        // Update sidebar after scroll
+        const page = pageInstances.get(userId);
+        if (page) {
+            setTimeout(() => updateBrowserSidebar(userId, page), 500);
+        }
     }else if(result.action === "close"){
         console.log(result.summary);
         

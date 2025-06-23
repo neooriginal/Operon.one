@@ -8,6 +8,28 @@ const { fileFunctions } = require('../../database');
 
 const containerFilesTracked = new Map(); 
 
+// Sidebar management
+function updateSidebarInfo(userId, currentFile, workingDirectory) {
+    if (typeof global.updateSidebar === 'function') {
+        const recentFiles = getRecentFiles(userId);
+        global.updateSidebar(userId, 'filesystem', {
+            currentFile,
+            workingDirectory,
+            recentFiles,
+            timestamp: Date.now()
+        });
+    }
+}
+
+function getRecentFiles(userId) {
+    const userFiles = Array.from(containerFilesTracked.values())
+        .filter(file => file.userId === userId)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5)
+        .map(file => file.path);
+    return userFiles;
+}
+
 
 async function getContainer(userId = 'default', retries = 3) {
     let lastError;
@@ -78,7 +100,7 @@ async function trackContainerFile(userId, containerPath, chatId = 1) {
 }
 
 
-async function saveToFile(containerName, content, userPath, filename) {
+async function saveToFile(containerName, content, userPath, filename, userId = 'default') {
     
     const normalizedPath = userPath?.replace(/\\/g, '/') || '/app/output';
     const normalizedFilename = filename?.replace(/\\/g, '/') || '';
@@ -90,6 +112,10 @@ async function saveToFile(containerName, content, userPath, filename) {
     }
     
     await docker.writeFile(containerName, filePath, content);
+    
+    // Update sidebar with current file information
+    updateSidebarInfo(userId, filePath, normalizedPath);
+    
     return filePath; 
 }
 
@@ -269,7 +295,7 @@ async function runStep(containerName, task, otherAIData, userId = 'default', cha
             if (!result.filename) {
                 throw new Error("Filename must be provided for saveToFile action.");
             }
-            const absoluteFilePath = await saveToFile(containerName, result.content, result.path, result.filename);
+            const absoluteFilePath = await saveToFile(containerName, result.content, result.path, result.filename, userId);
             operationResult = `File saved: ${absoluteFilePath}`;
             
             
@@ -392,6 +418,9 @@ async function runStep(containerName, task, otherAIData, userId = 'default', cha
             const normalizedFilename = result.filename?.replace(/\\/g, '/');
             const absoluteFilePath = path.posix.join(normalizedPath, normalizedFilename);
             operationResult = `File read: ${absoluteFilePath}`;
+            
+            // Update sidebar
+            updateSidebarInfo(userId, absoluteFilePath, normalizedPath);
             
             
             toolState.operations.push({

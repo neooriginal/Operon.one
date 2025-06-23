@@ -3,6 +3,16 @@ const ai = require("../AI/ai");
 const contextManager = require("../../utils/context");
 const cheerio = require("cheerio");
 
+// Sidebar management
+function updateDeepSearchSidebar(userId, data) {
+    if (typeof global.updateSidebar === 'function') {
+        global.updateSidebar(userId, 'deepSearch', {
+            ...data,
+            timestamp: Date.now()
+        });
+    }
+}
+
 
 const cache = {
     data: {},
@@ -46,6 +56,14 @@ async function runTask(task, otherAIData, callback, userId = 'default', intensit
         contextManager.updateContext(userId, userContext);
         
         let report = await evaluatewithAI(task, webData+"\n\n Also, there is some information that previous tasks have gathered. Keep them in mind while evaluating the web data and add them to the report to not duplicate information and other things. Here is the information: "+otherAIData, userId);
+        
+        // Update sidebar with completion status
+        updateDeepSearchSidebar(userId, {
+            currentTask: task,
+            status: 'Report completed',
+            reportSummary: report.substring(0, 200) + (report.length > 200 ? '...' : ''),
+            completed: true
+        });
         
         callback(report);
     } catch (error) {
@@ -129,6 +147,13 @@ async function searchWeb(task, userId = 'default', intensity) {
         let webData = [];
         let queries = await getQuery(task, userId, intensity);
         
+        // Update sidebar with current search status
+        updateDeepSearchSidebar(userId, {
+            currentTask: task,
+            status: 'Searching web...',
+            queriesGenerated: queries.length,
+            queries: queries.slice(0, 5) // Show first 5 queries
+        });
         
         const queryLimit = intensity ? Math.min(Math.max(3, intensity * 2), 20) : 8;
         queries = queries.slice(0, queryLimit);
@@ -156,9 +181,23 @@ async function searchWeb(task, userId = 'default', intensity) {
         webData = results.flat();
         
         
+        // Update sidebar with results found
+        updateDeepSearchSidebar(userId, {
+            currentTask: task,
+            status: 'Processing results...',
+            queriesProcessed: queries.length,
+            resultsFound: webData.length
+        });
+        
         if (webData.length > 0) {
             return webData.join("\n\n");
         } else {
+            updateDeepSearchSidebar(userId, {
+                currentTask: task,
+                status: 'No results found',
+                queriesProcessed: queries.length,
+                resultsFound: 0
+            });
             return "No search results found. Please try different search terms or check your internet connection.";
         }
     } catch (error) {

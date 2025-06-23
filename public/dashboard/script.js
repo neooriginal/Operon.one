@@ -784,7 +784,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 iconHtml = '';
         }
 
-        statusDisplay.innerHTML = `${iconHtml} <span>${text || '-'}</span>`;
+        const statusContent = statusDisplay.querySelector('.status-content');
+        if (statusContent) {
+            statusContent.innerHTML = `${iconHtml} ${text || '-'}`;
+        } else {
+            // Fallback for old structure
+            statusDisplay.innerHTML = `${iconHtml} <span>${text || '-'}</span>`;
+        }
     }
 
 
@@ -1836,7 +1842,386 @@ document.addEventListener('DOMContentLoaded', () => {
         return servers[serverName] || null;
     }
 
+    // Tool Sidebar Management
+    const toolSidebar = document.getElementById('tool-sidebar');
+    const toolSidebarToggle = document.getElementById('tool-sidebar-toggle');
+    const toolSidebarContent = document.getElementById('tool-sidebar-content');
+    const toolsToggleBtn = document.getElementById('tools-toggle-btn');
+    let activeSidebarTools = new Map();
+
+    // Initialize tool sidebar toggle
+    if (toolSidebarToggle) {
+        toolSidebarToggle.addEventListener('click', () => {
+            if (toolSidebar) {
+                toolSidebar.classList.toggle('active');
+                const isActive = toolSidebar.classList.contains('active');
+                toolSidebarToggle.innerHTML = `<i class="fas fa-${isActive ? 'times' : 'tools'}"></i>`;
+                updateToggleButtons(isActive);
+            }
+        });
+    }
+
+    // Initialize main tools toggle button
+    if (toolsToggleBtn) {
+        toolsToggleBtn.addEventListener('click', () => {
+            if (toolSidebar) {
+                toolSidebar.classList.toggle('active');
+                const isActive = toolSidebar.classList.contains('active');
+                updateToggleButtons(isActive);
+            }
+        });
+    }
+
+    function updateToggleButtons(isActive) {
+        if (toolsToggleBtn) {
+            toolsToggleBtn.classList.toggle('active', isActive);
+            toolsToggleBtn.title = isActive ? 'Hide Tools' : 'Show Tools';
+        }
+        if (toolSidebarToggle) {
+            toolSidebarToggle.innerHTML = `<i class="fas fa-${isActive ? 'times' : 'tools'}"></i>`;
+        }
+    }
+
+    // Socket event handlers for sidebar updates
+    socket.on('sidebar_update', (data) => {
+        const { toolName, data: toolData } = data;
+        updateToolSidebar(toolName, toolData);
+    });
+
+    function updateToolSidebar(toolName, data) {
+        if (!toolSidebarContent) return;
+
+        // Clear all other tools and only show the current one
+        activeSidebarTools.clear();
+        
+        if (data) {
+            activeSidebarTools.set(toolName, data);
+            renderToolSidebar();
+
+            // Auto-open sidebar when tool is active
+            if (!toolSidebar.classList.contains('active')) {
+                toolSidebar.classList.add('active');
+                updateToggleButtons(true);
+            }
+        } else {
+            // If no data, hide the sidebar
+            renderToolSidebar();
+            if (activeSidebarTools.size === 0) {
+                toolSidebar.classList.remove('active');
+                updateToggleButtons(false);
+            }
+        }
+    }
+
+    function renderToolSidebar() {
+        if (!toolSidebarContent) return;
+
+        // Clear existing content
+        toolSidebarContent.innerHTML = '';
+
+        if (activeSidebarTools.size === 0) {
+            toolSidebarContent.innerHTML = `
+                <div class="tool-sidebar-empty">
+                    <i class="fas fa-tools"></i>
+                    <p>No active tools</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Render each tool
+        activeSidebarTools.forEach((data, toolName) => {
+            if (!data) return;
+
+            const toolPanel = createToolPanel(toolName, data);
+            toolSidebarContent.appendChild(toolPanel);
+        });
+    }
+
+    function createToolPanel(toolName, data) {
+        const panel = document.createElement('div');
+        panel.className = 'tool-panel';
+        panel.id = `tool-panel-${toolName}`;
+
+        const iconMap = {
+            filesystem: 'fas fa-file-alt',
+            browser: 'fas fa-globe',
+            deepSearch: 'fas fa-search',
+            pythonExecute: 'fab fa-python',
+            default: 'fas fa-cog'
+        };
+
+        const icon = iconMap[toolName] || iconMap.default;
+
+        panel.innerHTML = `
+            <div class="tool-panel-header">
+                <i class="${icon}"></i>
+                <span class="tool-name">${toolName}</span>
+            </div>
+            <div class="tool-panel-body">
+                ${renderToolData(toolName, data)}
+            </div>
+        `;
+
+        return panel;
+    }
+
+    function renderToolData(toolName, data) {
+        switch (toolName) {
+            case 'filesystem':
+                return renderFilesystemData(data);
+            case 'browser':
+                return renderBrowserData(data);
+            case 'deepSearch':
+                return renderDeepSearchData(data);
+            case 'pythonExecute':
+                return renderPythonExecuteData(data);
+            default:
+                return renderGenericData(data);
+        }
+    }
+
+    function renderFilesystemData(data) {
+        let html = '';
+
+        if (data.currentFile) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Current File</div>
+                    <div class="tool-info-value">${escapeHtml(data.currentFile)}</div>
+                </div>
+            `;
+        }
+
+        if (data.workingDirectory) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Working Directory</div>
+                    <div class="tool-info-value">${escapeHtml(data.workingDirectory)}</div>
+                </div>
+            `;
+        }
+
+        if (data.recentFiles && data.recentFiles.length > 0) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Recent Files</div>
+                    <div class="tool-info-value">
+                        ${data.recentFiles.slice(0, 5).map(file => 
+                            `<div style="padding: 2px 0;">${escapeHtml(file)}</div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        return html || '<div class="tool-info-item">No file information available</div>';
+    }
+
+    function renderBrowserData(data) {
+        let html = '';
+
+        if (data.screenshot) {
+            html += `
+                <div class="browser-preview">
+                    ${data.currentUrl ? `<div class="browser-url">${escapeHtml(data.currentUrl)}</div>` : ''}
+                    <img src="data:image/png;base64,${data.screenshot}" alt="Browser Screenshot" />
+                </div>
+            `;
+        }
+
+        if (data.currentUrl && !data.screenshot) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Current URL</div>
+                    <div class="tool-info-value">${escapeHtml(data.currentUrl)}</div>
+                </div>
+            `;
+        }
+
+        if (data.pageTitle) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Page Title</div>
+                    <div class="tool-info-value">${escapeHtml(data.pageTitle)}</div>
+                </div>
+            `;
+        }
+
+        return html || '<div class="tool-info-item">No browser information available</div>';
+    }
+
+    function renderDeepSearchData(data) {
+        let html = '';
+
+        if (data.currentTask) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Current Task</div>
+                    <div class="tool-info-value">${escapeHtml(data.currentTask)}</div>
+                </div>
+            `;
+        }
+
+        if (data.status) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Status</div>
+                    <div class="tool-info-value">${escapeHtml(data.status)}</div>
+                </div>
+            `;
+        }
+
+        if (data.queriesGenerated) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Queries Generated</div>
+                    <div class="tool-info-value">${data.queriesGenerated}</div>
+                </div>
+            `;
+        }
+
+        if (data.queries && data.queries.length > 0) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Search Queries</div>
+                    <div class="tool-info-value">
+                        ${data.queries.map(query => 
+                            `<div style="padding: 2px 0;">• ${escapeHtml(query)}</div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (data.resultsFound !== undefined) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Results Found</div>
+                    <div class="tool-info-value">${data.resultsFound}</div>
+                </div>
+            `;
+        }
+
+        if (data.reportSummary) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Report Summary</div>
+                    <div class="tool-info-value">${escapeHtml(data.reportSummary)}</div>
+                </div>
+            `;
+        }
+
+        return html || '<div class="tool-info-item">No search information available</div>';
+    }
+
+    function renderPythonExecuteData(data) {
+        let html = '';
+
+        if (data.currentTask) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Current Task</div>
+                    <div class="tool-info-value">${escapeHtml(data.currentTask)}</div>
+                </div>
+            `;
+        }
+
+        if (data.status) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Status</div>
+                    <div class="tool-info-value">${escapeHtml(data.status)}</div>
+                </div>
+            `;
+        }
+
+        if (data.stage) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Stage</div>
+                    <div class="tool-info-value">${escapeHtml(data.stage)}</div>
+                </div>
+            `;
+        }
+
+        if (data.codePreview) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Code Preview</div>
+                    <div class="tool-info-value" style="font-family: monospace; white-space: pre-wrap;">${escapeHtml(data.codePreview)}</div>
+                </div>
+            `;
+        }
+
+        if (data.dependencies && data.dependencies.length > 0) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Dependencies</div>
+                    <div class="tool-info-value">
+                        ${data.dependencies.map(dep => 
+                            `<div style="padding: 2px 0;">• ${escapeHtml(dep)}</div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (data.outputPreview) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Output Preview</div>
+                    <div class="tool-info-value" style="font-family: monospace; white-space: pre-wrap;">${escapeHtml(data.outputPreview)}</div>
+                </div>
+            `;
+        }
+
+        if (data.error) {
+            html += `
+                <div class="tool-info-item">
+                    <div class="tool-info-label">Error</div>
+                    <div class="tool-info-value" style="color: #ef4444;">${escapeHtml(data.error)}</div>
+                </div>
+            `;
+        }
+
+        return html || '<div class="tool-info-item">No Python execution information available</div>';
+    }
+
+    function renderGenericData(data) {
+        let html = '';
+
+        if (typeof data === 'object') {
+            Object.entries(data).forEach(([key, value]) => {
+                html += `
+                    <div class="tool-info-item">
+                        <div class="tool-info-label">${escapeHtml(key)}</div>
+                        <div class="tool-info-value">${escapeHtml(String(value))}</div>
+                    </div>
+                `;
+            });
+        } else {
+            html = `<div class="tool-info-item">${escapeHtml(String(data))}</div>`;
+        }
+
+        return html || '<div class="tool-info-item">No information available</div>';
+    }
+
+
+
+    // Remove tools that haven't been updated in a while
+    setInterval(() => {
+        const now = Date.now();
+        activeSidebarTools.forEach((data, toolName) => {
+            if (data && data.timestamp && (now - data.timestamp) > 300000) { // 5 minutes
+                activeSidebarTools.delete(toolName);
+                renderToolSidebar();
+            }
+        });
+    }, 60000); // Check every minute
+
     // Make functions available in the global scope
     window.getMcpServers = getMcpServers;
     window.getMcpServerByName = getMcpServerByName;
+    window.updateToolSidebar = updateToolSidebar;
 }); 

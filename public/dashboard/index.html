@@ -334,7 +334,12 @@
             <div class="chat-interface" id="chat-interface">
                 <!-- Status Display Area -->
                 <div id="status-display" class="status-display">
-                    <i class="fas fa-info-circle"></i> Ready to help with complex tasks
+                    <div class="status-content">
+                        <i class="fas fa-info-circle"></i> Ready to help with complex tasks
+                    </div>
+                    <button class="tools-toggle-btn" id="tools-toggle-btn" title="Show Tools">
+                        <i class="fas fa-tools"></i>
+                    </button>
                 </div>
                 <div class="chat-messages" id="chat-messages">
                     <!-- Chat messages will be appended here -->
@@ -345,6 +350,22 @@
                 </div>
             </div>
         </div>
+
+        <!-- Tool Sidebar -->
+        <aside class="tool-sidebar" id="tool-sidebar">
+            <div class="tool-sidebar-header">
+                <h3>Tools</h3>
+                <button class="tool-sidebar-toggle" id="tool-sidebar-toggle">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="tool-sidebar-content" id="tool-sidebar-content">
+                <div class="tool-sidebar-empty">
+                    <i class="fas fa-tools"></i>
+                    <p>No active tools</p>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <!-- Redeem Code Modal -->

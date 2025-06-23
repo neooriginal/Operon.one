@@ -7,6 +7,16 @@ const contextManager = require('../../utils/context');
 const getPlatform = require("../../utils/getPlatform");
 const crypto = require('crypto');
 
+// Sidebar management
+function updatePythonSidebar(userId, data) {
+    if (typeof global.updateSidebar === 'function') {
+        global.updateSidebar(userId, 'pythonExecute', {
+            ...data,
+            timestamp: Date.now()
+        });
+    }
+}
+
 
 function validatePath(filePath, baseDirectory) {
     
@@ -131,6 +141,13 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
         task = task + "\n\nOther AI Data: " + (otherAIData || "");
         
         
+        // Update sidebar with initial status
+        updatePythonSidebar(userId, {
+            currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+            status: 'Generating Python code...',
+            stage: 'code_generation'
+        });
+        
         let codeResult;
         try {
             codeResult = await generateCode(task, userId);
@@ -140,6 +157,14 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
                 const errorMsg = "Failed to generate Python code: " + (codeResult?.error || "Unknown error");
                 toolState.lastError = errorMsg;
                 contextManager.setToolState('pythonExecute', toolState, userId);
+                
+                updatePythonSidebar(userId, {
+                    currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                    status: 'Code generation failed',
+                    error: errorMsg,
+                    stage: 'error'
+                });
+                
                 const errorResult = { error: errorMsg, success: false };
                 if (callback) callback(errorResult);
                 return errorResult;
@@ -149,6 +174,14 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
             const errorMsg = "Error generating code: " + error.message;
             toolState.lastError = errorMsg;
             contextManager.setToolState('pythonExecute', toolState, userId);
+            
+            updatePythonSidebar(userId, {
+                currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                status: 'Code generation failed',
+                error: errorMsg,
+                stage: 'error'
+            });
+            
             const errorResult = { error: errorMsg, success: false };
             if (callback) callback(errorResult);
             return errorResult;
@@ -160,14 +193,33 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
             
             const result = await safeExecute(async (containerName) => {
                 
+                updatePythonSidebar(userId, {
+                    currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                    status: 'Writing code to container...',
+                    codePreview: codeResult.code.substring(0, 200) + (codeResult.code.length > 200 ? '...' : ''),
+                    stage: 'preparing'
+                });
+                
                 await docker.writeFile(containerName, scriptPath, codeResult.code);
                 
                 
                 if (codeResult["pip install"] && codeResult["pip install"].length > 0) {
+                    updatePythonSidebar(userId, {
+                        currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                        status: 'Installing dependencies...',
+                        dependencies: codeResult["pip install"],
+                        stage: 'dependencies'
+                    });
+                    
                     const pipCommand = `pip install ${codeResult["pip install"].join(' ')}`;
                     await docker.executeCommand(containerName, pipCommand);
                 }
                 
+                updatePythonSidebar(userId, {
+                    currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                    status: 'Executing Python script...',
+                    stage: 'executing'
+                });
                 
                 const { stdout, stderr } = await docker.executePython(containerName, scriptPath);
                 
@@ -179,8 +231,23 @@ async function runTask(task, otherAIData, callback, userId = 'default') {
                 });
                 contextManager.setToolState('pythonExecute', toolState, userId);
                 
+                updatePythonSidebar(userId, {
+                    currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                    status: 'Evaluating output...',
+                    outputPreview: stdout.substring(0, 300) + (stdout.length > 300 ? '...' : ''),
+                    stage: 'evaluating'
+                });
                 
                 const summary = await evaluateOutput(task, stdout, userId);
+                
+                updatePythonSidebar(userId, {
+                    currentTask: task.substring(0, 100) + (task.length > 100 ? '...' : ''),
+                    status: 'Execution completed',
+                    outputPreview: stdout.substring(0, 300) + (stdout.length > 300 ? '...' : ''),
+                    stage: 'completed',
+                    completed: true
+                });
+                
                 return summary;
             }, userId);
             
