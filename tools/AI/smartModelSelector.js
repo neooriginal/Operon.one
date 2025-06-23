@@ -8,7 +8,7 @@ const MODEL_CONFIG = {
     "gpt-4.1": { model: "openai/gpt-4.1", maxTokens: 120000 }
 };
 
-const DEFAULT_CONFIG = { model: "openai/gpt-4.1", maxTokens: 120000 };
+const DEFAULT_CONFIG = { model: "openai/gpt-4o", maxTokens: 120000 };
 
 function getModel(prompt, mode) {
     return MODEL_CONFIG[mode] || DEFAULT_CONFIG;

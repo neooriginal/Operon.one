@@ -1,6 +1,7 @@
 const axios = require("axios");
 const ai = require("../AI/ai");
 const contextManager = require("../../utils/context");
+const cheerio = require("cheerio");
 
 async function runTask(task, otherAIData, callback, userId = 'default'){
     try {
@@ -162,55 +163,33 @@ async function searchWeb(task, userId = 'default'){
         for(let query of queries){
             try {
                 
-                const axiosConfig = {
-                    timeout: 15000 
-                };
-                
-                
-                console.log(`Searching Wikipedia for "${query}"...`);
+                console.log(`Searching web for "${query}"...`);
                 
                 
                 toolState.searchProgress.currentQuery = query;
                 contextManager.setToolState('webSearch', toolState, userId);
                 
-                const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=3`;
-                const searchResponse = await axios.get(searchUrl, axiosConfig);
+                const searchResults = await performWebSearch(query);
                 
-                if (searchResponse.data.query && searchResponse.data.query.search) {
-                    const articles = searchResponse.data.query.search;
+                if (searchResults && searchResults.length > 0) {
+                    webData.push(`Search results for "${query}":\n${searchResults}`);
                     
-                    for (let article of articles) {
-                        try {
-                            const title = article.title;
-                            
-                            
-                            toolState.searchProgress.currentArticle = title;
-                            contextManager.setToolState('webSearch', toolState, userId);
-                            
-                            const contentUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-                            const contentResponse = await axios.get(contentUrl, axiosConfig);
-                            
-                            if (contentResponse.data.extract) {
-                                const articleData = `Wikipedia article on "${title}":\n${contentResponse.data.extract}`;
-                                webData.push(articleData);
-                                
-                                
-                                toolState.searchProgress.results.push({
-                                    query,
-                                    title,
-                                    snippet: contentResponse.data.extract.substring(0, 100) + "..."
-                                });
-                                contextManager.setToolState('webSearch', toolState, userId);
-                            }
-                        } catch (articleError) {
-                            console.error(`Error fetching article: ${articleError.message}`);
-                            continue;
-                        }
-                        
-                        
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
+                    
+                    toolState.searchProgress.results.push({
+                        query,
+                        resultsFound: true,
+                        snippet: searchResults.substring(0, 100) + "..."
+                    });
+                } else {
+                    
+                    toolState.searchProgress.results.push({
+                        query,
+                        resultsFound: false,
+                        snippet: "No results found"
+                    });
                 }
+                
+                contextManager.setToolState('webSearch', toolState, userId);
                 
                 console.log(`Successfully processed query "${query}"`);
                 
@@ -263,6 +242,87 @@ async function searchWeb(task, userId = 'default'){
         contextManager.setToolState('webSearch', toolState, userId);
         
         return "Unable to search web due to network issues. Please try again later.";
+    }
+}
+
+async function performWebSearch(query) {
+    const searchEngines = [
+        { name: 'DuckDuckGo', fn: searchDuckDuckGo },
+        { name: 'Bing', fn: searchBing }
+    ];
+    
+    
+    for (const engine of searchEngines) {
+        try {
+            console.log(`Trying ${engine.name} for query: "${query}"`);
+            const results = await engine.fn(query);
+            if (results && results.trim().length > 0) {
+                return results;
+            }
+        } catch (error) {
+            console.log(`${engine.name} failed: ${error.message}`);
+            continue;
+        }
+    }
+    
+    return null;
+}
+
+async function searchDuckDuckGo(query) {
+    try {
+        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const response = await axios.get(searchUrl, {
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        
+        const $ = cheerio.load(response.data);
+        const results = [];
+        
+        $('.result').each((i, el) => {
+            if (i < 5) {
+                const title = $(el).find('.result__title').text().trim();
+                const snippet = $(el).find('.result__snippet').text().trim();
+                if (title && snippet) {
+                    results.push(`${title}: ${snippet}`);
+                }
+            }
+        });
+        
+        return results.join('\n\n');
+    } catch (error) {
+        throw new Error(`DuckDuckGo search failed: ${error.message}`);
+    }
+}
+
+async function searchBing(query) {
+    try {
+        const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+        const response = await axios.get(searchUrl, {
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        
+        const $ = cheerio.load(response.data);
+        const results = [];
+        
+        $('.b_algo').each((i, el) => {
+            if (i < 5) {
+                const title = $(el).find('h2').text().trim();
+                const snippet = $(el).find('.b_caption p').text().trim();
+                if (title && snippet && snippet.length > 20) {
+                    results.push(`${title}: ${snippet}`);
+                }
+            }
+        });
+        
+        return results.join('\n\n');
+    } catch (error) {
+        throw new Error(`Bing search failed: ${error.message}`);
     }
 }
 
