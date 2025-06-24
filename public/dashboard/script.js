@@ -1379,8 +1379,8 @@ document.addEventListener('DOMContentLoaded', () => {
             stepGroups = {};
             const planGroupContent = addStepGroup(`Plan (${data.plan.length} Steps)`, false);
             
-            // Add email notification checkbox if task has more than 2 steps
-            if (data.plan.length > 2 && !data.loadedFromHistory && !data.restoredFromRunning) {
+            // Add email notification checkbox if task has more than 2 steps and email service is available
+            if (data.plan.length > 2 && !data.loadedFromHistory && !data.restoredFromRunning && data.emailServiceAvailable) {
                 const emailNotificationContainer = document.createElement('div');
                 emailNotificationContainer.className = 'email-notification-container';
                 emailNotificationContainer.style.cssText = `

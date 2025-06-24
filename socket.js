@@ -699,11 +699,16 @@ io.on('connection', (socketClient) => {
                  });
                  
                  if (plan.length > 0) {
+                     // Check if email service is available
+                     const emailService = require('./utils/emailService');
+                     const emailServiceAvailable = emailService.isEmailServiceAvailable();
+                     
                      socketClient.emit('steps', {
                          userId: socketClient.userId,
                          chatId: numericChatId,
                          plan: plan,
-                         restoredFromRunning: true
+                         restoredFromRunning: true,
+                         emailServiceAvailable
                      });
                      
                      for (let i = 0; i < currentStepIndex && i < plan.length; i++) {

@@ -305,8 +305,12 @@ async function executeTaskPlan(planObject, question, userId, chatId, isFollowUp)
     ]
   }, userId, chatId);
   
+  // Check if email service is available
+  const emailService = require('./utils/emailService');
+  const emailServiceAvailable = emailService.isEmailServiceAvailable();
+  
   // Emit steps to client
-  io.to(`user:${userId}`).emit('steps', { userId, chatId, plan });
+  io.to(`user:${userId}`).emit('steps', { userId, chatId, plan, emailServiceAvailable });
   
   // Store steps in database for history reconstruction
   try {
@@ -1005,7 +1009,11 @@ if (require.main === module) {
               action: step.stepData.action,
               expectedOutput: step.stepData.expectedOutput
             }));
-            socket.emit('steps', { userId, chatId, plan, loadedFromHistory: true });
+            // Check if email service is available
+            const emailService = require('./utils/emailService');
+            const emailServiceAvailable = emailService.isEmailServiceAvailable();
+            
+            socket.emit('steps', { userId, chatId, plan, loadedFromHistory: true, emailServiceAvailable });
             
             // Emit step completions for completed steps
             taskSteps.forEach((taskStep, index) => {
