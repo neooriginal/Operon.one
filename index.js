@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const ascii = require('./utils/ascii');
 const contextManager = require('./utils/context');
+const logger = require('./utils/logger');
+const config = require('./utils/config');
 
 const io = require('./socket');
 const sanitize = require('sanitize-filename');
@@ -15,7 +17,7 @@ const ai = require('./tools/AI/ai');
 const { taskStepFunctions } = require('./database');
 require('dotenv').config();
 
-const SCREENSHOT_INTERVAL = 5000;
+const SCREENSHOT_INTERVAL = config.tasks.screenshotInterval;
 
 /**
  * Sanitizes a path by ensuring it contains only safe characters.
@@ -92,7 +94,7 @@ function loadTools() {
             if (fs.existsSync(path.join(toolsDirectory, folder, 'index.js'))) {
               mainFile = 'index.js';
             } else {
-              console.warn(`Warning: Main file ${mainFile} not found for tool ${folder}, skipping`);
+              logger.warn('Main file not found for tool, skipping', { mainFile, folder });
               return;
             }
           }
@@ -107,7 +109,7 @@ function loadTools() {
             example: toolConfig.example
           });
           
-          console.log(`Loaded tool: ${toolConfig.title}`);
+          logger.tool(toolConfig.title, 'Tool loaded successfully');
           
           // Initialize browser tool if it's the one we just loaded
           if (toolConfig.title === 'webBrowser' && folder === 'browser') {
@@ -118,17 +120,17 @@ function loadTools() {
               if (typeof initModule.initialize === 'function') {
                 // Initialize async but don't block startup
                 initModule.initialize().catch(err => {
-                  console.error(`Failed to initialize browser tool: ${err.message}`);
+                  logger.error('Failed to initialize browser tool', { error: err.message });
                 });
               }
             }
           }
         }
       } else {
-        console.warn(`Warning: No tool.json found in ${folder}, skipping`);
+        logger.warn('No tool.json found, skipping tool folder', { folder });
       }
     } catch (error) {
-      console.error(`Error loading tool from ${folder}:`, error.message);
+      logger.error('Error loading tool', { folder, error: error.message });
     }
   });
   
@@ -166,7 +168,7 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     
     // Check if a task is already running for this user
     if (contextManager.isTaskRunning(userId, chatId)) {
-      console.log(`Task already running for user ${userId} in chat ${chatId}`);
+      logger.warn('Task already running', { userId, chatId });
       io.to(`user:${userId}`).emit('task_error', { 
         userId, 
         chatId, 
@@ -827,15 +829,15 @@ async function finalizeTask(question, stepsOutput, userId = 'default', chatId = 
  */
 async function cleanupUserResources(userId) {
   try {
-    console.log(`Starting cleanup for user ${userId}`);
+    logger.debug('Starting cleanup for user', { userId });
     
     // Clean up browser resources if used
     if (tools.webBrowser) {
       try {
         await tools.webBrowser.cleanupResources(userId);
-        console.log(`Browser cleanup completed for user ${userId}`);
+        logger.debug('Browser cleanup completed', { userId });
       } catch (browserError) {
-        console.error("Error closing browser instance:", browserError.message);
+        logger.error('Error closing browser instance', { error: browserError.message, userId });
       }
     }
     
@@ -843,15 +845,15 @@ async function cleanupUserResources(userId) {
     if (tools.mcpClient && typeof tools.mcpClient.cleanupMcpManager === 'function') {
       try {
         await tools.mcpClient.cleanupMcpManager(userId);
-        console.log(`MCP cleanup completed for user ${userId}`);
+        logger.debug('MCP cleanup completed', { userId });
       } catch (mcpError) {
-        console.error(`Error during MCP cleanup for user ${userId}:`, mcpError.message);
+        logger.error('Error during MCP cleanup', { error: mcpError.message, userId });
       }
     }
     
-    console.log(`Cleanup completed for user ${userId}`);
+    logger.info('Cleanup completed for user', { userId });
   } catch (error) {
-    console.error(`Error during cleanup for user ${userId}:`, error.message);
+    logger.error('Error during cleanup', { error: error.message, userId });
   }
 }
 
@@ -908,7 +910,7 @@ module.exports = {
  */
 // Global cleanup function for process termination
 async function globalCleanup() {
-  console.log('\nReceived termination signal, cleaning up...');
+  logger.info('Received termination signal, cleaning up');
 
   try {
     // Clean up resources for all known users
@@ -924,9 +926,9 @@ async function globalCleanup() {
       await cleanupUserResources(id);
     }
 
-    console.log('Global cleanup completed');
+    logger.info('Global cleanup completed');
   } catch (error) {
-    console.error('Error during global cleanup:', error.message);
+    logger.error('Error during global cleanup', { error: error.message });
   }
 
   process.exit(0);
@@ -991,7 +993,7 @@ if (require.main === module) {
               }
             }
           } catch (fileError) {
-            console.error('Error getting files from history:', fileError);
+            logger.error('Error getting files from history', { error: fileError.message, userId, chatId });
           }
           
           // Get task steps for visualization
@@ -999,7 +1001,7 @@ if (require.main === module) {
           try {
             taskSteps = await taskStepFunctions.getTaskSteps(userId, chatId);
           } catch (stepError) {
-            console.error('Error getting task steps from history:', stepError);
+            logger.error('Error getting task steps from history', { error: stepError.message, userId, chatId });
           }
           
           // Emit task steps first if they exist

@@ -10,6 +10,8 @@ const adminRoutes = require('./adminRoutes');
 const { chatFunctions, fileFunctions, taskStepFunctions } = require('./database');
 const mime = require('mime-types');
 const rateLimit = require('express-rate-limit');
+const logger = require('./utils/logger');
+const config = require('./utils/config');
 
 
 const app = express();
@@ -25,13 +27,11 @@ app.use(require('cookie-parser')());
 
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 500, 
+  windowMs: config.rateLimit.windowMs, 
+  max: config.rateLimit.maxRequests, 
   standardHeaders: true,
   message: { error: 'Too many requests, please try again later.' },
-  // Use proper IP extraction for trusted proxy environments
   keyGenerator: (req) => {
-    // When behind a reverse proxy, use the real IP from X-Forwarded-For
     return req.ip || req.connection.remoteAddress;
   }
 });
@@ -64,8 +64,8 @@ app.use('/api/admin', adminRoutes);
 const httpServer = require("http").createServer(app);
 
 // Configure server timeouts
-httpServer.timeout = parseInt(process.env.HTTP_TIMEOUT) || 60000;
-httpServer.keepAliveTimeout = parseInt(process.env.KEEP_ALIVE_TIMEOUT) || 65000;
+httpServer.timeout = config.tasks.defaultTimeout;
+httpServer.keepAliveTimeout = config.tasks.defaultTimeout + 5000;
 
 // Global function to update sidebar for specific users
 global.updateSidebar = (userId, toolName, data) => {
@@ -79,9 +79,9 @@ global.updateSidebar = (userId, toolName, data) => {
 
 const io = socket(httpServer, {
     cors: {
-        origin: ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000", "http://127.0.0.1:3000"],
-        methods: ["GET", "POST"],
-        credentials: true
+        origin: config.cors.origins,
+        methods: config.cors.methods,
+        credentials: config.cors.credentials
     }
 });
 
@@ -100,7 +100,7 @@ io.use((socket, next) => {
     try {
         
         const jwt = require('jsonwebtoken');
-        const JWT_SECRET = process.env.JWT_SECRET;
+        const JWT_SECRET = config.auth.jwtSecret;
         
         jwt.verify(token, JWT_SECRET, (err, decoded) => {
             if (err) {
@@ -129,7 +129,7 @@ io.use((socket, next) => {
             return next();
         });
     } catch (error) {
-        console.error('Socket authentication error:', error.message);
+        logger.error('Socket authentication error', { error: error.message, userId });
         socket.authenticated = false;
         return next(new Error('Authentication error'));
     }
@@ -146,7 +146,7 @@ const requireAuthForHTML = (req, res, next) => {
   const verifyTokenAndUser = async (tokenToVerify) => {
     try {
       const jwt = require('jsonwebtoken');
-      const JWT_SECRET = process.env.JWT_SECRET;
+      const JWT_SECRET = config.auth.jwtSecret;
       
       return new Promise((resolve, reject) => {
         jwt.verify(tokenToVerify, JWT_SECRET, async (err, user) => {
@@ -164,7 +164,7 @@ const requireAuthForHTML = (req, res, next) => {
             req.user = user;
             resolve();
           } catch (dbError) {
-            console.error('Database error during HTML route authentication:', dbError);
+            logger.error('Database error during HTML route authentication', { error: dbError.message });
             reject(dbError);
           }
         });
@@ -206,7 +206,7 @@ const requireAdminForHTML = async (req, res, next) => {
   const verifyAdminToken = async (tokenToVerify) => {
     try {
       const jwt = require('jsonwebtoken');
-      const JWT_SECRET = process.env.JWT_SECRET;
+      const JWT_SECRET = config.auth.jwtSecret;
       
       return new Promise((resolve, reject) => {
         jwt.verify(tokenToVerify, JWT_SECRET, async (err, user) => {
@@ -229,7 +229,7 @@ const requireAdminForHTML = async (req, res, next) => {
             req.user = user;
             resolve();
           } catch (dbError) {
-            console.error('Database error during admin authentication:', dbError);
+            logger.error('Database error during admin authentication', { error: dbError.message });
             reject(dbError);
           }
         });
@@ -331,7 +331,7 @@ app.get('/api/chats', authenticateToken, async (req, res) => {
         const chats = await chatFunctions.getUserChats(req.user.id);
         res.json({ chats });
     } catch (error) {
-        console.error('Error getting chats:', error);
+        logger.error('Error getting chats', { error: error.message, userId: req.user.id });
         res.status(500).json({ error: 'Failed to retrieve chats' });
     }
 });
@@ -342,7 +342,7 @@ app.post('/api/chats', authenticateToken, async (req, res) => {
         const chat = await chatFunctions.createChat(req.user.id, title);
         res.status(201).json({ chat });
     } catch (error) {
-        console.error('Error creating chat:', error);
+        logger.error('Error creating chat', { error: error.message, userId: req.user.id });
         res.status(500).json({ error: 'Failed to create chat' });
     }
 });
@@ -357,13 +357,13 @@ app.get('/api/chats/:chatId', authenticateToken, async (req, res) => {
         try {
             taskSteps = await taskStepFunctions.getTaskSteps(req.user.id, chatId);
         } catch (stepError) {
-            console.error('Error getting task steps:', stepError);
+            logger.error('Error getting task steps', { error: stepError.message, userId: req.user.id, chatId });
             // Continue without steps if there's an error
         }
         
         res.json({ messages, taskSteps });
     } catch (error) {
-        console.error('Error getting chat history:', error);
+        logger.error('Error getting chat history', { error: error.message, userId: req.user.id, chatId: req.params.chatId });
         res.status(500).json({ error: 'Failed to retrieve chat history' });
     }
 });
@@ -391,7 +391,7 @@ app.get('/api/chats/:chatId/files', authenticateToken, async (req, res) => {
         
         res.json({ files: formattedFiles });
     } catch (error) {
-        console.error('Error getting chat files:', error);
+        logger.error('Error getting chat files', { error: error.message, userId: req.user.id, chatId: req.params.chatId });
         res.status(500).json({ error: 'Failed to retrieve chat files' });
     }
 });
@@ -403,7 +403,7 @@ app.put('/api/chats/:chatId', authenticateToken, async (req, res) => {
         await chatFunctions.updateChatTitle(req.user.id, chatId, title);
         res.json({ success: true });
     } catch (error) {
-        console.error('Error updating chat:', error);
+        logger.error('Error updating chat', { error: error.message, userId: req.user.id, chatId: req.params.chatId });
         res.status(500).json({ error: 'Failed to update chat' });
     }
 });
@@ -414,7 +414,7 @@ app.delete('/api/chats/:chatId', authenticateToken, async (req, res) => {
         await chatFunctions.deleteChat(req.user.id, chatId);
         res.json({ success: true });
     } catch (error) {
-        console.error('Error deleting chat:', error);
+        logger.error('Error deleting chat', { error: error.message, userId: req.user.id, chatId: req.params.chatId });
         res.status(500).json({ error: 'Failed to delete chat' });
     }
 });
@@ -425,7 +425,7 @@ app.get('/api/files/:fileId', isAuthenticated, async (req, res) => {
   const userId = req.userId; 
 
   try {
-    console.log(`Fetching file details for ${fileId} for user ${userId}`);
+    logger.debug('Fetching file details', { fileId, userId });
     
     const file = await fileFunctions.getTrackedFileById(userId, fileId);
     if (!file) {
@@ -435,10 +435,10 @@ app.get('/api/files/:fileId', isAuthenticated, async (req, res) => {
     
     // Remove file content from response (just metadata)
     const { fileContent, ...fileDetails } = file;
-    console.log(`File details found for ${fileId}: ${fileDetails.fileName || fileDetails.path}`);
+    logger.debug('File details found', { fileId, fileName: fileDetails.fileName || fileDetails.path, userId });
     res.json(fileDetails);
   } catch (error) {
-    console.error(`Error fetching file details for ID ${fileId}:`, error);
+    logger.error('Error fetching file details', { error: error.message, fileId, userId });
     res.status(500).send({ error: 'Internal Server Error' });
   }
 });
@@ -456,24 +456,24 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
   });
 
   try {
-    console.log(`Attempting to download file ${fileId} for user ${userId}`);
+    logger.debug('Attempting to download file', { fileId, userId });
     
     const file = await fileFunctions.getTrackedFileById(userId, fileId);
     
     if (!file) {
-      console.log(`File ${fileId} not found for user ${userId}`);
+      logger.warn('File not found for download', { fileId, userId });
       return res.status(404).send({ error: 'File not found or access denied' });
     }
     
     if (file.fileContent === null || file.fileContent === undefined) {
-      console.log(`File ${fileId} has no content for user ${userId}`);
+      logger.warn('File content unavailable', { fileId, userId });
       return res.status(404).send({ error: 'File content unavailable' });
     }
 
     const fileName = file.fileName || (file.path ? file.path.split('/').pop() : `download_${fileId}${file.fileExtension ? '.' + file.fileExtension : ''}`);
     const contentType = mime.lookup(fileName) || 'application/octet-stream';
 
-    console.log(`Serving file ${fileName} (${contentType}) for user ${userId}`);
+    logger.debug('Serving file', { fileName, contentType, userId, fileId });
     
     const isBinary = contentType.indexOf('text/') !== 0 && 
                      contentType !== 'application/json' && 
@@ -487,7 +487,7 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
         fileBuffer = Buffer.from(file.fileContent, 'utf8');
       }
     } catch (bufferError) {
-      console.error(`Error creating buffer for file ${fileId}:`, bufferError);
+      logger.error('Error creating buffer for file', { error: bufferError.message, fileId, userId });
       return res.status(500).send({ error: 'Error processing file content' });
     }
 
@@ -499,10 +499,10 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
     
     // Send the file
     res.end(fileBuffer);
-    console.log(`Successfully served file ${fileName} (${fileBuffer.length} bytes) for user ${userId}`);
+    logger.debug('Successfully served file', { fileName, fileSize: fileBuffer.length, userId, fileId });
 
   } catch (error) {
-    console.error(`Error downloading file for ID ${fileId}:`, error);
+    logger.error('Error downloading file', { error: error.message, fileId, userId });
     if (!res.headersSent) {
       res.status(500).send({ error: 'Internal Server Error' });
     }
@@ -566,7 +566,7 @@ io.on('connection', (socketClient) => {
          
          const taskUserId = socketClient.userId;
          
-         console.log(`Task received from ${taskUserId} in chat ${numericChatId}: ${task}`);
+         logger.task(taskUserId, numericChatId, 'Task received', { task: task.substring(0, 100) + '...' });
          
          
          socketClient.chatId = numericChatId;
@@ -585,10 +585,10 @@ io.on('connection', (socketClient) => {
              // Process the task asynchronously
              centralOrchestrator(task, taskUserId, numericChatId, false)
                  .then(result => {
-                     console.log(`Task completed for ${taskUserId}:`, result);
+                     logger.task(taskUserId, numericChatId, 'Task completed successfully');
                  })
                  .catch(error => {
-                     console.error(`Error in task processing for ${taskUserId}:`, error);
+                     logger.error('Error in task processing', { error: error.message, userId: taskUserId, chatId: numericChatId });
                      socketClient.emit('task_error', { 
                          error: 'Error processing your task: ' + error.message,
                          userId: taskUserId
@@ -596,7 +596,7 @@ io.on('connection', (socketClient) => {
                  });
              
          } catch (error) {
-             console.error(`Error processing task for ${taskUserId}:`, error);
+             logger.error('Error processing task', { error: error.message, userId: taskUserId, chatId: numericChatId });
              socketClient.emit('task_error', { 
                  error: 'Error processing your task',
                  userId: taskUserId
@@ -630,7 +630,7 @@ io.on('connection', (socketClient) => {
                  enabled.toString()
              );
              
-             console.log(`Email notification preference updated for user ${socketClient.userId}, chat ${chatId}: ${enabled}`);
+             logger.info('Email notification preference updated', { userId: socketClient.userId, chatId, enabled });
              
              socketClient.emit('email_notification_preference_updated', {
                  chatId,
@@ -638,7 +638,7 @@ io.on('connection', (socketClient) => {
                  success: true
              });
          } catch (error) {
-             console.error('Error updating email notification preference:', error);
+             logger.error('Error updating email notification preference', { error: error.message, userId: socketClient.userId });
              socketClient.emit('email_notification_preference_updated', {
                  chatId: data.chatId,
                  enabled: data.enabled,
@@ -649,7 +649,7 @@ io.on('connection', (socketClient) => {
      });
 
      socketClient.on('disconnect', () => {
-         console.log(`User disconnected: ${socketClient.id}`);
+         logger.info('User disconnected', { socketId: socketClient.id, userId: socketClient.userId });
          
          
          try {
@@ -657,11 +657,11 @@ io.on('connection', (socketClient) => {
              const { cleanupUserResources } = require('./index');
              if (typeof cleanupUserResources === 'function' && socketClient.authenticated) {
                  cleanupUserResources(socketClient.userId).catch(err => {
-                     console.error(`Error cleaning up resources for ${socketClient.userId}:`, err);
+                     logger.error('Error cleaning up resources', { error: err.message, userId: socketClient.userId });
                  });
              }
          } catch (error) {
-             console.error(`Error during disconnect cleanup: ${error.message}`);
+             logger.error('Error during disconnect cleanup', { error: error.message, socketId: socketClient.id });
          }
      });
 
@@ -744,7 +744,7 @@ io.on('connection', (socketClient) => {
                  });
              }
          } catch (error) {
-             console.error(`Error checking running task for ${socketClient.userId}:`, error);
+             logger.error('Error checking running task', { error: error.message, userId: socketClient.userId });
              socketClient.emit('task_status_checked', { 
                  error: error.message,
                  userId: socketClient.userId
@@ -753,9 +753,9 @@ io.on('connection', (socketClient) => {
      });
  });
 
-const PORT = process.env.PORT || 3000;
+const PORT = config.server.port;
 httpServer.listen(PORT, () => {
-    console.log(`Server with Socket.IO running on port ${PORT}`);
+    logger.info('Server started', { port: PORT, environment: config.server.environment });
 });
 
 module.exports = io;

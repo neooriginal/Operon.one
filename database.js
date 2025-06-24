@@ -6,6 +6,8 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
+const logger = require('./utils/logger');
+const { safeJsonParse } = require('./utils/errorHandler');
 
 /**
  * Directory for storing data files
@@ -28,9 +30,9 @@ const DB_PATH = path.join(DATA_DIR, 'operonone.db');
  */
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
-    console.error('Database connection error:', err.message);
+    logger.error('Database connection error', { error: err.message, path: DB_PATH });
   } else {
-    console.log('Connected to the SQLite database');
+    logger.database('Connected to the SQLite database');
     initDatabase();
   }
 });
@@ -53,14 +55,14 @@ function initDatabase() {
     lastLogin DATETIME
   )`, (err) => {
     if (err) {
-      console.error('Error creating users table:', err.message);
+      logger.error('Error creating users table', { error: err.message });
     } else {
-      console.log('Users table ready');
+      logger.database('Users table ready');
       
       // Add emailVerified column if it doesn't exist (migration for existing databases)
       db.run(`ALTER TABLE users ADD COLUMN emailVerified INTEGER DEFAULT 0`, (err) => {
         if (err && !err.message.includes('duplicate column')) {
-          console.error('Error adding emailVerified column:', err.message);
+          logger.error('Error adding emailVerified column', { error: err.message });
         }
       });
     }
@@ -1364,75 +1366,18 @@ const settingsFunctions = {
   }
 };
 
-/**
- * Try to parse a JSON string with fallback mechanisms
- * @param {string|Object} str - String to parse or object to return as-is
- * @param {*} defaultValue - Default value to return if parsing fails
- * @returns {*} Parsed object or default value
- */
+// Use the simplified error handler for JSON parsing
 function tryParseJSON(str, defaultValue) {
-  if (!str) return defaultValue;
-  
-  
-  if (typeof str === 'object') return str;
-  
-  
-  if (typeof str === 'string') {
-    try {
-      
-      return JSON.parse(str);
-    } catch (e) {
-      
-      try {
-        
-        const cleaned = str.replace(/,\s*([\]}])/g, '$1');
-        return JSON.parse(cleaned);
-      } catch (e2) {
-        
-        try {
-          
-          let fixedStr = str;
-          const openBraces = (fixedStr.match(/\{/g) || []).length;
-          const closeBraces = (fixedStr.match(/\}/g) || []).length;
-          const openBrackets = (fixedStr.match(/\[/g) || []).length;
-          const closeBrackets = (fixedStr.match(/\]/g) || []).length;
-          
-          
-          for (let i = 0; i < (openBraces - closeBraces); i++) {
-            fixedStr += '}';
-          }
-          
-          
-          for (let i = 0; i < (openBrackets - closeBrackets); i++) {
-            fixedStr += ']';
-          }
-          
-          return JSON.parse(fixedStr);
-        } catch (e3) {
-          console.error('Failed to parse JSON after multiple attempts', {
-            error: true,
-            message: 'Failed to parse JSON after multiple attempts',
-            original: str.substring(0, 100) + '...',
-            fallback: true
-          });
-          
-          return defaultValue !== undefined ? defaultValue : str;
-        }
-      }
-    }
-  }
-  
-  
-  return defaultValue !== undefined ? defaultValue : str;
+  return safeJsonParse(str, defaultValue);
 }
 
 
 process.on('exit', () => {
   db.close((err) => {
     if (err) {
-      console.error('Error closing database:', err.message);
+      logger.error('Error closing database', { error: err.message });
     } else {
-      console.log('Database connection closed');
+      logger.database('Database connection closed');
     }
   });
 });

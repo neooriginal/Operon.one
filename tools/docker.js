@@ -5,6 +5,8 @@ const util = require('util');
 const os = require('os');
 const execAsync = util.promisify(exec);
 const crypto = require('crypto');
+const logger = require('../utils/logger');
+const config = require('../utils/config');
 
 
 const isWindows = process.platform === 'win32';
@@ -23,10 +25,10 @@ function normalizePathForDocker(filePath) {
 
 class DockerManager {
     constructor() {
-        this.baseImage = 'python:3.9-slim';
-        this.containerPrefix = 'operon-task-';
+        this.baseImage = config.docker.baseImage;
+        this.containerPrefix = config.docker.containerPrefix;
         this.activeContainers = new Map(); 
-        this.maxRetries = 3; 
+        this.maxRetries = config.docker.maxRetries; 
         this.initialized = false;
     }
 
@@ -53,11 +55,11 @@ class DockerManager {
                 return await operation();
             } catch (error) {
                 lastError = error;
-                console.warn(`Docker operation failed (attempt ${attempt}/${maxRetries}): ${error.message}`);
+                logger.warn('Docker operation failed', { attempt, maxRetries, error: error.message });
                 
                 
                 if (error.message.includes('Conflict') && error.message.includes('already in use')) {
-                    console.log('Container name conflict detected, retrying with different name');
+                    logger.debug('Container name conflict detected, retrying with different name');
                     continue;
                 }
                 
@@ -80,7 +82,7 @@ class DockerManager {
                 try {
                     await execAsync('wsl --status');
                 } catch (error) {
-                    console.error('WSL is not available:', error.message);
+                    logger.error('WSL is not available', { error: error.message });
                     return false;
                 }
             }
@@ -88,7 +90,7 @@ class DockerManager {
             await execAsync(`${dockerCMD} ps`);
             return true;
         } catch (error) {
-            console.error('Docker is not available:', error.message);
+            logger.error('Docker is not available', { error: error.message });
             return false;
         }
     }
@@ -108,14 +110,14 @@ class DockerManager {
             
             const { stdout } = await execAsync(`${dockerCMD} images -q ${this.baseImage}`);
             if (!stdout.trim()) {
-                console.log(`Pulling Docker image: ${this.baseImage}`);
+                logger.info('Pulling Docker image', { image: this.baseImage });
                 await execAsync(`${dockerCMD} pull ${this.baseImage}`);
             }
             
             this.initialized = true;
             return true;
         } catch (error) {
-            console.error('Failed to initialize Docker:', error.message);
+            logger.error('Failed to initialize Docker', { error: error.message });
             throw error;
         }
     }
@@ -167,7 +169,7 @@ class DockerManager {
             
             return true;
         } catch (error) {
-            console.error(`Failed to remove container: ${error.message}`);
+            logger.error('Failed to remove container', { error: error.message, containerName });
             return false;
         }
     }
@@ -187,7 +189,7 @@ class DockerManager {
 
             
             const fullCommand = `${dockerCMD} exec ${containerName} sh -c "${escapedInnerCommand}"`;
-            console.log(`Executing Docker command (using base64): ${command}`); 
+            logger.debug('Executing Docker command', { containerName, command: command.substring(0, 100) + '...' }); 
             
             
             const { stdout, stderr } = await execAsync(fullCommand);
@@ -226,7 +228,7 @@ class DockerManager {
                 try {
                     fs.unlinkSync(tempFile);
                 } catch (e) {
-                    console.warn(`Failed to clean up temp file: ${e.message}`);
+                    logger.warn('Failed to clean up temp file', { error: e.message, tempFile });
                 }
             }
         });
@@ -260,7 +262,7 @@ class DockerManager {
                 try {
                     fs.existsSync(tempFile) && fs.unlinkSync(tempFile);
                 } catch (e) {
-                    console.warn(`Failed to clean up temp file: ${e.message}`);
+                    logger.warn('Failed to clean up temp file', { error: e.message, tempFile });
                 }
             }
         });
@@ -314,7 +316,7 @@ class DockerManager {
         for (const [taskId, containerName] of this.activeContainers.entries()) {
             try {
                 await this.removeContainer(containerName);
-                console.log(`Cleaned up container for task ${taskId}`);
+                logger.debug('Cleaned up container for task', { taskId, containerName });
             } catch (error) {
                 errors.push(`Failed to clean up container ${containerName}: ${error.message}`);
             }
@@ -323,7 +325,7 @@ class DockerManager {
         this.activeContainers.clear();
         
         if (errors.length > 0) {
-            console.error(`Errors during cleanup: ${errors.join(', ')}`);
+            logger.error('Errors during cleanup', { errors });
             return false;
         }
         
@@ -337,9 +339,9 @@ const dockerManager = new DockerManager();
 (async () => {
     try {
         await dockerManager.initialize();
-        console.log('Docker initialized successfully');
+        logger.info('Docker initialized successfully');
     } catch (error) {
-        console.error('Failed to initialize Docker:', error.message);
+        logger.error('Failed to initialize Docker', { error: error.message });
     }
 })();
 
