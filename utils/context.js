@@ -1,3 +1,4 @@
+
 /**
  * Context Manager - Unified state management for AI agent
  * Handles conversation history, step outputs, tool states, and more
@@ -368,6 +369,106 @@ class Context {
    */
   getLastTaskId(userId = 'default', chatId = 1) {
     return this.getContext(userId, chatId).lastTaskId;
+  }
+
+  /**
+   * Set cancellation token for task cancellation support
+   * @param {AbortController} abortController - AbortController instance for cancellation
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  setCancellationToken(abortController, userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    context.cancellationToken = abortController;
+    return abortController;
+  }
+
+  /**
+   * Get cancellation token for task cancellation
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  getCancellationToken(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    return context.cancellationToken;
+  }
+
+  /**
+   * Cancel current task
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  cancelTask(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    if (context.cancellationToken && !context.cancellationToken.signal.aborted) {
+      context.cancellationToken.abort('Task cancelled by user');
+      context.taskCancelledAt = Date.now();
+      context.taskCancelledBy = 'user';
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if task is cancelled
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  isTaskCancelled(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    return context.cancellationToken && context.cancellationToken.signal.aborted;
+  }
+
+  /**
+   * Clear cancellation token
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  clearCancellationToken(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    context.cancellationToken = null;
+  }
+
+  /**
+   * Check if task was recently cancelled
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   * @param {number} withinMinutes - Check within last N minutes (default: 10)
+   */
+  wasTaskRecentlyCancelled(userId = 'default', chatId = 1, withinMinutes = 10) {
+    const context = this.getContext(userId, chatId);
+    if (!context.taskCancelledAt) return false;
+    
+    const now = Date.now();
+    const cancelledAt = context.taskCancelledAt;
+    const timeLimit = withinMinutes * 60 * 1000; // Convert to milliseconds
+    
+    return (now - cancelledAt) <= timeLimit;
+  }
+
+  /**
+   * Get cancellation info
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  getCancellationInfo(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    return {
+      cancelledAt: context.taskCancelledAt,
+      cancelledBy: context.taskCancelledBy,
+      wasCancelled: !!context.taskCancelledAt
+    };
+  }
+
+  /**
+   * Clear cancellation history
+   * @param {string} userId - User identifier (default: 'default')
+   * @param {number} chatId - Chat identifier (default: 1)
+   */
+  clearCancellationHistory(userId = 'default', chatId = 1) {
+    const context = this.getContext(userId, chatId);
+    context.taskCancelledAt = null;
+    context.taskCancelledBy = null;
   }
 }
 

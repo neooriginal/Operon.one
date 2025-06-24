@@ -201,6 +201,19 @@ document.addEventListener('DOMContentLoaded', () => {
     window.loadChatHistory = loadChatHistory;
     window.loadUserChats = loadUserChats;
     
+    // Expose reset function for debugging/manual reset
+    window.resetTaskState = resetTaskState;
+    
+    // Add keyboard shortcut for manual reset (Ctrl+Shift+R)
+    document.addEventListener('keydown', (event) => {
+        if (event.ctrlKey && event.shiftKey && event.key === 'R') {
+            event.preventDefault();
+            console.log('Manual task state reset triggered by keyboard shortcut');
+            resetTaskState();
+            updateStatusDisplay('Task state manually reset', 'idle');
+        }
+    });
+    
     // Credits management functions
     async function loadCredits() {
         try {
@@ -763,13 +776,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!statusDisplay) return;
 
         let iconHtml = '';
-        statusDisplay.classList.remove('active');
+        statusDisplay.classList.remove('active', 'cancelled', 'warning');
 
         switch (statusType) {
             case 'loading':
             case 'status_update':
                 iconHtml = getIconForType('status_update');
                 statusDisplay.classList.add('active');
+                break;
+            case 'cancelled':
+                iconHtml = '<i class="fas fa-times-circle"></i>';
+                statusDisplay.classList.add('cancelled');
+                break;
+            case 'warning':
+                iconHtml = '<i class="fas fa-exclamation-triangle"></i>';
+                statusDisplay.classList.add('warning');
                 break;
             case 'idle':
                 iconHtml = '<i class="fas fa-check"></i>';
@@ -1056,10 +1077,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add a global flag to track task status
     let taskInProgress = false;
     let taskStepsRestored = false;
+    let taskCanBeCancelled = false;
 
     function handleSendMessage() {
 
         if (!messageInput || !chatMessages) return;
+
+        // Check if we should cancel instead of send
+        if (taskInProgress && taskCanBeCancelled) {
+            handleCancelTask();
+            return;
+        }
 
         const message = messageInput.value.trim();
         if (!message) return;
@@ -1074,6 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set flag to prevent multiple submissions
         taskInProgress = true;
         taskStepsRestored = false;
+        taskCanBeCancelled = false;
 
         const processSendMessage = (chatId) => {
 
@@ -1090,7 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (messageInput && sendButton) {
                 messageInput.disabled = true;
-                sendButton.disabled = true;
+                updateSendButtonForTaskState('running');
             }
         };
 
@@ -1105,18 +1134,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     console.error('Failed to create new chat');
                     updateStatusDisplay('Failed to create new chat', 'error');
-                    if (messageInput && sendButton) {
-                        messageInput.disabled = false;
-                        sendButton.disabled = false;
-                    }
+                    resetTaskState();
                 }
             }).catch((error) => {
                 console.error('Error creating new chat:', error);
                 updateStatusDisplay('Failed to create new chat', 'error');
-                if (messageInput && sendButton) {
-                    messageInput.disabled = false;
-                    sendButton.disabled = false;
-                }
+                resetTaskState();
             });
         } else {
 
@@ -1127,6 +1150,93 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateChatTitleFromContent(currentChatId, message);
             }
         }
+    }
+
+    // Handle task cancellation
+    function handleCancelTask() {
+        if (!taskInProgress || !taskCanBeCancelled) {
+            console.log('No cancellable task in progress');
+            return;
+        }
+
+        // Update UI immediately
+        updateSendButtonForTaskState('cancelling');
+        updateStatusDisplay('Cancelling task...', 'warning');
+
+        // Send cancellation request
+        socket.emit('cancel_task', {
+            chatId: currentChatId,
+            userId: userId
+        });
+
+        // Set a fallback timeout in case cancellation response doesn't come
+        setTimeout(() => {
+            if (taskInProgress && sendButton && sendButton.textContent === 'Cancelling...') {
+                console.log('Cancellation fallback timeout - resetting state');
+                resetTaskState();
+                updateStatusDisplay('Cancellation timeout - task may still be running', 'error');
+            }
+        }, 10000); // 10 second fallback timeout
+    }
+
+    // Update send button appearance based on task state
+    function updateSendButtonForTaskState(state) {
+        if (!sendButton) return;
+
+        switch (state) {
+            case 'idle':
+                sendButton.textContent = 'Send';
+                sendButton.className = 'send-button';
+                sendButton.disabled = false;
+                sendButton.style.background = '';
+                break;
+            case 'running':
+                sendButton.textContent = 'Cancel';
+                sendButton.className = 'send-button cancel-button';
+                sendButton.disabled = false;
+                sendButton.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                taskCanBeCancelled = true;
+                break;
+            case 'cancelling':
+                sendButton.textContent = 'Cancelling...';
+                sendButton.className = 'send-button cancel-button cancelling';
+                sendButton.disabled = true;
+                sendButton.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+                taskCanBeCancelled = false;
+                break;
+        }
+    }
+
+    // Reset task state
+    function resetTaskState() {
+        console.log('Resetting task state - before:', { 
+            taskInProgress, 
+            taskCanBeCancelled, 
+            inputDisabled: messageInput?.disabled,
+            buttonText: sendButton?.textContent 
+        });
+        
+        taskInProgress = false;
+        taskCanBeCancelled = false;
+        updateSendButtonForTaskState('idle');
+        
+        if (messageInput) {
+            messageInput.disabled = false;
+            // Force focus to ensure field is clickable
+            setTimeout(() => {
+                if (messageInput) {
+                    messageInput.focus();
+                    messageInput.blur(); // Quick focus/blur to ensure it's active
+                }
+            }, 100);
+        }
+        
+        console.log('Resetting task state - after:', { 
+            taskInProgress, 
+            taskCanBeCancelled, 
+            inputDisabled: messageInput?.disabled,
+            buttonText: sendButton?.textContent 
+        });
     }
 
 
@@ -1494,8 +1604,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.userId === userId) {
                 console.log('Task completed:', data);
 
-                // Reset task in progress flag
-                taskInProgress = false;
+                // Reset task state
+                resetTaskState();
 
                 const result = extractTextFromObject(data.result) || 'Task completed successfully';
 
@@ -1527,22 +1637,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!data.loadedFromHistory) {
                     loadCredits();
                 }
-                
-                messageInput.disabled = false;
-                sendButton.disabled = false;
+
             }
         } catch (error) {
             console.error('Error processing task completion:', error.message);
             updateStatusDisplay('Error completing task', 'error');
             
-            // Reset task in progress flag even on error
-            taskInProgress = false;
-            
-            // Re-enable input controls
-            if (messageInput && sendButton) {
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-            }
+            // Reset task state even on error
+            resetTaskState();
         }
     });
 
@@ -1604,17 +1706,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Only reset if this is for the current user and chat
         if (!data.userId || data.userId === userId) {
-            // Reset UI state
-            if (messageInput && sendButton) {
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-            }
-            
-            // Reset the task in progress flag
-            taskInProgress = false;
+            // Reset task state
+            resetTaskState();
             
             // Show error message to user
             updateStatusDisplay(data.error || 'Error processing task', 'error');
+            
+            // If this is a cancellation-related error, treat it as a cancellation
+            if (data.error && (data.error.includes('cancel') || data.error.includes('Cancel'))) {
+                console.log('Cancellation error - treating as successful cancellation');
+                addMessage('Task cancelled by user', 'system', 'text');
+            }
         }
     });
 
@@ -1637,7 +1739,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Disable input controls
             if (messageInput && sendButton) {
                 messageInput.disabled = true;
-                sendButton.disabled = true;
+                updateSendButtonForTaskState('running');
             }
             
             // Show restoration status
@@ -1648,8 +1750,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 addMessage(data.question, 'user');
             }
         } else if (data.userId === userId && !data.isRunning) {
-            // No running task, keep UI in normal state
-            console.log('No running task found');
+            // Check if task was recently cancelled
+            if (data.wasCancelled) {
+                console.log('Task was recently cancelled:', data);
+                
+                // Show cancellation status
+                resetTaskState();
+                updateStatusDisplay('Task was cancelled', 'cancelled');
+                
+                // Add cancellation message to chat if not already present
+                const lastMessage = chatMessages?.lastElementChild;
+                const lastMessageText = lastMessage?.textContent?.trim();
+                
+                if (!lastMessageText || !lastMessageText.includes('cancelled')) {
+                    addMessage('Task cancelled by user', 'system', 'text');
+                }
+                
+                // Set a timeout to clear the cancellation message after some time
+                setTimeout(() => {
+                    if (statusDisplay && statusDisplay.textContent.includes('cancelled')) {
+                        updateStatusDisplay('Ready', 'idle');
+                    }
+                }, 5000);
+            } else {
+                // No running task, keep UI in normal state
+                console.log('No running task found');
+            }
         } else if (data.error) {
             console.error('Error checking task status:', data.error);
         }
@@ -1661,6 +1787,34 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             console.error('Failed to save email notification preference:', data.error);
             updateStatusDisplay('Failed to save email notification preference', 'error');
+        }
+    });
+
+    // Handle task cancellation events
+    socket.on('task_cancellation_confirmed', (data) => {
+        if (data.userId === userId) {
+            console.log('Task cancellation confirmed:', data);
+            updateStatusDisplay('Task cancellation initiated', 'warning');
+            
+            // Set a timeout to reset state if task_cancelled event doesn't come
+            setTimeout(() => {
+                if (taskInProgress && !taskCanBeCancelled) {
+                    console.log('Cancellation timeout - resetting state');
+                    resetTaskState();
+                    updateStatusDisplay('Task cancellation completed', 'cancelled');
+                }
+            }, 5000); // 5 second timeout
+        }
+    });
+
+    socket.on('task_cancelled', (data) => {
+        if (data.userId === userId) {
+            console.log('Task cancelled:', data);
+            resetTaskState();
+            updateStatusDisplay(data.message || 'Task cancelled successfully', 'cancelled');
+            
+            // Add cancellation message to chat
+            addMessage('Task cancelled by user', 'system', 'text');
         }
     });
 

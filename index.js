@@ -182,6 +182,13 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
       contextManager.resetContext(userId, chatId);
     }
     
+    // Clear any previous cancellation history when starting a new task
+    contextManager.clearCancellationHistory(userId, chatId);
+    
+    // Create AbortController for cancellation support
+    const abortController = new AbortController();
+    contextManager.setCancellationToken(abortController, userId, chatId);
+    
     // Set task as running only once after context is initialized/reset
     contextManager.setTaskRunning(true, userId, chatId);
     
@@ -192,11 +199,21 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     // Set the question in context
     contextManager.setQuestion(question, userId, chatId);
 
+    // Check for cancellation
+    if (contextManager.isTaskCancelled(userId, chatId)) {
+      throw new Error('Task cancelled by user');
+    }
+
     // Generate planning prompt
     const history = contextManager.getHistoryWithChatId(userId, chatId);
     const prompt = await prompts.generatePlanningPrompt(question, history, userId);
     
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Planning task execution' });
+    
+    // Check for cancellation
+    if (contextManager.isTaskCancelled(userId, chatId)) {
+      throw new Error('Task cancelled by user');
+    }
     
     // Get plan from AI using planning model
     let planObject = await ai.callAI(prompt, question, history, undefined, true, "planning", userId, chatId);
@@ -212,7 +229,19 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
   } catch (error) {
     console.error("Critical error in orchestration:", error.message);
     
-    io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
+    // Check if this was a cancellation
+    const isCancelled = error.message === 'Task cancelled by user';
+    
+    // Clean up task state
+    contextManager.setTaskRunning(false, userId, chatId);
+    contextManager.clearCancellationToken(userId, chatId);
+    
+    // Send appropriate message to client
+    if (isCancelled) {
+      io.to(`user:${userId}`).emit('task_cancelled', { userId, chatId, message: 'Task cancelled successfully' });
+    } else {
+      io.to(`user:${userId}`).emit('task_error', { userId, chatId, error: error.message });
+    }
     
     try {
       await cleanupUserResources(userId);
@@ -220,7 +249,7 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
       console.error("Error during cleanup:", cleanupError.message);
     }
     
-    return `Critical error occurred during execution: ${error.message}`;
+    return isCancelled ? 'Task cancelled by user' : `Critical error occurred during execution: ${error.message}`;
   }
 }
 
@@ -269,6 +298,7 @@ async function handleDirectAnswer(planObject, question, userId, chatId) {
   
   // Mark task as no longer running
   contextManager.setTaskRunning(false, userId, chatId);
+  contextManager.clearCancellationToken(userId, chatId);
   
   await cleanupUserResources(userId);
   return planObject.answer;
@@ -368,6 +398,11 @@ function setupScreenshotInterval(plan, userId, chatId) {
  */
 async function executeSteps(plan, question, userId, chatId) {
   while (contextManager.getCurrentStepIndex(userId, chatId) < plan.length) {
+    // Check for cancellation before each step
+    if (contextManager.isTaskCancelled(userId, chatId)) {
+      throw new Error('Task cancelled by user');
+    }
+    
     const currentStepIndex = contextManager.getCurrentStepIndex(userId, chatId);
     const step = plan[currentStepIndex];
 
@@ -693,6 +728,7 @@ async function finalizeAndReturn(question, plan, userId, chatId) {
   
   // Mark task as no longer running
   contextManager.setTaskRunning(false, userId, chatId);
+  contextManager.clearCancellationToken(userId, chatId);
   
   await cleanupUserResources(userId);
   return finalOutput;

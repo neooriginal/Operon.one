@@ -604,6 +604,51 @@ io.on('connection', (socketClient) => {
          }
      });
 
+     // Handle task cancellation
+     socketClient.on('cancel_task', async (data) => {
+         if (!socketClient.authenticated) {
+             socketClient.emit('task_error', { 
+                 error: 'Authentication required for task cancellation',
+                 userId: socketClient.id
+             });
+             return;
+         }
+         
+         try {
+             const { chatId = 1 } = data;
+             const numericChatId = parseInt(chatId, 10) || 1;
+             const taskUserId = socketClient.userId;
+             
+             logger.info('Task cancellation requested', { userId: taskUserId, chatId: numericChatId });
+             
+             // Import context manager and cancel the task
+             const { contextManager } = require('./index');
+             const cancelled = contextManager.cancelTask(taskUserId, numericChatId);
+             
+             if (cancelled) {
+                 logger.info('Task cancelled successfully', { userId: taskUserId, chatId: numericChatId });
+                 socketClient.emit('task_cancellation_confirmed', { 
+                     userId: taskUserId, 
+                     chatId: numericChatId, 
+                     message: 'Task cancellation initiated' 
+                 });
+             } else {
+                 logger.warn('No running task to cancel', { userId: taskUserId, chatId: numericChatId });
+                 socketClient.emit('task_error', { 
+                     error: 'No running task to cancel',
+                     userId: taskUserId,
+                     chatId: numericChatId
+                 });
+             }
+         } catch (error) {
+             logger.error('Error cancelling task', { error: error.message, userId: socketClient.userId });
+             socketClient.emit('task_error', { 
+                 error: 'Error cancelling task: ' + error.message,
+                 userId: socketClient.userId
+             });
+         }
+     });
+
      // Handle tool sidebar updates
      socketClient.on('request_sidebar_info', (data) => {
          if (!socketClient.authenticated) {
@@ -737,11 +782,28 @@ io.on('connection', (socketClient) => {
                      restoredFromRunning: true
                  });
              } else {
-                 socketClient.emit('task_status_checked', {
-                     userId: socketClient.userId,
-                     chatId: numericChatId,
-                     isRunning: false
-                 });
+                 // Check if task was recently cancelled
+                 const wasCancelled = contextManager.wasTaskRecentlyCancelled(socketClient.userId, numericChatId);
+                 
+                 if (wasCancelled) {
+                     const cancellationInfo = contextManager.getCancellationInfo(socketClient.userId, numericChatId);
+                     
+                     socketClient.emit('task_status_checked', {
+                         userId: socketClient.userId,
+                         chatId: numericChatId,
+                         isRunning: false,
+                         wasCancelled: true,
+                         cancelledAt: cancellationInfo.cancelledAt,
+                         cancelledBy: cancellationInfo.cancelledBy
+                     });
+                 } else {
+                     socketClient.emit('task_status_checked', {
+                         userId: socketClient.userId,
+                         chatId: numericChatId,
+                         isRunning: false,
+                         wasCancelled: false
+                     });
+                 }
              }
          } catch (error) {
              logger.error('Error checking running task', { error: error.message, userId: socketClient.userId });
