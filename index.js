@@ -632,6 +632,30 @@ async function finalizeAndReturn(question, plan, userId, chatId) {
       path: file.containerPath,        
       content: file.fileContent   
     })) || [];
+
+    // Check for email notification preference and send email if task has >2 steps
+    if (plan.length > 2) {
+      try {
+        const { settingsFunctions, userFunctions } = require('./database');
+        const emailNotifications = await settingsFunctions.getSetting(userId, `email_notifications_${chatId}`);
+        
+        if (emailNotifications === 'true') {
+          const user = await userFunctions.getUserById(userId);
+          if (user && user.email) {
+            const emailService = require('./utils/emailService');
+            await emailService.sendTaskCompletionEmail(
+              user.email,
+              question,
+              finalOutput,
+              plan.length,
+              duration
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error('Error sending task completion email:', emailError.message);
+      }
+    }
     
     // Emit task completion
     io.to(`user:${userId}`).emit('task_completed', { 

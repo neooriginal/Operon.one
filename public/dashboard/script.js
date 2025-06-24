@@ -1378,6 +1378,60 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatusDisplay(statusText, 'info');
             stepGroups = {};
             const planGroupContent = addStepGroup(`Plan (${data.plan.length} Steps)`, false);
+            
+            // Add email notification checkbox if task has more than 2 steps
+            if (data.plan.length > 2 && !data.loadedFromHistory && !data.restoredFromRunning) {
+                const emailNotificationContainer = document.createElement('div');
+                emailNotificationContainer.className = 'email-notification-container';
+                emailNotificationContainer.style.cssText = `
+                    margin: 10px 0;
+                    padding: 10px;
+                    background: rgba(99, 102, 241, 0.1);
+                    border-radius: 8px;
+                    border-left: 4px solid var(--primary);
+                `;
+                
+                const checkboxWrapper = document.createElement('label');
+                checkboxWrapper.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                    color: var(--light);
+                    font-size: 0.9rem;
+                `;
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `email-notification-${data.chatId}`;
+                checkbox.style.cssText = `
+                    accent-color: var(--primary);
+                    transform: scale(1.1);
+                `;
+                
+                const label = document.createElement('span');
+                label.textContent = 'Email me when this task completes';
+                label.style.cssText = 'user-select: none;';
+                
+                checkboxWrapper.appendChild(checkbox);
+                checkboxWrapper.appendChild(label);
+                emailNotificationContainer.appendChild(checkboxWrapper);
+                
+                // Handle checkbox change
+                checkbox.addEventListener('change', (e) => {
+                    const isChecked = e.target.checked;
+                    console.log('Email notification preference:', isChecked);
+                    
+                    // Store preference via socket
+                    socket.emit('update_email_notification_preference', {
+                        chatId: data.chatId,
+                        enabled: isChecked
+                    });
+                });
+                
+                planGroupContent.appendChild(emailNotificationContainer);
+            }
+            
             data.plan.forEach((step, index) => {
                 const stepId = `step-${index}`;
 
@@ -1598,6 +1652,15 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('No running task found');
         } else if (data.error) {
             console.error('Error checking task status:', data.error);
+        }
+    });
+
+    socket.on('email_notification_preference_updated', (data) => {
+        if (data.success) {
+            console.log('Email notification preference saved successfully');
+        } else {
+            console.error('Failed to save email notification preference:', data.error);
+            updateStatusDisplay('Failed to save email notification preference', 'error');
         }
     });
 

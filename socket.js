@@ -614,6 +614,40 @@ io.on('connection', (socketClient) => {
          socketClient.emit('sidebar_info_requested', { toolName, userId: socketClient.userId });
      });
 
+     // Handle email notification preference updates
+     socketClient.on('update_email_notification_preference', async (data) => {
+         if (!socketClient.authenticated) {
+             return;
+         }
+         
+         try {
+             const { chatId, enabled } = data;
+             const { settingsFunctions } = require('./database');
+             
+             await settingsFunctions.saveSetting(
+                 socketClient.userId, 
+                 `email_notifications_${chatId}`, 
+                 enabled.toString()
+             );
+             
+             console.log(`Email notification preference updated for user ${socketClient.userId}, chat ${chatId}: ${enabled}`);
+             
+             socketClient.emit('email_notification_preference_updated', {
+                 chatId,
+                 enabled,
+                 success: true
+             });
+         } catch (error) {
+             console.error('Error updating email notification preference:', error);
+             socketClient.emit('email_notification_preference_updated', {
+                 chatId: data.chatId,
+                 enabled: data.enabled,
+                 success: false,
+                 error: error.message
+             });
+         }
+     });
+
      socketClient.on('disconnect', () => {
          console.log(`User disconnected: ${socketClient.id}`);
          

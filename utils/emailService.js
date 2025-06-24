@@ -264,6 +264,86 @@ function generateVerificationCode(useAlphanumeric = false) {
   }
 }
 
+/**
+ * Send task completion email
+ * @param {string} email - Recipient email address
+ * @param {string} taskDescription - The original task description
+ * @param {string} result - The task completion result
+ * @param {number} stepCount - Number of steps in the task
+ * @param {number} duration - Task duration in milliseconds
+ * @returns {Promise<boolean>} Whether email was sent successfully
+ */
+async function sendTaskCompletionEmail(email, taskDescription, result, stepCount, duration) {
+  if (!transporter) {
+    console.log('Email service not available - skipping task completion email send');
+    return false;
+  }
+
+  try {
+    const durationMinutes = Math.round(duration / 60000);
+    const durationText = durationMinutes > 0 ? `${durationMinutes} minute${durationMinutes > 1 ? 's' : ''}` : 'less than a minute';
+    
+    // Truncate result if too long for email
+    const maxResultLength = 2000;
+    const truncatedResult = result.length > maxResultLength 
+      ? result.substring(0, maxResultLength) + '\n\n[Output truncated for email display...]'
+      : result;
+
+    const mailOptions = {
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: email,
+      subject: 'Task Completed - Operon.one',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Task Completed Successfully! 🎉</h2>
+          
+          <div style="background-color: #f5f5f5; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #28a745;">
+            <h3 style="margin: 0 0 10px 0; color: #333;">Task Details</h3>
+            <p style="margin: 5px 0;"><strong>Task:</strong> ${taskDescription}</p>
+            <p style="margin: 5px 0;"><strong>Steps:</strong> ${stepCount}</p>
+            <p style="margin: 5px 0;"><strong>Duration:</strong> ${durationText}</p>
+          </div>
+          
+          <h3 style="color: #333;">Task Output</h3>
+          <div style="background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; border: 1px solid #e9ecef; white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 14px; color: #333; max-height: 400px; overflow-y: auto;">
+${truncatedResult}
+          </div>
+          
+          <p>You can view the complete task details and any generated files in your Operon.one dashboard</p>
+          
+          <p style="color: #666; font-size: 14px;">
+            Best regards,<br>
+            The Operon.one Team
+          </p>
+        </div>
+      `,
+      text: `
+        Task Completed Successfully!
+
+        Task Details:
+        - Task: ${taskDescription}
+        - Steps: ${stepCount}
+        - Duration: ${durationText}
+
+        Task Output:
+        ${truncatedResult}
+
+        You can view the complete task details and any generated files in your Operon.one dashboard
+
+        Best regards,
+        The Operon.one Team
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log('Task completion email sent to:', email);
+    return true;
+  } catch (error) {
+    console.error('Failed to send task completion email:', error);
+    return false;
+  }
+}
+
 // Initialize the service on module load
 const isInitialized = initializeEmailService();
 
@@ -272,6 +352,7 @@ module.exports = {
   sendVerificationEmail,
   sendWelcomeEmail,
   sendPasswordResetEmail,
+  sendTaskCompletionEmail,
   generateVerificationCode,
   isInitialized
 }; 

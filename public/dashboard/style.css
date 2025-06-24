@@ -198,6 +198,53 @@ body::before {
     }
 }
 
+/* Email notification checkbox styles */
+.email-notification-container {
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 8px;
+    border-left: 4px solid var(--primary);
+    transition: all 0.3s ease;
+}
+
+.email-notification-container:hover {
+    background: rgba(99, 102, 241, 0.15);
+}
+
+.email-notification-container label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--light);
+    font-size: 0.9rem;
+    user-select: none;
+    transition: color 0.3s ease;
+}
+
+.email-notification-container label:hover {
+    color: var(--primary-light);
+}
+
+.email-notification-container input[type="checkbox"] {
+    accent-color: var(--primary);
+    transform: scale(1.1);
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .email-notification-container {
+        padding: 8px;
+        margin: 8px 0;
+    }
+    
+    .email-notification-container label {
+        font-size: 0.85rem;
+        gap: 6px;
+    }
+}
+
 .recent-chats-container {
     flex-grow: 1;
     overflow-y: auto;
