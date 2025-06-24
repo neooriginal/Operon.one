@@ -11,10 +11,10 @@ async function generateGlobalPrompt(userId = 'default') {
   const sortedTools = toolDescriptions.sort((a, b) => a.title.localeCompare(b.title));
   let toolsList = sortedTools.map(tool => `> - ${tool.title}: ${tool.description}`).join('\n');
   
-  // Try to add MCP tools if available
+  // Try to add MCP tools if available (using lazy loading)
   try {
     const mcpModule = require('../mcp/main.js');
-    const mcpToolsInfo = await mcpModule.getMcpToolsForAI(userId);
+    const mcpToolsInfo = await mcpModule.getMcpToolsForAI(userId, false); // false = lazy loading
     
     if (mcpToolsInfo.toolCount > 0) {
       toolsList += '\n>\n> **MCP (Model Context Protocol) Tools:**\n';
@@ -22,11 +22,13 @@ async function generateGlobalPrompt(userId = 'default') {
       
       for (const [serverName, tools] of Object.entries(mcpToolsInfo.availableTools)) {
         tools.forEach(tool => {
-          toolsList += `> - ${tool.fullIdentifier}: ${tool.description} (via MCP server: ${serverName})\n`;
+          const status = tool.isStatic ? ' (static)' : ' (connected)';
+          toolsList += `> - ${tool.fullIdentifier}: ${tool.description} (via MCP server: ${serverName}${status})\n`;
         });
       }
       
       toolsList += '>\n> **To use MCP tools:** Use the mcpClient tool with format: "Call tool [toolName] from [serverName] with args {...}"\n';
+      toolsList += '> **Note:** MCP tools use lazy loading - servers will only start when tools are actually called.\n';
     }
   } catch (error) {
     // MCP not available or error loading - continue without MCP tools
