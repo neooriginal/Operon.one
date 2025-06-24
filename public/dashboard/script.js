@@ -197,23 +197,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loadChatHistory(currentChatId);
     });
 
-    // Listen for follow-up questions from AI
-    socket.on('follow_up_questions', (data) => {
-        if (data.chatId && data.chatId !== currentChatId) return;
-        
-        showFollowUpQuestions(data.questions, data.reasoning);
-    });
-
     // Expose functions globally for the combined interface
-    window.loadUserChats = loadUserChats;
     window.loadChatHistory = loadChatHistory;
-    window.createNewChat = createNewChat;
-    window.deleteChat = deleteChat;
-    window.setActiveChatInUI = setActiveChatInUI;
-    window.handleSendMessage = handleSendMessage;
-    window.updateStatusDisplay = updateStatusDisplay;
-    window.closeFollowUpPopup = closeFollowUpPopup;
-    window.submitFollowUpResponses = submitFollowUpResponses;
+    window.loadUserChats = loadUserChats;
     
     // Credits management functions
     async function loadCredits() {
@@ -1090,8 +1076,6 @@ document.addEventListener('DOMContentLoaded', () => {
         taskStepsRestored = false;
 
         const processSendMessage = (chatId) => {
-            // Store original task for potential follow-up questions
-            window.currentOriginalTask = message;
 
             addMessage(message, 'user');
             messageInput.value = '';
@@ -1860,194 +1844,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalTitle = document.getElementById('modal-title');
         const modalBody = document.getElementById('modal-body');
         const modalClose = document.querySelector('.modal-close');
-        
-        if (modal && modalTitle && modalBody) {
-            modalTitle.textContent = title;
-            modalBody.innerHTML = content;
-            modal.style.display = 'flex';
-            
-            // Create cleanup function to remove all event listeners
-            const cleanup = () => {
+
+        if (!modal || !modalTitle || !modalBody || !modalClose) {
+            console.error('Modal elements not found!');
+            return;
+        }
+
+        modalTitle.textContent = title;
+        modalBody.innerHTML = content;
+        modal.style.display = 'flex';
+
+
+        modalClose.onclick = () => {
+            modal.style.display = 'none';
+        };
+
+        modal.onclick = (event) => {
+            if (event.target === modal) {
                 modal.style.display = 'none';
-                document.removeEventListener('click', handleModalClick);
-                document.removeEventListener('keydown', handleKeyDown);
-                if (modalClose) {
-                    modalClose.removeEventListener('click', cleanup);
-                }
-            };
-            
-            // Close modal when clicking outside
-            const handleModalClick = (e) => {
-                if (e.target === modal) {
-                    cleanup();
-                }
-            };
-            
-            // Close modal on Escape key
-            const handleKeyDown = (e) => {
-                if (e.key === 'Escape') {
-                    cleanup();
-                }
-            };
-            
-            // Add event listeners
-            document.addEventListener('click', handleModalClick);
-            document.addEventListener('keydown', handleKeyDown);
-            
-            // Close button handler
-            if (modalClose) {
-                modalClose.addEventListener('click', cleanup);
             }
-        }
-    }
-
-    // Follow-up Questions Popup Functions
-    function showFollowUpQuestions(questions, reasoning) {
-        // Create popup if it doesn't exist
-        let popup = document.getElementById('follow-up-popup');
-        if (!popup) {
-            popup = createFollowUpPopup();
-            document.body.appendChild(popup);
-        }
-
-        // Populate content
-        const reasoningEl = popup.querySelector('.follow-up-reasoning');
-        const questionsContainer = popup.querySelector('.follow-up-questions');
-        
-        if (reasoning) {
-            reasoningEl.textContent = reasoning;
-            reasoningEl.style.display = 'block';
-        } else {
-            reasoningEl.style.display = 'none';
-        }
-
-        // Clear previous questions
-        questionsContainer.innerHTML = '';
-
-        // Add questions
-        questions.forEach((question, index) => {
-            const questionDiv = document.createElement('div');
-            questionDiv.className = 'follow-up-question';
-            
-            const label = document.createElement('label');
-            label.textContent = question;
-            label.setAttribute('for', `follow-up-${index}`);
-            
-            const input = document.createElement('textarea');
-            input.id = `follow-up-${index}`;
-            input.name = `follow-up-${index}`;
-            input.placeholder = 'Your answer...';
-            input.rows = 2;
-            
-            questionDiv.appendChild(label);
-            questionDiv.appendChild(input);
-            questionsContainer.appendChild(questionDiv);
-        });
-
-        // Show popup
-        popup.classList.add('active');
-        
-        // Focus first input
-        const firstInput = popup.querySelector('textarea');
-        if (firstInput) {
-            setTimeout(() => firstInput.focus(), 100);
-        }
-    }
-
-    function createFollowUpPopup() {
-        const popup = document.createElement('div');
-        popup.id = 'follow-up-popup';
-        popup.className = 'follow-up-popup';
-        
-        popup.innerHTML = `
-            <div class="follow-up-content">
-                <div class="follow-up-header">
-                    <i class="fas fa-question-circle"></i>
-                    <h3>Task Clarification Needed</h3>
-                </div>
-                
-                <div class="follow-up-reasoning" style="display: none;"></div>
-                
-                <div class="follow-up-questions"></div>
-                
-                <div class="follow-up-actions">
-                    <button class="follow-up-btn secondary" onclick="closeFollowUpPopup()">
-                        Skip Questions
-                    </button>
-                    <button class="follow-up-btn primary" onclick="submitFollowUpResponses()">
-                        Continue with Clarifications
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        return popup;
-    }
-
-    function closeFollowUpPopup() {
-        const popup = document.getElementById('follow-up-popup');
-        if (popup) {
-            popup.classList.remove('active');
-            
-            // Re-enable input and send button
-            if (messageInput && sendButton) {
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-                taskInProgress = false;
-            }
-        }
-    }
-
-    function submitFollowUpResponses() {
-        const popup = document.getElementById('follow-up-popup');
-        if (!popup) return;
-        
-        const inputs = popup.querySelectorAll('textarea');
-        const responses = Array.from(inputs).map(input => input.value.trim()).filter(val => val);
-        
-        if (responses.length === 0) {
-            alert('Please provide at least one response or skip the questions.');
-            return;
-        }
-        
-        // Get original task from stored value or last user message
-        const originalTask = window.currentOriginalTask || getLastUserMessage();
-        
-        if (!originalTask) {
-            console.error('Could not find original task');
-            return;
-        }
-        
-        // Clear input
-        if (messageInput) {
-            messageInput.value = '';
-        }
-        
-        // Close popup
-        closeFollowUpPopup();
-        
-        // Update status
-        updateStatusDisplay('Processing with clarifications', 'loading');
-        
-        // Submit follow-up response
-        socket.emit('submit_follow_up', {
-            originalTask: originalTask,
-            responses: responses,
-            userId: userId,
-            chatId: currentChatId
-        });
-    }
-
-    function getLastUserMessage() {
-        if (!chatMessages) return '';
-        
-        const userMessages = chatMessages.querySelectorAll('.message.user .message-content');
-        if (userMessages.length > 0) {
-            const lastMessage = userMessages[userMessages.length - 1];
-            return lastMessage.textContent.trim();
-        }
-        
-        return '';
+        };
     }
 
     /**

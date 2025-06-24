@@ -300,41 +300,6 @@ function generateFinalizationPrompt(question, stepsOutput) {
   `;
 }
 
-/**
- * Generates a prompt to detect if a task needs clarification.
- * @param {string} question - The user's question or request.
- * @returns {string} The clarification detection prompt.
- */
-function generateClarificationPrompt(question) {
-  return `
-You are an AI assistant that determines if a user's task request needs clarification before execution.
-
-USER TASK: ${question}
-
-Analyze this task and determine if it's ambiguous or needs additional information to execute properly.
-
-Common situations requiring clarification:
-- Vague file locations ("create a file" without specifying where/name)
-- Missing parameters for tools/actions
-- Ambiguous instructions with multiple possible interpretations
-- Incomplete specifications for complex tasks
-- References to undefined variables or data
-
-RESPONSE FORMAT (JSON only):
-{
-  "needsClarification": true/false,
-  "questions": [
-    "Specific question 1?",
-    "Specific question 2?"
-  ],
-  "reasoning": "Brief explanation of why clarification is needed"
-}
-
-If needsClarification is false, return empty questions array.
-Keep questions focused and specific. Maximum 3 questions.
-`;
-}
-
 // Internal variable to store tool descriptions for prompt generation
 let toolDescriptions = [];
 
@@ -351,6 +316,5 @@ module.exports = {
   generatePlanningPrompt,
   generateProgressAnalysisPrompt,
   generateFinalizationPrompt,
-  generateClarificationPrompt,
   setToolDescriptions
 };

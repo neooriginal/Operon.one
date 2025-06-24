@@ -1,6 +1,6 @@
 Urgent:
 - cancelling tasks
-
+- AI asking follow up questions to a task
 
 Nice to have:
 - voice mode
