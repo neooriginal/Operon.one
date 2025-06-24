@@ -61,7 +61,7 @@ async function runTask(task, otherAIData, callback, userId = 'default', intensit
         updateDeepSearchSidebar(userId, {
             currentTask: task,
             status: 'Report completed',
-            reportSummary: report.substring(0, 200) + (report.length > 200 ? '...' : ''),
+            reportSummary: (typeof report === 'string' ? report.substring(0, 200) + (report.length > 200 ? '...' : '') : 'Report generated'),
             completed: true
         });
         
@@ -131,7 +131,7 @@ async function evaluatewithAI(task, webData, userId = 'default') {
         userContext.deepSearch.evaluations.push({
             task,
             timestamp: new Date().toISOString(),
-            summary: response.report?.substring(0, 100) + "..." || "No report"
+            summary: (typeof response.report === 'string' ? response.report.substring(0, 100) + "..." : "No report")
         });
         contextManager.updateContext(userId, userContext);
         
