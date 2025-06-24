@@ -19,6 +19,7 @@ const contextManager = require('../../utils/context');
  * @property {Object.<string, string>} [env] - Environment variables for the server
  * @property {number} [timeout] - Connection timeout in milliseconds (default: 30000)
  * @property {boolean} [autoRestart] - Whether to automatically restart the server on failure
+ * @property {Object} [staticTools] - Static tool definitions without needing to start the server
  * @memberof McpTypes
  */
 
@@ -145,7 +146,35 @@ class McpClient extends EventEmitter {
         this.availablePrompts = [];
         this.serverCapabilities = {};
         this.connectionTimeout = null;
+        this.staticTools = config.staticTools || [];
+        this.lazyLoaded = false;
         this._setupErrorHandling();
+    }
+
+    /**
+     * Gets available tools without starting the server (static mode)
+     * @returns {McpTypes.McpTool[]} Array of available tools
+     */
+    getAvailableToolsStatic() {
+        return [...this.staticTools];
+    }
+
+    /**
+     * Gets available tools, connecting to server only if needed
+     * @async
+     * @param {boolean} [forceConnect=false] - Force connection to get live tools
+     * @returns {Promise<McpTypes.McpTool[]>} Array of available tools
+     */
+    async getAvailableToolsLazy(forceConnect = false) {
+        if (!forceConnect && this.staticTools.length > 0) {
+            return [...this.staticTools];
+        }
+        
+        if (!this.isConnected) {
+            await this.connect();
+        }
+        
+        return [...this.availableTools];
     }
 
     /**
@@ -757,20 +786,12 @@ class DynamicMcpExecutor {
     }
 
     /**
-     * Discovers all available MCP capabilities
+     * Discovers all available MCP capabilities (lazy loading mode)
      * @async
      * @returns {Promise<Object>} Complete capability discovery results
      */
     async discoverCapabilities() {
-        this.logStep('Initializing MCP connections...');
-        
-        // Ensure connections are established
-        if (this.mcpManager.getConnectedServers().length === 0) {
-            await this.mcpManager.connectToAllServers();
-        }
-        
-        const connectedServers = this.mcpManager.getConnectedServers();
-        this.logStep(`Connected to ${connectedServers.length} MCP servers: ${connectedServers.join(', ')}`);
+        this.logStep('Discovering MCP capabilities...');
         
         const capabilities = {
             servers: {},
@@ -780,19 +801,27 @@ class DynamicMcpExecutor {
             serverSummary: []
         };
         
-        // Discover capabilities for each server
-        for (const serverName of connectedServers) {
+        // Use lazy loading to get tools without starting servers
+        const allTools = await this.mcpManager.getAllAvailableToolsLazy();
+        const connectedServers = this.mcpManager.getConnectedServers();
+        const configuredServers = Object.keys(this.mcpManager.serverConfigs);
+        
+        this.logStep(`Found ${configuredServers.length} configured servers, ${connectedServers.length} already connected`);
+        
+        // Process tools from all configured servers (connected or static)
+        for (const [serverName, tools] of Object.entries(allTools)) {
             const client = this.mcpManager.getClient(serverName);
+            const isConnected = client && client.isServerConnected();
             
-            if (!client || !client.isServerConnected()) {
-                this.logStep(`Skipping disconnected server: ${serverName}`);
-                continue;
+            let resources = [];
+            let prompts = [];
+            let serverCapabilities = {};
+            
+            if (isConnected) {
+                resources = client.getAvailableResources();
+                prompts = client.getAvailablePrompts();
+                serverCapabilities = client.getServerCapabilities();
             }
-            
-            const tools = client.getAvailableTools();
-            const resources = client.getAvailableResources();
-            const prompts = client.getAvailablePrompts();
-            const serverCapabilities = client.getServerCapabilities();
             
             capabilities.servers[serverName] = {
                 tools: tools.map(tool => ({
@@ -800,7 +829,8 @@ class DynamicMcpExecutor {
                     description: tool.description,
                     inputSchema: tool.inputSchema,
                     fullName: `${serverName}.${tool.name}`,
-                    server: serverName
+                    server: serverName,
+                    isStatic: !isConnected
                 })),
                 resources: resources.map(resource => ({
                     name: resource.name,
@@ -816,7 +846,7 @@ class DynamicMcpExecutor {
                     server: serverName
                 })),
                 capabilities: serverCapabilities,
-                connectionStatus: 'connected'
+                connectionStatus: isConnected ? 'connected' : 'configured'
             };
             
             capabilities.totalTools += tools.length;
@@ -833,16 +863,17 @@ class DynamicMcpExecutor {
                 toolCount: tools.length,
                 resourceCount: resources.length,
                 promptCount: prompts.length,
-                mainCapabilities: Object.keys(serverCapabilities)
+                mainCapabilities: Object.keys(serverCapabilities),
+                connectionStatus: isConnected ? 'connected' : 'configured'
             });
             
-            this.logStep(`Discovered ${tools.length} tools, ${resources.length} resources from ${serverName}`);
+            this.logStep(`Discovered ${tools.length} tools, ${resources.length} resources from ${serverName} (${isConnected ? 'connected' : 'static'})`);
         }
         
         capabilities.toolCategories = Array.from(capabilities.toolCategories);
         this.discoveredCapabilities = capabilities;
         
-        this.logStep(`Discovery complete: ${capabilities.totalTools} total tools across ${connectedServers.length} servers`);
+        this.logStep(`Discovery complete: ${capabilities.totalTools} total tools across ${Object.keys(allTools).length} servers (lazy mode)`);
         
         return capabilities;
     }
@@ -1606,6 +1637,20 @@ class McpClientManager {
         
         /** @type {Object.<string, McpTypes.McpServerConfig>} */
         this.serverConfigs = {};
+        
+        /** @type {boolean} */
+        this.lazyMode = true;
+        
+        /** @type {Object.<string, McpTypes.McpTool[]>} */
+        this.staticToolsCache = {};
+    }
+
+    /**
+     * Sets lazy loading mode
+     * @param {boolean} enabled - Whether to enable lazy loading
+     */
+    setLazyMode(enabled) {
+        this.lazyMode = enabled;
     }
 
     /**
@@ -1765,6 +1810,50 @@ class McpClientManager {
     }
 
     /**
+     * Gets available tools without starting servers (lazy mode)
+     * @async
+     * @returns {Promise<Object.<string, McpTypes.McpTool[]>>} Map of server names to their tools
+     */
+    async getAllAvailableToolsLazy() {
+        await this.loadServerConfigs();
+        
+        const allTools = {};
+        
+        // First, get tools from already connected servers
+        for (const [serverName, client] of this.clients) {
+            if (client.isServerConnected()) {
+                allTools[serverName] = client.getAvailableTools();
+            }
+        }
+        
+        // Then, get static tools from configured servers (without connecting)
+        for (const [serverName, config] of Object.entries(this.serverConfigs)) {
+            if (!allTools[serverName] && config.staticTools) {
+                allTools[serverName] = config.staticTools;
+                this.staticToolsCache[serverName] = config.staticTools;
+            }
+        }
+        
+        return allTools;
+    }
+
+    /**
+     * Ensures a server connection exists, connecting only when needed
+     * @async
+     * @param {string} serverName - Name of the server
+     * @returns {Promise<McpClient>} The MCP client
+     */
+    async ensureConnection(serverName) {
+        let client = this.clients.get(serverName);
+        
+        if (!client || !client.isServerConnected()) {
+            client = await this.connectToServer(serverName);
+        }
+        
+        return client;
+    }
+
+    /**
      * Gets all available resources from all connected servers
      * @returns {Object.<string, McpTypes.McpResource[]>} Map of server names to their resources
      */
@@ -1781,24 +1870,17 @@ class McpClientManager {
     }
 
     /**
-     * Calls a tool on a specific server
+     * Calls a tool on a specific server (with lazy connection)
      * @async
      * @param {string} serverName - Name of the server
      * @param {string} toolName - Name of the tool
      * @param {Object} [toolArgs={}] - Tool arguments
      * @returns {Promise<Object>} Tool execution result
-     * @throws {Error} When server not connected or tool call fails
+     * @throws {Error} When server not configured or tool call fails
      */
     async callTool(serverName, toolName, toolArgs = {}) {
-        const client = this.clients.get(serverName);
-        
-        if (!client) {
-            throw new Error(`Not connected to server: ${serverName}`);
-        }
-        
-        if (!client.isServerConnected()) {
-            throw new Error(`Server ${serverName} is not connected`);
-        }
+        // Ensure connection exists (lazy loading)
+        const client = await this.ensureConnection(serverName);
         
         return await client.callTool(toolName, toolArgs);
     }
@@ -1937,49 +2019,83 @@ async function runTask(taskDescription, otherAIData, stepCallback, userId = 'def
 }
 
 /**
- * Enhanced getAvailableTools for AI planning - now returns dynamic capabilities
+ * Enhanced getAvailableTools for AI planning - lazy loading mode
  * @async
  * @param {string} [userId='default'] - User ID for context management
+ * @param {boolean} [forceConnect=false] - Force connection to all servers
  * @returns {Promise<Object>} Available tools organized by server with full metadata
  */
-async function getAvailableTools(userId = 'default') {
+async function getAvailableTools(userId = 'default', forceConnect = false) {
     try {
         const mcpManager = getMcpManager(userId);
-        const executor = new DynamicMcpExecutor(mcpManager, () => {}, userId);
         
-        // Use the dynamic discovery system
-        const capabilities = await executor.discoverCapabilities();
-        
-        // Format for AI planning with enhanced metadata
-        const toolsForAI = {};
-        
-        for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
-            toolsForAI[serverName] = serverInfo.tools.map(tool => ({
-                name: tool.name,
-                description: tool.description,
-                server: serverName,
-                fullName: tool.fullName,
-                inputSchema: tool.inputSchema,
-                callFormat: `Use MCP tool: ${tool.description}`,
-                category: inferToolCategory(tool.name, tool.description)
-            }));
+        if (forceConnect) {
+            // Old behavior: connect to all servers
+            const executor = new DynamicMcpExecutor(mcpManager, () => {}, userId);
+            const capabilities = await executor.discoverCapabilities();
+            
+            // Format for AI planning with enhanced metadata
+            const toolsForAI = {};
+            
+            for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
+                toolsForAI[serverName] = serverInfo.tools.map(tool => ({
+                    name: tool.name,
+                    description: tool.description,
+                    server: serverName,
+                    fullName: tool.fullName,
+                    inputSchema: tool.inputSchema,
+                    callFormat: `Use MCP tool: ${tool.description}`,
+                    category: inferToolCategory(tool.name, tool.description),
+                    isStatic: tool.isStatic
+                }));
+            }
+            
+            return {
+                tools: toolsForAI,
+                summary: `${capabilities.totalTools} MCP tools available across ${Object.keys(capabilities.servers).length} servers`,
+                capabilities: capabilities,
+                totalTools: capabilities.totalTools,
+                connectedServers: Object.keys(capabilities.servers),
+                lazyMode: false
+            };
+        } else {
+            // New behavior: lazy loading
+            const allTools = await mcpManager.getAllAvailableToolsLazy();
+            const toolsForAI = {};
+            let totalTools = 0;
+            
+            for (const [serverName, tools] of Object.entries(allTools)) {
+                toolsForAI[serverName] = tools.map(tool => ({
+                    name: tool.name,
+                    description: tool.description,
+                    server: serverName,
+                    fullName: `${serverName}.${tool.name}`,
+                    inputSchema: tool.inputSchema,
+                    callFormat: `Use MCP tool: ${tool.description}`,
+                    category: inferToolCategory(tool.name, tool.description),
+                    isStatic: !mcpManager.clients.has(serverName)
+                }));
+                totalTools += tools.length;
+            }
+            
+            return {
+                tools: toolsForAI,
+                summary: `${totalTools} MCP tools available across ${Object.keys(allTools).length} servers (lazy mode)`,
+                totalTools: totalTools,
+                connectedServers: mcpManager.getConnectedServers(),
+                configuredServers: Object.keys(allTools),
+                lazyMode: true
+            };
         }
         
-        return {
-            tools: toolsForAI,
-            summary: `${capabilities.totalTools} MCP tools available across ${Object.keys(capabilities.servers).length} servers`,
-            capabilities: capabilities,
-            totalTools: capabilities.totalTools,
-            connectedServers: Object.keys(capabilities.servers)
-        };
-        
     } catch (error) {
-        console.error('[MCP-Dynamic] Failed to get available tools:', error.message);
-            return {
+        console.error('[MCP-Lazy] Failed to get available tools:', error.message);
+        return {
             tools: {},
             summary: 'Failed to retrieve MCP tools: ' + error.message,
             totalTools: 0,
-            error: error.message
+            error: error.message,
+            lazyMode: true
         };
     }
 }
@@ -2020,26 +2136,27 @@ function inferToolCategory(toolName, toolDescription) {
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Enhanced MCP tools description for AI planning
  */
-async function getMcpToolsForAI(userId = 'default') {
+async function getMcpToolsForAI(userId = 'default', forceConnect = false) {
     try {
         const mcpManager = getMcpManager(userId);
-        const executor = new DynamicMcpExecutor(mcpManager, () => {}, userId);
         
-        // Use dynamic discovery
-        const capabilities = await executor.discoverCapabilities();
+        // Use lazy loading by default
+        const allTools = await mcpManager.getAllAvailableToolsLazy();
         
-        if (capabilities.totalTools === 0) {
+        if (Object.keys(allTools).length === 0) {
             return {
                 availableTools: {},
-                summary: 'No MCP servers are currently connected. Configure MCP servers in settings to access external tools.',
-                toolCount: 0
+                summary: 'No MCP servers are currently configured. Configure MCP servers in settings to access external tools.',
+                toolCount: 0,
+                lazyMode: true
             };
         }
         
         const enhancedTools = {};
+        let totalTools = 0;
         
-        for (const [serverName, serverInfo] of Object.entries(capabilities.servers)) {
-            enhancedTools[serverName] = serverInfo.tools.map(tool => {
+        for (const [serverName, tools] of Object.entries(allTools)) {
+            enhancedTools[serverName] = tools.map(tool => {
                 // Create a detailed parameter guide for the AI
                 let parameterGuide = '';
                 let requiredParams = [];
@@ -2062,30 +2179,37 @@ async function getMcpToolsForAI(userId = 'default') {
                     server: serverName,
                     callFormat: `To use this tool, describe your task naturally. The system will automatically extract the right parameters.`,
                     inputSchema: tool.inputSchema,
-                    fullIdentifier: tool.fullName,
+                    fullIdentifier: `${serverName}.${tool.name}`,
                     category: inferToolCategory(tool.name, tool.description),
                     parameterGuide: parameterGuide,
                     requiredParameters: requiredParams,
-                    usageHint: generateToolUsageHint(tool.name, tool.description, tool.inputSchema)
+                    usageHint: generateToolUsageHint(tool.name, tool.description, tool.inputSchema),
+                    isStatic: !mcpManager.clients.has(serverName)
                 };
             });
+            totalTools += tools.length;
         }
+        
+        const connectedServers = mcpManager.getConnectedServers();
+        const configuredServers = Object.keys(allTools);
         
         return {
             availableTools: enhancedTools,
-            summary: `${capabilities.totalTools} MCP tools available across ${Object.keys(capabilities.servers).length} servers: ${Object.keys(capabilities.servers).join(', ')}`,
-            toolCount: capabilities.totalTools,
-            connectedServers: Object.keys(capabilities.servers),
-            capabilities: capabilities
+            summary: `${totalTools} MCP tools available across ${configuredServers.length} servers: ${configuredServers.join(', ')} (${connectedServers.length} connected, ${configuredServers.length - connectedServers.length} configured only)`,
+            toolCount: totalTools,
+            connectedServers: connectedServers,
+            configuredServers: configuredServers,
+            lazyMode: true
         };
         
     } catch (error) {
-        console.error('[MCP-Dynamic] Failed to get MCP tools for AI:', error.message);
+        console.error('[MCP-Lazy] Failed to get MCP tools for AI:', error.message);
         return {
             availableTools: {},
             summary: 'Failed to retrieve MCP tools: ' + error.message,
             toolCount: 0,
-            error: error.message
+            error: error.message,
+            lazyMode: true
         };
     }
 }
@@ -2094,17 +2218,20 @@ async function getMcpToolsForAI(userId = 'default') {
 // MCP tool now operates dynamically through DynamicMcpExecutor
 
 /**
- * DYNAMIC MCP TOOL ARCHITECTURE
- * =============================
+ * LAZY-LOADING MCP TOOL ARCHITECTURE
+ * ==================================
  * 
- * This tool now operates completely dynamically without hardcoded patterns:
+ * This tool now operates with lazy loading for optimal performance and resource management:
  * 
- * 1. DISCOVERY PHASE: Automatically discovers all available MCP servers and tools
- * 2. PLANNING PHASE: Uses semantic matching to find relevant tools for user requests  
- * 3. EXECUTION PHASE: Executes tools step-by-step, adapting based on results
- * 4. AUTONOMOUS OPERATION: Can chain multiple tools together to accomplish complex tasks
+ * 1. LAZY DISCOVERY PHASE: Discovers tools from static configs without starting servers
+ * 2. ON-DEMAND CONNECTION: Only connects to MCP servers when tools are actually called
+ * 3. PLANNING PHASE: Uses semantic matching to find relevant tools for user requests  
+ * 4. EXECUTION PHASE: Executes tools step-by-step, connecting servers as needed
+ * 5. AUTONOMOUS OPERATION: Can chain multiple tools together to accomplish complex tasks
  * 
  * Key Features:
+ * - **LAZY LOADING**: Servers only start when tools are actually called
+ * - **STATIC TOOL DISCOVERY**: Functions can be retrieved without starting servers
  * - No hardcoded task parsing patterns
  * - Dynamic tool discovery and execution
  * - Step-by-step execution with detailed logging
@@ -2115,6 +2242,11 @@ async function getMcpToolsForAI(userId = 'default') {
  * - Full execution history tracking
  * - Schema-aware parameter mapping
  * 
+ * LAZY LOADING MODES:
+ * - **Static Mode**: Tools retrieved from configuration without server startup
+ * - **Connected Mode**: Live tools from already connected servers
+ * - **On-Demand Mode**: Servers start only when specific tools are called
+ * 
  * PARAMETER HANDLING:
  * - Automatically detects parameter types from tool schemas
  * - Infers arguments from natural language descriptions
@@ -2124,8 +2256,9 @@ async function getMcpToolsForAI(userId = 'default') {
  * - Detailed parameter guides for AI interaction
  * 
  * Usage: Simply describe what you want to accomplish and the tool will:
- * - Discover available MCP capabilities with detailed parameter information
+ * - Discover available MCP capabilities from static configs (no server startup)
  * - Plan the best approach using available tools
+ * - Start servers only when tools are actually needed
  * - Automatically infer correct parameters from your description
  * - Execute tools with proper type validation
  * - Retry with corrected parameters if validation fails
