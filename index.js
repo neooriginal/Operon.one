@@ -185,6 +185,29 @@ async function centralOrchestrator(question, userId, chatId = 1, isFollowUp = fa
     
     // Notify user that task is received
     io.to(`user:${userId}`).emit('task_received', { userId, chatId, task: question, isFollowUp });
+    
+    // Check for clarification needs on new tasks (not follow-ups)
+    if (!isFollowUp) {
+      io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Analyzing task requirements' });
+      
+      const clarificationPrompt = prompts.generateClarificationPrompt(question);
+      const clarificationCheck = await ai.callAI(clarificationPrompt, question, [], undefined, true, "planning", userId, chatId);
+      
+      if (clarificationCheck && clarificationCheck.needsClarification && clarificationCheck.questions && clarificationCheck.questions.length > 0) {
+        // Send follow-up questions to user
+        io.to(`user:${userId}`).emit('follow_up_questions', { 
+          userId, 
+          chatId, 
+          questions: clarificationCheck.questions,
+          reasoning: clarificationCheck.reasoning 
+        });
+        
+        // Mark task as no longer running and wait for user response
+        contextManager.setTaskRunning(false, userId, chatId);
+        return 'Clarification questions sent to user';
+      }
+    }
+    
     io.to(`user:${userId}`).emit('status_update', { userId, chatId, status: 'Improving prompt' });
     
     // Set the question in context
@@ -945,6 +968,19 @@ if (require.main === module) {
     socket.on('submit_task', async (data) => {
       const { task, userId = `socket_${Date.now()}`, chatId = 1, isFollowUp = false } = data;
       centralOrchestrator(task, userId, chatId, isFollowUp);
+    });
+    
+    /**
+     * Handle follow-up question responses.
+     */
+    socket.on('submit_follow_up', async (data) => {
+      const { originalTask, responses, userId = `socket_${Date.now()}`, chatId = 1 } = data;
+      
+      // Combine original task with user responses for clarification
+      const clarifiedTask = `${originalTask}\n\nAdditional clarifications:\n${responses.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+      
+      // Process as a follow-up task
+      centralOrchestrator(clarifiedTask, userId, chatId, true);
     });
     
     /**
