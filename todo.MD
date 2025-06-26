@@ -1,6 +1,8 @@
 Urgent:
 
 - AI asking follow up questions to a task
+- multi row input in task creation and follow up
+- automatically redirect to task creation page if no specific existing task is loaded
 
 Nice to have:
 
