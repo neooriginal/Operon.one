@@ -342,16 +342,67 @@
                     <div class="status-content">
                         <i class="fas fa-info-circle"></i> Ready to help with complex tasks
                     </div>
-                    <button class="tools-toggle-btn" id="tools-toggle-btn" title="Show Tools">
-                        <i class="fas fa-tools"></i>
-                    </button>
+                    <div class="status-actions">
+                        <button class="upload-toggle-btn" id="upload-toggle-btn" title="Upload Files">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </button>
+                        <button class="tools-toggle-btn" id="tools-toggle-btn" title="Show Tools">
+                            <i class="fas fa-tools"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="chat-messages" id="chat-messages">
                     <!-- Chat messages will be appended here -->
                 </div>
                 <div class="chat-input">
+                    <button class="chat-upload-button" id="chat-upload-button" title="Upload Files">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
                     <textarea id="message-input" placeholder="Enter your task or question...&#10;Press Ctrl+Enter to submit" rows="2"></textarea>
                     <button id="send-button">Send</button>
+                    <input type="file" id="chat-file-input" multiple accept="*/*" style="display: none;">
+                </div>
+            </div>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="file-upload-section" id="file-upload-section" style="display: none;">
+            <h3><i class="fas fa-cloud-upload-alt"></i> Upload Files</h3>
+            
+            <div class="file-upload-container">
+                <div class="file-upload-dropzone" id="file-dropzone">
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <div class="upload-text">Drop files here or click to upload</div>
+                    <div class="upload-hint">Supports all file types • Max 50MB per file</div>
+                    <button class="file-upload-button" id="upload-button">
+                        <i class="fas fa-plus"></i>
+                        Choose Files
+                    </button>
+                    <input type="file" class="file-upload-input" id="file-input" multiple accept="*/*">
+                </div>
+                
+                <div class="upload-progress" id="upload-progress">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">Ready to upload</div>
+                </div>
+                
+                <div class="upload-results" id="upload-results">
+                    <div id="upload-message"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Uploaded Files Management Section -->
+        <div class="uploaded-files-section" id="uploaded-files-section" style="display: none;">
+            <h3><i class="fas fa-folder-open"></i> Uploaded Files</h3>
+            <div class="uploaded-files-list" id="uploaded-files-list">
+                <div class="uploaded-files-list empty">
+                    <i class="fas fa-folder-open"></i>
+                    <p>Loading files...</p>
                 </div>
             </div>
         </div>
@@ -500,6 +551,10 @@
                 }
             }
             
+            // Make showChatInterface globally available
+            window.showChatInterface = showChatInterface;
+            window.showWelcomeScreen = showWelcomeScreen;
+            
             function loadUserCredits() {
                 fetch('/api/credits', {
                     headers: {
@@ -579,6 +634,12 @@
                             window.isLoadingHistory = false;
                             
                             localStorage.setItem('currentChatId', chat.id);
+                            
+                            // Auto-close file upload sidebar when switching chats
+                            if (window.closeFileUploadSidebar) {
+                                window.closeFileUploadSidebar();
+                            }
+                            
                             showChatInterface();
                             // Trigger the script.js chat loading by dispatching a custom event
                             window.dispatchEvent(new CustomEvent('loadChat', { detail: { chatId: chat.id } }));
@@ -626,7 +687,21 @@
                     document.getElementById('start-button').disabled = true;
                     document.getElementById('start-button').textContent = 'Starting...';
                     
-                    localStorage.setItem('currentChatId', 'new');
+                    // Check if we already have a valid chat from file uploads
+                    const currentChatId = localStorage.getItem('currentChatId');
+                    const hasValidChat = currentChatId && currentChatId !== 'new' && !isNaN(parseInt(currentChatId, 10));
+                    
+                    console.log('Start button - checking chat ID:', { currentChatId, hasValidChat });
+                    
+                    if (!hasValidChat) {
+                        // No valid chat from uploads, will create new one during message send
+                        localStorage.setItem('currentChatId', 'new');
+                        console.log('No valid chat from uploads, setting to new');
+                    } else {
+                        console.log('Keeping existing chat from file uploads:', currentChatId);
+                        // Keep the existing valid chat ID from file uploads
+                    }
+                    
                     localStorage.setItem('initialQuery', input);
                     
                     showChatInterface();
@@ -652,6 +727,12 @@
             document.getElementById('new-task-button').addEventListener('click', function() {
                 localStorage.removeItem('initialQuery');
                 localStorage.setItem('currentChatId', 'new');
+                
+                // Auto-close file upload sidebar when creating new task
+                if (window.closeFileUploadSidebar) {
+                    window.closeFileUploadSidebar();
+                }
+                
                 showWelcomeScreen();
                 loadWelcomePageChats();
                 // Auto-focus the input for immediate task creation
@@ -669,6 +750,543 @@
                 console.error('Token validation error:', error);
             });
         });
+
+        // File Upload Functionality
+        function initializeFileUpload() {
+            const uploadToggleBtn = document.getElementById('upload-toggle-btn');
+            const fileUploadSection = document.getElementById('file-upload-section');
+            const uploadedFilesSection = document.getElementById('uploaded-files-section');
+            const dropzone = document.getElementById('file-dropzone');
+            const fileInput = document.getElementById('file-input');
+            const uploadButton = document.getElementById('upload-button');
+            const progressContainer = document.getElementById('upload-progress');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const uploadResults = document.getElementById('upload-results');
+
+            // Toggle file upload section
+            uploadToggleBtn.addEventListener('click', () => {
+                const isVisible = fileUploadSection.style.display !== 'none';
+                fileUploadSection.style.display = isVisible ? 'none' : 'block';
+                uploadedFilesSection.style.display = isVisible ? 'none' : 'block';
+                
+                if (!isVisible) {
+                    loadUploadedFiles();
+                }
+            });
+
+            // Drag and drop handlers
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('drag-over');
+            });
+
+            dropzone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                if (!dropzone.contains(e.relatedTarget)) {
+                    dropzone.classList.remove('drag-over');
+                }
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('drag-over');
+                const files = Array.from(e.dataTransfer.files);
+                handleFileSelection(files);
+            });
+
+            // Click to select files
+            dropzone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            uploadButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                handleFileSelection(files);
+            });
+
+            function handleFileSelection(files) {
+                if (files.length === 0) return;
+
+                // Show progress
+                progressContainer.classList.add('show');
+                uploadResults.classList.remove('show');
+
+                uploadFiles(files);
+            }
+
+            async function uploadFiles(files) {
+                const totalFiles = files.length;
+                let completedFiles = 0;
+                let failedFiles = [];
+
+                updateProgress(0, `Starting upload of ${totalFiles} file(s)...`);
+
+                for (const file of files) {
+                    try {
+                        updateProgress(
+                            (completedFiles / totalFiles) * 100,
+                            `Uploading "${file.name}" (${completedFiles + 1}/${totalFiles})...`
+                        );
+                        
+                        await uploadSingleFile(file);
+                        completedFiles++;
+                        
+                        updateProgress(
+                            (completedFiles / totalFiles) * 100,
+                            `Uploaded ${completedFiles}/${totalFiles} files`
+                        );
+                        
+                    } catch (error) {
+                        console.error('Upload failed for file:', file.name, error);
+                        failedFiles.push({name: file.name, error: error.message});
+                        
+                        // Continue with other files instead of stopping
+                        completedFiles++; // Count as processed, even if failed
+                        updateProgress(
+                            (completedFiles / totalFiles) * 100,
+                            `Processing ${completedFiles}/${totalFiles} files (${failedFiles.length} failed)`
+                        );
+                    }
+                }
+
+                // Show final results
+                if (failedFiles.length === 0) {
+                    showUploadResult(`Successfully uploaded all ${totalFiles} file(s)!`, 'success');
+                } else if (completedFiles - failedFiles.length > 0) {
+                    showUploadResult(
+                        `Uploaded ${completedFiles - failedFiles.length}/${totalFiles} files. ${failedFiles.length} failed.`,
+                        'partial'
+                    );
+                } else {
+                    showUploadResult(`All uploads failed. Please check your files and try again.`, 'error');
+                }
+                
+                setTimeout(() => {
+                    progressContainer.classList.remove('show');
+                    loadUploadedFiles(); // Refresh the file list
+                    fileInput.value = ''; // Clear the input
+                }, 3000);
+            }
+
+            async function uploadSingleFile(file) {
+                const currentChatId = localStorage.getItem('currentChatId') || 1;
+                const chatId = currentChatId === 'new' ? 1 : currentChatId;
+                
+                const formData = new FormData();
+                formData.append('files', file); // Match the server expectation
+                formData.append('chatId', chatId); // Include chatId
+
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error || 'Upload failed');
+                }
+
+                return await response.json();
+            }
+
+            function updateProgress(percentage, text) {
+                progressBar.style.width = `${percentage}%`;
+                progressText.textContent = text;
+            }
+
+            function showUploadResult(message, type) {
+                const uploadMessage = document.getElementById('upload-message');
+                uploadMessage.textContent = message;
+                uploadResults.className = `upload-results show ${type}`;
+            }
+        }
+
+        // File Management Functionality
+        async function loadUploadedFiles() {
+            try {
+                // Get current chat ID to filter files
+                const currentChatId = localStorage.getItem('currentChatId') || 1;
+                const chatId = currentChatId === 'new' ? 1 : currentChatId;
+                
+                const response = await fetch(`/api/uploads?chatId=${chatId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load files');
+                }
+
+                const files = await response.json();
+                displayUploadedFiles(files);
+            } catch (error) {
+                console.error('Error loading files:', error);
+                displayUploadedFiles([]);
+            }
+        }
+
+        function displayUploadedFiles(files) {
+            const filesList = document.getElementById('uploaded-files-list');
+
+            if (files.length === 0) {
+                filesList.innerHTML = `
+                    <div class="uploaded-files-list empty">
+                        <i class="fas fa-folder-open"></i>
+                        <p>No files uploaded yet</p>
+                    </div>
+                `;
+                return;
+            }
+
+            filesList.innerHTML = files.map(file => `
+                <div class="file-item" data-file-id="${file.id}">
+                    <div class="file-item-icon">
+                        <i class="fas ${getFileIcon(file.filename)}"></i>
+                    </div>
+                    <div class="file-item-info">
+                        <div class="file-item-name">${escapeHtml(file.filename)}</div>
+                        <div class="file-item-details">
+                            <div class="file-item-size">
+                                <i class="fas fa-hdd"></i>
+                                ${formatFileSize(file.size)}
+                            </div>
+                            <div class="file-item-date">
+                                <i class="fas fa-calendar"></i>
+                                ${formatDate(file.upload_date)}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-item-actions">
+                        <button class="file-action-btn" onclick="viewFile('${file.id}', '${escapeHtml(file.filename)}')">
+                            <i class="fas fa-eye"></i>
+                            View
+                        </button>
+                        <a class="file-action-btn" href="/api/files/${file.id}/download" download="${escapeHtml(file.filename)}">
+                            <i class="fas fa-download"></i>
+                            Download
+                        </a>
+                        <button class="file-action-btn delete" onclick="deleteFile('${file.id}', '${escapeHtml(file.filename)}')">
+                            <i class="fas fa-trash"></i>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const iconMap = {
+                'pdf': 'fa-file-pdf',
+                'doc': 'fa-file-word',
+                'docx': 'fa-file-word',
+                'xls': 'fa-file-excel',
+                'xlsx': 'fa-file-excel',
+                'ppt': 'fa-file-powerpoint',
+                'pptx': 'fa-file-powerpoint',
+                'txt': 'fa-file-alt',
+                'md': 'fa-file-alt',
+                'jpg': 'fa-file-image',
+                'jpeg': 'fa-file-image',
+                'png': 'fa-file-image',
+                'gif': 'fa-file-image',
+                'svg': 'fa-file-image',
+                'mp4': 'fa-file-video',
+                'avi': 'fa-file-video',
+                'mov': 'fa-file-video',
+                'mp3': 'fa-file-audio',
+                'wav': 'fa-file-audio',
+                'zip': 'fa-file-archive',
+                'rar': 'fa-file-archive',
+                'tar': 'fa-file-archive',
+                'js': 'fa-file-code',
+                'html': 'fa-file-code',
+                'css': 'fa-file-code',
+                'py': 'fa-file-code',
+                'java': 'fa-file-code',
+                'cpp': 'fa-file-code'
+            };
+            return iconMap[ext] || 'fa-file';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function viewFile(fileId, filename) {
+            try {
+                // First get file metadata
+                const response = await fetch(`/api/files/${fileId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load file details');
+                }
+
+                const fileData = await response.json();
+                
+                // Try to get content via download endpoint
+                const downloadResponse = await fetch(`/api/files/${fileId}/download`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    }
+                });
+                
+                if (downloadResponse.ok) {
+                    const content = await downloadResponse.text();
+                    showFileModal(filename, content);
+                } else {
+                    throw new Error('File content not available for viewing');
+                }
+            } catch (error) {
+                console.error('Error viewing file:', error);
+                alert('Failed to view file: ' + error.message);
+            }
+        }
+
+        function showFileModal(filename, content) {
+            const modal = document.createElement('div');
+            modal.className = 'file-content-modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>${escapeHtml(filename)}</h3>
+                        <button class="close-button" onclick="this.closest('.file-content-modal').remove()">
+                            &times;
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <pre>${escapeHtml(content)}</pre>
+                    </div>
+                </div>
+            `;
+
+            // Close modal when clicking outside
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+
+            document.body.appendChild(modal);
+        }
+
+        async function deleteFile(fileId, filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/uploads/${fileId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete file');
+                }
+
+                // Refresh the file list
+                loadUploadedFiles();
+            } catch (error) {
+                console.error('Error deleting file:', error);
+                alert('Failed to delete file: ' + error.message);
+            }
+        }
+
+        // Initialize file upload when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeFileUpload();
+            initializeInlineUploadButtons();
+        });
+
+        // Initialize inline upload buttons (chat input only)
+        function initializeInlineUploadButtons() {
+            const chatUploadBtn = document.getElementById('chat-upload-button');
+            const chatFileInput = document.getElementById('chat-file-input');
+
+            // Chat input upload button
+            if (chatUploadBtn && chatFileInput) {
+                chatUploadBtn.addEventListener('click', () => {
+                    chatFileInput.click();
+                });
+
+                chatFileInput.addEventListener('change', async (e) => {
+                    const files = Array.from(e.target.files);
+                    if (files.length > 0) {
+                        await handleInlineFileUpload(files, 'chat');
+                        chatFileInput.value = ''; // Clear the input
+                    }
+                });
+            }
+        }
+
+        // Handle file upload from chat input button
+        async function handleInlineFileUpload(files, source) {
+            let currentChatId = localStorage.getItem('currentChatId') || 'new';
+            
+            // Show visual feedback
+            showInlineUploadFeedback(source, 'uploading', `Uploading ${files.length} file(s)...`);
+            
+            try {
+                const chatId = currentChatId === 'new' ? 1 : currentChatId;
+                console.log('Uploading files to chat:', chatId);
+                
+                showInlineUploadFeedback(source, 'uploading', `Uploading files to chat...`);
+                
+                let successCount = 0;
+                let errorMessages = [];
+                
+                for (const file of files) {
+                    try {
+                        const formData = new FormData();
+                        formData.append('files', file);
+                        formData.append('chatId', chatId);
+                        
+                        const response = await fetch('/api/upload', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                            },
+                            body: formData
+                        });
+
+                        if (response.ok) {
+                            successCount++;
+                            console.log(`Successfully uploaded: ${file.name}`);
+                        } else {
+                            const errorText = await response.text();
+                            errorMessages.push(`${file.name}: ${errorText}`);
+                            console.error(`Failed to upload ${file.name}:`, errorText);
+                        }
+                    } catch (fileError) {
+                        errorMessages.push(`${file.name}: ${fileError.message}`);
+                        console.error(`Upload error for ${file.name}:`, fileError);
+                    }
+                }
+                
+                if (successCount === files.length) {
+                    showInlineUploadFeedback(source, 'success', `Successfully uploaded ${successCount} file(s)`);
+                    
+                    // Refresh the file list in the upload section
+                    if (typeof loadUploadedFiles === 'function') {
+                        loadUploadedFiles();
+                    }
+                } else if (successCount > 0) {
+                    showInlineUploadFeedback(source, 'partial', `Uploaded ${successCount}/${files.length} files`);
+                } else {
+                    showInlineUploadFeedback(source, 'error', `Upload failed: ${errorMessages[0] || 'Unknown error'}`);
+                }
+                
+            } catch (error) {
+                console.error('Error in file upload process:', error);
+                showInlineUploadFeedback(source, 'error', `Upload failed: ${error.message}`);
+            }
+        }
+
+        // Show visual feedback for inline uploads
+        function showInlineUploadFeedback(source, type, message) {
+            const button = source === 'welcome'
+                ? document.getElementById('welcome-upload-button')
+                : document.getElementById('chat-upload-button');
+            
+            if (!button) return;
+            
+            // Store original state if not already stored
+            if (!button.dataset.originalIcon) {
+                button.dataset.originalIcon = button.querySelector('i').className;
+                button.dataset.originalColor = button.style.color || '';
+                button.dataset.originalTitle = button.title || 'Upload Files';
+            }
+            
+            const icon = button.querySelector('i');
+            
+            // Clear any existing timeout
+            if (button.feedbackTimeout) {
+                clearTimeout(button.feedbackTimeout);
+            }
+            
+            // Update button appearance based on type
+            if (type === 'uploading') {
+                icon.className = 'fas fa-spinner fa-spin';
+                button.style.color = 'var(--primary)';
+                button.title = message;
+                button.disabled = true;
+            } else if (type === 'success') {
+                icon.className = 'fas fa-check';
+                button.style.color = 'var(--success)';
+                button.title = message;
+                button.disabled = false;
+            } else if (type === 'error') {
+                icon.className = 'fas fa-exclamation-triangle';
+                button.style.color = 'var(--error)';
+                button.title = message;
+                button.disabled = false;
+            }
+            
+            // Auto-reset after appropriate time (longer for uploads, shorter for status)
+            const resetTime = type === 'uploading' ? 30000 : 3000; // 30s for uploads, 3s for status
+            
+            button.feedbackTimeout = setTimeout(() => {
+                icon.className = button.dataset.originalIcon;
+                button.style.color = button.dataset.originalColor;
+                button.title = button.dataset.originalTitle;
+                button.disabled = false;
+                button.feedbackTimeout = null;
+            }, resetTime);
+        }
+        
+        // Force reset upload feedback (useful for error recovery)
+        function resetUploadFeedback(source) {
+            const button = source === 'welcome'
+                ? document.getElementById('welcome-upload-button')
+                : document.getElementById('chat-upload-button');
+                
+            if (!button) return;
+            
+            if (button.feedbackTimeout) {
+                clearTimeout(button.feedbackTimeout);
+                button.feedbackTimeout = null;
+            }
+            
+            if (button.dataset.originalIcon) {
+                const icon = button.querySelector('i');
+                icon.className = button.dataset.originalIcon;
+                button.style.color = button.dataset.originalColor;
+                button.title = button.dataset.originalTitle;
+                button.disabled = false;
+            }
+        }
     </script>
     
     <!-- File Modal -->

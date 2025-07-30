@@ -9,6 +9,7 @@ const { router: authRoutes, authenticateToken } = require('./authRoutes');
 const adminRoutes = require('./adminRoutes');
 const { chatFunctions, fileFunctions, taskStepFunctions } = require('./database');
 const mime = require('mime-types');
+const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
 const config = require('./utils/config');
@@ -506,6 +507,226 @@ app.get('/api/files/:fileId/download', isAuthenticated, async (req, res) => {
     if (!res.headersSent) {
       res.status(500).send({ error: 'Internal Server Error' });
     }
+  }
+});
+
+// Configure multer for file uploads - use memory storage to avoid saving to host
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB max file size
+    files: 10 // Max 10 files per upload
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow all file types but log them
+    logger.info('File upload attempted', {
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      userId: req.userId
+    });
+    cb(null, true);
+  }
+});
+
+// File upload endpoint that saves directly to docker container
+app.post('/api/upload', isAuthenticated, upload.array('files', 10), async (req, res) => {
+  const userId = req.userId;
+  const { chatId = 1 } = req.body;
+  
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    logger.info('Processing file uploads', {
+      fileCount: req.files.length,
+      userId,
+      chatId
+    });
+
+    const uploadedFiles = [];
+    
+    // Import the filesystem tool
+    const { sanitizeFilePath } = require('./index');
+    
+    for (const file of req.files) {
+      try {
+        // Create a safe filename
+        const timestamp = Date.now();
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `${timestamp}_${safeName}`;
+        
+        // Determine container path - save to user-specific directory in container
+        const containerPath = `/app/uploads/${userId}/${fileName}`;
+        
+        // Get file extension
+        const fileExtension = file.originalname.split('.').pop() || '';
+        
+        // Convert buffer to string for text files, or base64 for binary files
+        let fileContent;
+        const isTextFile = file.mimetype.startsWith('text/') ||
+                          file.mimetype === 'application/json' ||
+                          file.mimetype === 'application/javascript' ||
+                          file.mimetype === 'application/xml';
+        
+        if (isTextFile) {
+          fileContent = file.buffer.toString('utf8');
+        } else {
+          fileContent = file.buffer.toString('base64');
+        }
+        
+        // Track the file in the database
+        const tracked = await fileFunctions.trackContainerFile(
+          userId,
+          containerPath,
+          file.originalname,
+          `Uploaded file: ${file.originalname}`,
+          chatId,
+          fileContent,
+          fileExtension
+        );
+        
+        logger.info('File uploaded and tracked', {
+          fileName: file.originalname,
+          containerPath,
+          fileId: tracked.id,
+          userId,
+          chatId
+        });
+        
+        uploadedFiles.push({
+          id: tracked.id,
+          originalName: file.originalname,
+          fileName: fileName,
+          containerPath: containerPath,
+          size: file.size,
+          mimeType: file.mimetype,
+          uploaded: true
+        });
+        
+      } catch (fileError) {
+        logger.error('Error processing individual file', {
+          fileName: file.originalname,
+          error: fileError.message,
+          userId
+        });
+        
+        uploadedFiles.push({
+          originalName: file.originalname,
+          error: `Failed to upload: ${fileError.message}`,
+          uploaded: false
+        });
+      }
+    }
+    
+    // Count successful uploads
+    const successCount = uploadedFiles.filter(f => f.uploaded).length;
+    const errorCount = uploadedFiles.filter(f => !f.uploaded).length;
+    
+    logger.info('File upload completed', {
+      successCount,
+      errorCount,
+      userId,
+      chatId
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: `Successfully uploaded ${successCount} file(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+      files: uploadedFiles,
+      successCount,
+      errorCount
+    });
+    
+  } catch (error) {
+    logger.error('Error handling file upload', {
+      error: error.message,
+      userId,
+      chatId
+    });
+    res.status(500).json({
+      error: 'Failed to upload files',
+      details: error.message
+    });
+  }
+});
+
+// Get uploaded files for a user/chat
+app.get('/api/uploads', isAuthenticated, async (req, res) => {
+  const userId = req.userId;
+  const { chatId = 1 } = req.query;
+  
+  try {
+    const files = await fileFunctions.getTrackedFiles(userId, chatId);
+    
+    // Format only container files (uploaded files)
+    const uploadedFiles = files.containerFiles.map(file => ({
+      id: file.id,
+      filename: file.originalName, // Match JavaScript expectation
+      originalName: file.originalName,
+      containerPath: file.containerPath,
+      fileExtension: file.fileExtension,
+      upload_date: file.createdAt, // Match JavaScript expectation
+      size: file.fileContent ? file.fileContent.length : 0, // Calculate size from content
+      hasContent: !!file.fileContent
+    }));
+    
+    res.json(uploadedFiles); // Return array directly to match JavaScript expectation
+    
+  } catch (error) {
+    logger.error('Error fetching uploaded files', {
+      error: error.message,
+      userId,
+      chatId
+    });
+    res.status(500).json({
+      error: 'Failed to fetch uploaded files',
+      details: error.message
+    });
+  }
+});
+
+// Delete an uploaded file
+app.delete('/api/uploads/:fileId', isAuthenticated, async (req, res) => {
+  const { fileId } = req.params;
+  const userId = req.userId;
+  
+  try {
+    // Get the file to verify ownership
+    const file = await fileFunctions.getTrackedFileById(userId, fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found or access denied' });
+    }
+    
+    // Only allow deletion of container files (uploaded files)
+    if (file.type !== 'container') {
+      return res.status(403).json({ error: 'Cannot delete this type of file' });
+    }
+    
+    // Delete from database
+    const result = await fileFunctions.deleteTrackedFiles(userId, [fileId], 'container');
+    
+    if (result.deleted > 0) {
+      logger.info('File deleted', { fileId, fileName: file.fileName, userId });
+      res.json({
+        success: true,
+        message: 'File deleted successfully',
+        deletedCount: result.deleted
+      });
+    } else {
+      res.status(404).json({ error: 'File not found' });
+    }
+    
+  } catch (error) {
+    logger.error('Error deleting file', {
+      error: error.message,
+      fileId,
+      userId
+    });
+    res.status(500).json({
+      error: 'Failed to delete file',
+      details: error.message
+    });
   }
 });
 

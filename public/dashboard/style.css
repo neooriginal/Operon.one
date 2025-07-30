@@ -637,30 +637,49 @@ body::before {
     gap: 10px;
 }
 
-.tools-toggle-btn {
+.tools-toggle-btn, .upload-toggle-btn {
     background: rgba(71, 85, 105, 0.3);
     border: 1px solid rgba(71, 85, 105, 0.5);
-    border-radius: var(--border-radius);
-    color: var(--gray);
+    border-radius: var(--border-radius-lg);
+    color: var(--gray-light);
     cursor: pointer;
-    padding: 8px 10px;
+    padding: 10px 12px;
     transition: var(--transition);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    min-width: 44px;
+    height: 40px;
 }
 
-.tools-toggle-btn:hover {
+.tools-toggle-btn:hover, .upload-toggle-btn:hover {
     background: rgba(99, 102, 241, 0.2);
     border-color: var(--primary);
     color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
 }
 
-.tools-toggle-btn.active {
+.tools-toggle-btn.active, .upload-toggle-btn.active {
     background: var(--primary);
     border-color: var(--primary);
     color: white;
+    box-shadow: var(--shadow);
+}
+
+.upload-toggle-btn i {
+    transition: transform 0.3s ease;
+}
+
+.upload-toggle-btn:hover i {
+    transform: rotate(180deg);
+}
+
+.upload-toggle-btn.active i {
+    transform: rotate(180deg);
 }
 
 .status-display.active {
@@ -2002,4 +2021,521 @@ body::before {
         padding: 15px;
         max-height: 400px;
     }
-} 
+}
+
+/* File Upload Styles */
+.file-upload-section {
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: var(--border-radius-lg);
+    padding: 24px;
+    margin: 20px 0;
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    box-shadow: var(--shadow);
+}
+
+.file-upload-section h3 {
+    margin: 0 0 20px 0;
+    color: var(--light);
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.file-upload-section h3 i {
+    color: var(--primary);
+    font-size: 1.2rem;
+}
+
+.file-upload-container {
+    margin-bottom: 20px;
+}
+
+.file-upload-dropzone {
+    border: 2px dashed rgba(71, 85, 105, 0.5);
+    border-radius: var(--border-radius-lg);
+    padding: 40px 20px;
+    text-align: center;
+    background: rgba(15, 23, 42, 0.4);
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.file-upload-dropzone::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at center, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.file-upload-dropzone:hover {
+    border-color: var(--primary);
+    background: rgba(15, 23, 42, 0.6);
+}
+
+.file-upload-dropzone:hover::before {
+    opacity: 1;
+}
+
+.file-upload-dropzone.drag-over {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+    transform: scale(1.02);
+    box-shadow: var(--shadow-lg);
+}
+
+.file-upload-dropzone.drag-over::before {
+    opacity: 1;
+}
+
+.file-upload-dropzone .upload-icon {
+    font-size: 3rem;
+    color: var(--gray);
+    margin-bottom: 16px;
+    transition: var(--transition);
+}
+
+.file-upload-dropzone:hover .upload-icon,
+.file-upload-dropzone.drag-over .upload-icon {
+    color: var(--primary);
+    transform: scale(1.1);
+}
+
+.file-upload-dropzone .upload-text {
+    color: var(--light);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.file-upload-dropzone .upload-hint {
+    color: var(--gray);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+.file-upload-input {
+    display: none;
+}
+
+.file-upload-button {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: var(--light);
+    border: none;
+    border-radius: var(--border-radius-lg);
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-upload-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.file-upload-button:hover::before {
+    left: 100%;
+}
+
+.file-upload-button:hover {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+}
+
+.file-upload-button:active {
+    transform: translateY(0);
+}
+
+.file-upload-button i {
+    font-size: 1rem;
+}
+
+.upload-progress {
+    margin-top: 20px;
+    display: none;
+}
+
+.upload-progress.show {
+    display: block;
+}
+
+.progress-bar-container {
+    background: rgba(71, 85, 105, 0.3);
+    border-radius: var(--border-radius);
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: var(--border-radius);
+}
+
+.progress-text {
+    color: var(--gray-light);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.upload-results {
+    margin-top: 15px;
+    padding: 12px;
+    border-radius: var(--border-radius);
+    font-size: 0.9rem;
+    display: none;
+}
+
+.upload-results.show {
+    display: block;
+}
+
+.upload-results.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.upload-results.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.upload-results.partial {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Uploaded Files Management */
+.uploaded-files-section {
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: var(--border-radius-lg);
+    padding: 24px;
+    margin: 20px 0;
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    box-shadow: var(--shadow);
+}
+
+.uploaded-files-section h3 {
+    margin: 0 0 20px 0;
+    color: var(--light);
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.uploaded-files-section h3 i {
+    color: var(--secondary);
+    font-size: 1.2rem;
+}
+
+.uploaded-files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.uploaded-files-list.empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray);
+}
+
+.uploaded-files-list.empty i {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.file-item {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    border-radius: var(--border-radius-lg);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: var(--transition);
+}
+
+.file-item:hover {
+    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(15, 23, 42, 0.8);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.file-item-icon {
+    font-size: 1.5rem;
+    color: var(--primary);
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.file-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-item-name {
+    color: var(--light);
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-item-details {
+    color: var(--gray);
+    font-size: 0.8rem;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.file-item-size {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.file-item-date {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.file-item-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.file-action-btn {
+    background: rgba(71, 85, 105, 0.3);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    border-radius: var(--border-radius);
+    color: var(--gray-light);
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+}
+
+.file-action-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.file-action-btn.delete:hover {
+    border-color: var(--error);
+    color: var(--error);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.file-action-btn i {
+    font-size: 0.9rem;
+}
+
+/* Mobile Responsive Styles for File Upload */
+@media (max-width: 768px) {
+    .file-upload-section,
+    .uploaded-files-section {
+        margin: 12px 0;
+        padding: 16px;
+    }
+
+    .file-upload-dropzone {
+        padding: 30px 15px;
+    }
+
+    .file-upload-dropzone .upload-icon {
+        font-size: 2.5rem;
+        margin-bottom: 12px;
+    }
+
+    .file-upload-dropzone .upload-text {
+        font-size: 1rem;
+    }
+
+    .file-upload-dropzone .upload-hint {
+        font-size: 0.85rem;
+        margin-bottom: 16px;
+    }
+
+    .file-upload-button {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+    }
+
+    .file-item {
+        padding: 12px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .file-item-icon {
+        align-self: flex-start;
+    }
+
+    .file-item-info {
+        order: 1;
+    }
+
+    .file-item-actions {
+        order: 2;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .file-item-details {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .file-action-btn {
+        padding: 8px 12px;
+        min-height: 36px;
+        justify-content: center;
+    }
+}
+
+/* Upload Button Styles for Welcome Screen and Chat Input */
+.welcome-upload-button {
+    position: absolute;
+    right: 64px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
+    background: rgba(71, 85, 105, 0.3);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    border-radius: var(--border-radius-lg);
+    color: var(--gray-light);
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    z-index: 2;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.welcome-upload-button:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.welcome-upload-button:active {
+    transform: translateY(-50%) scale(0.95);
+    transition-duration: 0.1s;
+}
+
+.welcome-upload-button i {
+    transition: transform 0.3s ease;
+}
+
+.welcome-upload-button:hover i {
+    transform: rotate(45deg);
+}
+
+.chat-upload-button {
+    background: rgba(71, 85, 105, 0.3);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    border-radius: var(--border-radius-lg);
+    color: var(--gray-light);
+    cursor: pointer;
+    padding: 14px 16px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    min-width: 50px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    flex-shrink: 0;
+}
+
+.chat-upload-button:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.chat-upload-button:active {
+    transform: translateY(0);
+}
+
+.chat-upload-button i {
+    transition: transform 0.3s ease;
+}
+
+.chat-upload-button:hover i {
+    transform: rotate(45deg);
+}
+
+@media (max-width: 768px) {
+    .welcome-upload-button {
+        width: 42px;
+        height: 42px;
+        right: 56px;
+        font-size: 0.9rem;
+    }
+    
+    .chat-upload-button {
+        padding: 12px 14px;
+        min-width: 44px;
+        font-size: 0.9rem;
+    }
+}

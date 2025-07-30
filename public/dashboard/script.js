@@ -331,9 +331,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const storedInitialQuery = localStorage.getItem('initialQuery');
         if (storedInitialQuery && chatMessages && messageInput) {
             console.log('Handling initial query:', storedInitialQuery);
-            chatMessages.innerHTML = '';
-            currentChatId = 'new';
-            localStorage.setItem('currentChatId', 'new');
+            
+            // Only clear chat if we don't have a valid existing chat from file uploads
+            const existingChatId = localStorage.getItem('currentChatId');
+            const hasValidChat = existingChatId && existingChatId !== 'new' && !isNaN(parseInt(existingChatId, 10));
+            
+            if (!hasValidChat) {
+                console.log('No valid chat from uploads, creating new chat flow');
+                chatMessages.innerHTML = '';
+                currentChatId = 'new';
+                localStorage.setItem('currentChatId', 'new');
+            } else {
+                console.log('Using existing chat from file uploads:', existingChatId);
+                currentChatId = existingChatId;
+                // Don't clear chat messages if we have an existing chat
+            }
 
             messageInput.value = storedInitialQuery;
             localStorage.removeItem('initialQuery');
@@ -390,15 +402,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
 
-            if (initialQuery && (currentChatId === 'new' || !currentChatId) && chatMessages && messageInput) {
-                console.log('Starting new chat with initial query:', initialQuery);
-                chatMessages.innerHTML = '';
-                currentChatId = 'new';
-                localStorage.setItem('currentChatId', 'new');
-
+            if (initialQuery && chatMessages && messageInput) {
+                // Check if we have a valid chat ID from file uploads
+                const hasValidChatFromUploads = currentChatId && currentChatId !== 'new' && !isNaN(parseInt(currentChatId, 10));
+                
+                console.log('Initial query with chat check:', { currentChatId, hasValidChatFromUploads, initialQuery });
+                
+                if (!hasValidChatFromUploads) {
+                    console.log('No valid chat from uploads, creating new chat flow');
+                    chatMessages.innerHTML = '';
+                    currentChatId = 'new';
+                    localStorage.setItem('currentChatId', 'new');
+                } else {
+                    console.log('Using existing chat from file uploads for initial query:', currentChatId);
+                    // Don't clear messages or reset chat ID if we have a valid chat from uploads
+                }
 
                 messageInput.value = initialQuery;
-
                 localStorage.removeItem('initialQuery');
 
                 setTimeout(() => {
@@ -521,6 +541,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     welcomeScreen.classList.add('hidden');
                     chatInterface.classList.add('active');
                 }
+
+                // Auto-close file upload/management sidebar when switching chats
+                closeFileUploadSidebar();
 
                 loadChatHistory(currentChatId);
             });
@@ -753,6 +776,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.classList.remove('active');
                 });
 
+                // Auto-close file upload/management sidebar when creating new task
+                closeFileUploadSidebar();
+
                 // Auto-focus the input for immediate task creation
                 setTimeout(() => {
                     const welcomeInput = document.getElementById('welcome-input');
@@ -769,6 +795,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.recent-chat-item').forEach(item => {
                     item.classList.remove('active');
                 });
+
+                // Auto-close file upload/management sidebar when creating new task
+                closeFileUploadSidebar();
 
                 if (messageInput) {
                     messageInput.focus();
@@ -1133,11 +1162,18 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
 
-        if (!currentChatId || currentChatId === 'new') {
+        // Check if currentChatId is a valid number (from file uploads) or needs to be created
+        const isValidChatId = currentChatId && currentChatId !== 'new' && !isNaN(parseInt(currentChatId, 10));
+        
+        console.log('Chat ID validation:', { currentChatId, isValidChatId });
+        
+        if (!isValidChatId) {
+            console.log('Creating new chat for task...');
             createNewChat().then((newChat) => {
                 if (newChat && newChat.id) {
                     currentChatId = newChat.id;
                     localStorage.setItem('currentChatId', currentChatId);
+                    console.log('New chat created with ID:', currentChatId);
                     processSendMessage(currentChatId);
                     updateChatTitleFromContent(currentChatId, message);
                 } else {
@@ -1151,11 +1187,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetTaskState();
             });
         } else {
-
+            console.log('Using existing chat for task:', currentChatId);
             processSendMessage(currentChatId);
 
-
-            if (document.querySelectorAll('.message.user-message').length === 1) {
+            // Only update title if this is the first user message in chat
+            const userMessages = document.querySelectorAll('.message.user');
+            if (userMessages.length <= 1) {
                 updateChatTitleFromContent(currentChatId, message);
             }
         }
@@ -2446,8 +2483,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, 60000); // Check every minute
 
+    // Function to close file upload sidebar
+    function closeFileUploadSidebar() {
+        const fileUploadSection = document.getElementById('file-upload-section');
+        const uploadedFilesSection = document.getElementById('uploaded-files-section');
+        const uploadToggleBtn = document.getElementById('upload-toggle-btn');
+        
+        if (fileUploadSection) {
+            fileUploadSection.style.display = 'none';
+        }
+        if (uploadedFilesSection) {
+            uploadedFilesSection.style.display = 'none';
+        }
+        if (uploadToggleBtn) {
+            uploadToggleBtn.classList.remove('active');
+        }
+    }
+
     // Make functions available in the global scope
     window.getMcpServers = getMcpServers;
     window.getMcpServerByName = getMcpServerByName;
     window.updateToolSidebar = updateToolSidebar;
-}); 
+    window.closeFileUploadSidebar = closeFileUploadSidebar;
+});
