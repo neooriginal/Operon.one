@@ -156,6 +156,11 @@
             font-weight: 400;
             position: relative;
             z-index: 1;
+            resize: vertical;
+            font-family: var(--font-main);
+            line-height: 1.5;
+            min-height: 80px;
+            max-height: 300px;
         }
         
         .welcome-input::placeholder {
@@ -322,7 +327,7 @@
                     <h1>Welcome to Operon.one</h1>
                     
                     <div class="welcome-input-container">
-                        <input type="text" class="welcome-input" id="welcome-input" placeholder="What would you like to accomplish today?">
+                        <textarea class="welcome-input" id="welcome-input" placeholder="What would you like to accomplish today?&#10;&#10;Press Ctrl+Enter to submit" rows="3"></textarea>
                         <button class="welcome-send-button" id="start-button">
                             <i class="fas fa-arrow-right"></i>
                         </button>
@@ -345,7 +350,7 @@
                     <!-- Chat messages will be appended here -->
                 </div>
                 <div class="chat-input">
-                    <input type="text" id="message-input" placeholder="Enter your task or question...">
+                    <textarea id="message-input" placeholder="Enter your task or question...&#10;Press Ctrl+Enter to submit" rows="2"></textarea>
                     <button id="send-button">Send</button>
                 </div>
             </div>
@@ -471,9 +476,13 @@
                 // Show chat interface and start with initial query
                 showChatInterface();
             } else {
-                // Show welcome screen and load chats for sidebar
+                // Always show welcome screen for new task creation
                 showWelcomeScreen();
                 loadWelcomePageChats();
+                // Auto-focus the input for immediate task creation
+                setTimeout(() => {
+                    document.getElementById('welcome-input').focus();
+                }, 100);
             }
             
             function showWelcomeScreen() {
@@ -631,8 +640,9 @@
                 }
             });
             
-            document.getElementById('welcome-input').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
+            document.getElementById('welcome-input').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
                     document.getElementById('start-button').click();
                 }
             });
@@ -644,6 +654,10 @@
                 localStorage.setItem('currentChatId', 'new');
                 showWelcomeScreen();
                 loadWelcomePageChats();
+                // Auto-focus the input for immediate task creation
+                setTimeout(() => {
+                    document.getElementById('welcome-input').focus();
+                }, 100);
             });
             
             fetch('/api/validate-token', {

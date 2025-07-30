@@ -854,6 +854,11 @@ body::before {
     outline: none;
     transition: var(--transition);
     box-shadow: var(--shadow-sm);
+    resize: vertical;
+    font-family: var(--font-main);
+    line-height: 1.5;
+    min-height: 50px;
+    max-height: 200px;
 }
 
 #message-input:focus {
@@ -966,7 +971,8 @@ body::before {
     #message-input {
         font-size: 16px;
         padding: 12px;
-        height: 48px;
+        min-height: 48px;
+        max-height: 120px;
     }
     
     #send-button {

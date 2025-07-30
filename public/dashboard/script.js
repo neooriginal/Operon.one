@@ -724,8 +724,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (sendButton && messageInput) {
         sendButton.addEventListener('click', handleSendMessage);
-        messageInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
                 handleSendMessage();
             }
         });
@@ -751,6 +752,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.recent-chat-item').forEach(item => {
                     item.classList.remove('active');
                 });
+
+                // Auto-focus the input for immediate task creation
+                setTimeout(() => {
+                    const welcomeInput = document.getElementById('welcome-input');
+                    if (welcomeInput) {
+                        welcomeInput.focus();
+                    }
+                }, 100);
             } else if (chatMessages) {
                 // We're in the old chat interface
                 chatMessages.innerHTML = '';
