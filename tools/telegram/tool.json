@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "title": "telegramBot",
+  "description": "Telegram bot integration that allows users to interact via Telegram messages, send files, and receive responses",
+  "main": "main.js",
+  "example": "Start the Telegram bot to listen for messages and respond to user queries",
+  "skipReasoning": true
+}
